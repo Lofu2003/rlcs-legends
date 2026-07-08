@@ -1,6 +1,6 @@
 {
   "name": "rlcs-legends",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "RLCS Legends — Draft-Manager-Spiel, abgeleitet von draftrlcs.app",
   "main": "main.js",
   "scripts": {
