@@ -35,6 +35,13 @@ let careerState = null;
 let careerRosterPlayers = null;
 let careerCoach = null;
 
+// Rivalitäten: Bot-Teams bleiben über die gesamte Karriere bestehen (statt
+// jedes Turnier neu gewürfelt zu werden) und entwickeln sich zwischen Saisons
+// weiter (developBotTeams() in bot-teams.js). careerRivalRecords trackt die
+// Kopf-an-Kopf-Bilanz gegen jede einzelne Bot-Org, keyed nach Org-Name.
+let careerBotTeams = null;
+let careerRivalRecords = {};
+
 function tierForOverall(overall) {
   if (overall >= 85) return 'tier-diamond';
   if (overall >= 78) return 'tier-gold';
@@ -449,6 +456,8 @@ function confirmOrgAndProceed() {
   careerState = { seasonNumber: 1, titlesWon: 0 };
   careerRosterPlayers = null;
   careerCoach = null;
+  careerBotTeams = null;
+  careerRivalRecords = {};
   showScreen('screen-draft');
   renderAll();
   saveGameState();
@@ -731,7 +740,10 @@ function startTournament() {
   const mySub = subName ? findPlayer(subName) : null;
   const myCoach = draftedCoachName ? findCoach(draftedCoachName) : null;
 
-  const botTeams = generateBotTeams(7);
+  // Bot-Teams bleiben über die ganze Karriere bestehen (Rivalitäten) — nur bei
+  // der allerersten Saison neu würfeln, danach den entwickelten Bestand nutzen.
+  if (!careerBotTeams) careerBotTeams = generateBotTeams(7);
+  const botTeams = careerBotTeams;
   const teams = [
     createTournamentTeam('player', assignedOrg.name, true, myStarters, mySub, myCoach),
     ...botTeams.map((b, i) => createTournamentTeam('bot' + i, b.name, false, b.players, null, null)),
@@ -790,7 +802,26 @@ function renderTournamentScreen() {
   }
 
   actionBtn.disabled = tournamentAutoSimRunning;
+  renderRivalryNote();
   renderSwissBracket();
+}
+
+// Zeigt die Kopf-an-Kopf-Bilanz gegen den aktuellen Gegner, falls es schon eine
+// gibt (frühere Saison oder frühere Runde derselben Karriere) — sonst nichts,
+// damit ein "0:0"-Hinweis beim allerersten Aufeinandertreffen nicht nur Rauschen ist.
+function renderRivalryNote() {
+  const ts = tournamentState;
+  const noteEl = document.getElementById('rivalry-note');
+  const playerMatch = ts.stage === 'complete' ? null : findPlayerMatch();
+  if (!playerMatch) { noteEl.classList.add('hidden'); return; }
+
+  const opponentId = playerMatch.aId === 'player' ? playerMatch.bId : playerMatch.aId;
+  const opponent = findTournamentTeam(opponentId);
+  const record = careerRivalRecords[opponent.name];
+  if (!record || record.wins + record.losses === 0) { noteEl.classList.add('hidden'); return; }
+
+  noteEl.classList.remove('hidden');
+  noteEl.textContent = '⚔ Bisherige Bilanz gegen ' + opponent.name + ': ' + record.wins + ' Siege, ' + record.losses + ' Niederlagen';
 }
 
 function onTournamentActionClick() {
@@ -834,10 +865,25 @@ function onTournamentActionClick() {
 // sofort ohne Ticker — auch die des Spielers. Wie der bestehende "Spieler ist
 // nicht mehr dabei"-Zweig in onTournamentActionClick(), aber bewusst als
 // Alternative zum normalen "Match spielen" wählbar, nicht nur als Fallback.
+// Trägt das Ergebnis einer entschiedenen Serie in die Rivalen-Bilanz ein, falls
+// der Spieler daran beteiligt war (Bot-vs-Bot-Serien werden nicht getrackt).
+function recordRivalResultIfPlayerMatch(match) {
+  if (!match || (match.aId !== 'player' && match.bId !== 'player')) return;
+  const opponentId = match.aId === 'player' ? match.bId : match.aId;
+  const opponent = findTournamentTeam(opponentId);
+  const playerWon = (match.aId === 'player' && match.scoreA > match.scoreB)
+    || (match.bId === 'player' && match.scoreB > match.scoreA);
+  if (!careerRivalRecords[opponent.name]) careerRivalRecords[opponent.name] = { wins: 0, losses: 0 };
+  if (playerWon) careerRivalRecords[opponent.name].wins += 1;
+  else careerRivalRecords[opponent.name].losses += 1;
+}
+
 function quickSimulateCurrentRound() {
   const ts = tournamentState;
   if (ts.stage === 'complete' || ts.stageMatchPlayed) return;
-  getCurrentStageMatches().forEach((m) => simulateFullSeriesInstant(ts.teams, m, simulateMatch));
+  const stageMatches = getCurrentStageMatches();
+  stageMatches.forEach((m) => simulateFullSeriesInstant(ts.teams, m, simulateMatch));
+  recordRivalResultIfPlayerMatch(stageMatches.find((m) => m.aId === 'player' || m.bId === 'player'));
   ts.stageMatchPlayed = true;
   renderTournamentScreen();
   saveGameState();
@@ -857,7 +903,9 @@ async function quickSimulateEntireTournament() {
   while (tournamentState.stage !== 'complete') {
     const ts = tournamentState;
     if (!ts.stageMatchPlayed) {
-      getCurrentStageMatches().forEach((m) => simulateFullSeriesInstant(ts.teams, m, simulateMatch));
+      const stageMatches = getCurrentStageMatches();
+      stageMatches.forEach((m) => simulateFullSeriesInstant(ts.teams, m, simulateMatch));
+      recordRivalResultIfPlayerMatch(stageMatches.find((m) => m.aId === 'player' || m.bId === 'player'));
       ts.stageMatchPlayed = true;
       renderTournamentScreen();
       await sleep(700);
@@ -895,7 +943,10 @@ function playNextSeriesGame(match, opponent, playerIsA) {
   recordSeriesGame(ts.teams, match, goalsA, goalsB);
 
   const seriesDone = match.played;
-  if (seriesDone) ts.stageMatchPlayed = true;
+  if (seriesDone) {
+    ts.stageMatchPlayed = true;
+    recordRivalResultIfPlayerMatch(match);
+  }
   saveGameState();
 
   const playerSeriesWins = playerIsA ? match.seriesWinsA : match.seriesWinsB;
@@ -1042,6 +1093,7 @@ function startNextSeason() {
 
   if (wasChampion) careerState.titlesWon += 1;
   careerState.seasonNumber += 1;
+  careerBotTeams = developBotTeams(careerBotTeams); // Rivalen entwickeln sich mit
 
   tournamentState = null;
   showScreen('screen-draft');
@@ -1284,8 +1336,8 @@ let slotPickerMode = null; // 'new' | 'continue'
 
 function collectSaveState() {
   return {
-    version: 2, assignedOrg, BUDGET, draftedPlayerNames, draftedCoachName, tournamentState,
-    careerState, careerRosterPlayers, careerCoach,
+    version: 3, assignedOrg, BUDGET, draftedPlayerNames, draftedCoachName, tournamentState,
+    careerState, careerRosterPlayers, careerCoach, careerBotTeams, careerRivalRecords,
   };
 }
 
@@ -1306,6 +1358,8 @@ async function loadGameState() {
   careerState = data.careerState || { seasonNumber: 1, titlesWon: 0 }; // ältere Spielstände (v1) hatten das Feld noch nicht
   careerRosterPlayers = data.careerRosterPlayers || null;
   careerCoach = data.careerCoach || null;
+  careerBotTeams = data.careerBotTeams || null; // ältere Spielstände (v1/v2) hatten das noch nicht
+  careerRivalRecords = data.careerRivalRecords || {};
 
   if (tournamentState) {
     renderTournamentScreen();

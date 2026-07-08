@@ -58,3 +58,26 @@ function generateBotTeams(count) {
   }
   return teams;
 }
+
+// ── Rivalitäten: Bot-Teams entwickeln sich über Saisons weiter ──────────────
+// Statt bei jedem Turnier komplett neue Gegner zu würfeln, bleiben dieselben
+// Bot-Orgs über eine ganze Karriere hinweg bestehen (generateBotTeams() wird
+// nur EINMAL pro Karriere aufgerufen, siehe renderer.js careerBotTeams) — das
+// macht wiederkehrende Gegner und eine Kopf-an-Kopf-Bilanz erst möglich.
+// Zwischen den Saisons entwickeln sich auch die Bot-Spieler leicht weiter
+// (kleinerer, ungerichteter Drift als beim eigenen Team — Bots haben keine
+// Sieg-Quote-Bias, sie werden einfach zufällig etwas besser oder schlechter).
+function developBotTeamPlayer(p) {
+  const statKeys = ['mechanics', 'gameSense', 'speed', 'shooting', 'defending', 'boostMgmt'];
+  const developed = { ...p };
+  statKeys.forEach((k) => {
+    const drift = Math.round(Math.random() * 6 - 3); // ±3
+    developed[k] = Math.max(50, Math.min(95, p[k] + drift));
+  });
+  developed.overall = Math.round(statKeys.reduce((sum, k) => sum + developed[k], 0) / statKeys.length);
+  return developed;
+}
+
+function developBotTeams(teams) {
+  return teams.map((t) => ({ ...t, players: t.players.map(developBotTeamPlayer) }));
+}

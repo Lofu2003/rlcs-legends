@@ -43,11 +43,58 @@ function formatClock(seconds) {
 
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+// Mehrere Formulierungen pro Ereignistyp, zufällig ausgewählt — sonst wirkt der
+// Ticker nach wenigen Spielen repetitiv (eine Saison hat schon 20-35 Einzelspiele
+// über mehrere Bo5/Bo7-Serien). GOAL_LATE_TEMPLATES kommt nur in der Schlussphase
+// der regulären Spielzeit zum Einsatz, für einen zusätzlichen Spannungsmoment.
+const DUEL_TEMPLATES = [
+  (w, wl) => 'Duell gewonnen von ' + w + ' (' + wl + ')',
+  (w, wl) => w + ' setzt sich im Zweikampf durch und sichert den Ball für ' + wl,
+  (w, wl) => w + ' gewinnt den 50/50-Ball für ' + wl,
+  (w, wl) => 'Starker Challenge von ' + w + ' — ' + wl + ' hat wieder den Ball',
+  (w, wl) => w + ' klärt unter Druck für ' + wl,
+  (w, wl) => w + ' liest das Spiel perfekt und erobert den Ball für ' + wl,
+];
+
+const GOAL_TEMPLATES = [
+  (w, wl) => 'TOR! ' + w + ' trifft für ' + wl + '!',
+  (w, wl) => w + ' hämmert den Ball rein — TOR für ' + wl + '!',
+  (w, wl) => 'Wunderschöner Abschluss von ' + w + '! TOR für ' + wl + '!',
+  (w, wl) => w + ' lässt dem Keeper keine Chance — TOR für ' + wl + '!',
+  (w, wl) => 'Da ist er drin! ' + w + ' trifft für ' + wl + '!',
+  (w, wl) => w + ' verwandelt eiskalt — TOR für ' + wl + '!',
+];
+
+const GOAL_LATE_TEMPLATES = [
+  (w, wl) => 'IN DER SCHLUSSPHASE! ' + w + ' trifft für ' + wl + '!',
+  (w, wl) => 'Was für ein Zeitpunkt! ' + w + ' schlägt kurz vor Schluss zu — TOR für ' + wl + '!',
+  (w, wl) => 'Mit der letzten Aktion! ' + w + ' trifft in letzter Sekunde für ' + wl + '!',
+];
+
+const SAVE_TEMPLATES = [
+  (d, dl, w) => 'PARADE! ' + d + ' (' + dl + ') hält den Schuss von ' + w + '!',
+  (d, dl, w) => d + ' wirft sich rein und pariert glänzend gegen ' + w + '!',
+  (d, dl, w) => 'Riesenparade von ' + d + ' (' + dl + ')! ' + w + ' fassungslos.',
+  (d, dl, w) => d + ' steht goldrichtig und blockt ' + w + ' ab.',
+  (d, dl, w) => 'Reflexparade von ' + d + '! ' + w + ' konnte es kaum glauben.',
+];
+
+const MISS_TEMPLATES = [
+  (w, wl) => 'Schuss von ' + w + ' (' + wl + ') — daneben!',
+  (w, wl) => w + ' verzieht knapp — Ball geht über die Latte.',
+  (w, wl) => w + ' kommt nicht richtig an den Ball, der Versuch verpufft.',
+  (w, wl) => 'Zu unplatziert von ' + w + ' — kein Problem für die Abwehr.',
+  (w, wl) => w + ' überhastet den Abschluss und trifft den Ball nur schwach.',
+];
+
+const LATE_GAME_THRESHOLD_SECONDS = 20;
+
 /**
  * Löst EIN Ballbesitz-Ereignis auf (Duell, ggf. Torschuss/Parade/Fehlschuss).
  * Gibt ein Ereignis-Objekt zurück (ohne time/stepSeconds — die setzt der Aufrufer).
+ * isLateGame steuert dramatischere Tor-Formulierungen in der Schlussphase.
  */
-function simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct) {
+function simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, isLateGame) {
   const playerA = pickRandom(activeTeamA);
   const playerB = pickRandom(teamB);
   const aWins = resolveDuel(duelStat(playerA) * (1 + teamABonusPct), duelStat(playerB));
@@ -64,7 +111,7 @@ function simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct) {
   if (!leadsToShot) {
     return {
       type: 'duel', team: winnerTeamTag, player: winner.name,
-      msg: 'Duell gewonnen von ' + winner.name + ' (' + winnerLabel + ')',
+      msg: pickRandom(DUEL_TEMPLATES)(winner.name, winnerLabel),
       scoringTeam: null,
     };
   }
@@ -73,22 +120,23 @@ function simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct) {
   const scored = Math.random() < goalChance(winner.shooting, defender.defending);
 
   if (scored) {
+    const templates = isLateGame ? GOAL_LATE_TEMPLATES : GOAL_TEMPLATES;
     return {
       type: 'goal', isGoal: true, team: winnerTeamTag, player: winner.name,
-      msg: 'TOR! ' + winner.name + ' trifft für ' + winnerLabel + '!',
+      msg: pickRandom(templates)(winner.name, winnerLabel),
       scoringTeam: winnerTeamTag,
     };
   } else if (Math.random() < 0.55) {
     // Parade: der beste Verteidiger der Gegenseite hält den Schuss
     return {
       type: 'save', team: defendingTeamTag, player: defender.name,
-      msg: 'PARADE! ' + defender.name + ' (' + defendingLabel + ') hält den Schuss von ' + winner.name + '!',
+      msg: pickRandom(SAVE_TEMPLATES)(defender.name, defendingLabel, winner.name),
       scoringTeam: null,
     };
   }
   return {
     type: 'miss', team: winnerTeamTag, player: winner.name,
-    msg: 'Schuss von ' + winner.name + ' (' + winnerLabel + ') — daneben!',
+    msg: pickRandom(MISS_TEMPLATES)(winner.name, winnerLabel),
     scoringTeam: null,
   };
 }
@@ -145,7 +193,8 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
       continue;
     }
 
-    const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct);
+    const isLateGame = clock <= LATE_GAME_THRESHOLD_SECONDS;
+    const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, isLateGame);
     if (result.scoringTeam === 'A') scoreA++;
     else if (result.scoringTeam === 'B') scoreB++;
     if (result.scoringTeam) result.msg += '  (' + scoreA + ':' + scoreB + ')';
@@ -167,7 +216,7 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
       otSeconds += step;
       const timeStr = '+' + formatClock(otSeconds);
 
-      const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct);
+      const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, true);
       if (result.scoringTeam === 'A') { scoreA++; decided = true; }
       else if (result.scoringTeam === 'B') { scoreB++; decided = true; }
       if (result.scoringTeam) result.msg += '  (' + scoreA + ':' + scoreB + ')';

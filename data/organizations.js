@@ -13,42 +13,93 @@ function computeMatchBonusPct(strength) {
   return Math.round((strength - 84) * 0.4 * 10) / 10;
 }
 
+// pros/cons: mehrere Formulierungen pro Org — eine davon wird bei der Zuweisung
+// (assignRandomOrg()) zufällig fest gewählt, damit dieselbe Org sich nicht bei
+// jedem "Neues Spiel" gleich anfühlt, auch wenn man ihr öfter zugelost wird.
 const ORGANIZATIONS_RAW = [
   {
     name: 'Vertex Esports',
     strength: 95,
-    pro: 'Top-Trainingszentrum, große Sponsoren — maximales Budget.',
-    con: 'Hoher Erwartungsdruck von Fans und Management.',
+    pros: [
+      'Top-Trainingszentrum, große Sponsoren — maximales Budget.',
+      'Modernste Analyse-Tools und ein Weltklasse-Trainerstab.',
+      'Die Organisation mit dem größten Prestige der Liga.',
+    ],
+    cons: [
+      'Hoher Erwartungsdruck von Fans und Management.',
+      'Jede Enttäuschung wird sofort in den Medien zerrissen.',
+      'Ungeduldiges Management — Geduld ist hier Mangelware.',
+    ],
   },
   {
     name: 'Solace United',
     strength: 90,
-    pro: 'Solides Budget, erfahrene Organisationsstruktur.',
-    con: 'Etwas konservative Kaderplanung erwartet.',
+    pros: [
+      'Solides Budget, erfahrene Organisationsstruktur.',
+      'Ruhige Hand im Management, wenig Panik bei Rückschlägen.',
+      'Gutes Standing bei Sponsoren — verlässliche Finanzierung.',
+    ],
+    cons: [
+      'Etwas konservative Kaderplanung erwartet.',
+      'Wenig Toleranz für riskante Experimente im Draft.',
+      'Bürokratische Abläufe bremsen schnelle Entscheidungen.',
+    ],
   },
   {
     name: 'Ironclad Gaming',
     strength: 84,
-    pro: 'Ausgeglichene Ausstattung, keine besonderen Nachteile.',
-    con: 'Keine besonderen Vorteile — Mittelmaß.',
+    pros: [
+      'Ausgeglichene Ausstattung, keine besonderen Nachteile.',
+      'Stabiles Umfeld ohne große Altlasten.',
+      'Weder Druck von oben noch Budgetsorgen — solides Mittelfeld.',
+    ],
+    cons: [
+      'Keine besonderen Vorteile — Mittelmaß.',
+      'Nichts, was dich von der Konkurrenz abhebt.',
+      'Durchschnittlich in fast jeder Hinsicht.',
+    ],
   },
   {
     name: 'Nimbus Rivals',
     strength: 78,
-    pro: 'Junge, hungrige Organisation mit Aufstiegsambitionen.',
-    con: 'Eingeschränktes Budget für den Kader.',
+    pros: [
+      'Junge, hungrige Organisation mit Aufstiegsambitionen.',
+      'Flexibles Management, offen für ungewöhnliche Kaderideen.',
+      'Wachsende Fanbase, die an einen Aufstieg glaubt.',
+    ],
+    cons: [
+      'Eingeschränktes Budget für den Kader.',
+      'Wenig Erfahrung im Umgang mit Drucksituationen.',
+      'Noch kein etablierter Name in der Szene.',
+    ],
   },
   {
     name: 'Fracture Point',
     strength: 72,
-    pro: 'Kleine Organisation — großer Underdog-Bonus im Narrativ.',
-    con: 'Knappes Budget, wenig Spielraum für Stars.',
+    pros: [
+      'Kleine Organisation — großer Underdog-Bonus im Narrativ.',
+      'Niemand erwartet hier etwas — Freiheit, Risiken einzugehen.',
+      'Eng verschworene Truppe ohne internen Konkurrenzdruck.',
+    ],
+    cons: [
+      'Knappes Budget, wenig Spielraum für Stars.',
+      'Kaum Rücklagen für Fehlentscheidungen im Draft.',
+      'Muss sich jede Aufmerksamkeit hart erarbeiten.',
+    ],
   },
   {
     name: 'Starline Underdogs',
     strength: 66,
-    pro: 'Nichts zu verlieren — jede Überraschung zählt doppelt.',
-    con: 'Sehr knappes Budget, schwierigster Start.',
+    pros: [
+      'Nichts zu verlieren — jede Überraschung zählt doppelt.',
+      'Reinste Außenseiter-Story — jeder Sieg wird gefeiert.',
+      'Kompromisslose Experimentierfreude, da ohnehin nichts erwartet wird.',
+    ],
+    cons: [
+      'Sehr knappes Budget, schwierigster Start.',
+      'Praktisch keine finanzielle Rückendeckung.',
+      'Muss von Anfang an über die eigenen Verhältnisse hinauswachsen.',
+    ],
   },
 ];
 
@@ -58,6 +109,13 @@ const ORGANIZATIONS = ORGANIZATIONS_RAW.map((org) => ({
   matchBonusPct: computeMatchBonusPct(org.strength),
 }));
 
+function pickRandomOrgFlavor(list) { return list[Math.floor(Math.random() * list.length)]; }
+
 function assignRandomOrg() {
-  return ORGANIZATIONS[Math.floor(Math.random() * ORGANIZATIONS.length)];
+  const org = ORGANIZATIONS[Math.floor(Math.random() * ORGANIZATIONS.length)];
+  return {
+    ...org,
+    pro: pickRandomOrgFlavor(org.pros),
+    con: pickRandomOrgFlavor(org.cons),
+  };
 }

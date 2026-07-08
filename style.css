@@ -32,7 +32,14 @@ body {
   font-size: 24px;
   font-weight: 800;
   color: #ffffff;
-  margin: 0 0 20px;
+  margin: 0 0 8px;
+}
+
+.rivalry-note {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ff9d3d;
 }
 
 .champion-banner {
