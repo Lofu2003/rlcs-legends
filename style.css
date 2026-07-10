@@ -5,7 +5,9 @@ body {
   font-family: "Segoe UI", sans-serif;
   background: #0d1220;
   color: #e2e8f5;
-  overflow-x: hidden;
+  overflow-x: auto; /* Turnier-Bracket kann breiter als der Viewport werden —
+                        dann soll die SEITE selbst scrollen, kein verschachteltes
+                        Scroll-Fenster (siehe .bracket-container) */
 }
 
 .screen.hidden { display: none; }
@@ -15,16 +17,19 @@ body {
 #screen-tournament {
   position: relative;
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Bewusst KEIN display:flex + align-items/justify-content:center mehr —
+     zentrierter Flex-Inhalt, der breiter/höher als der Viewport wird, lässt
+     sich zur Hälfte nicht mehr erreichen (negativer Scroll-Bereich). Normaler
+     Blockfluss von oben nach unten lässt Überlauf stattdessen ganz normal nach
+     rechts/unten wachsen — dorthin kann die Seite ganz normal scrollen. */
   background: radial-gradient(circle at 50% 15%, #1c2650 0%, #0d1220 60%);
-  padding: 40px 0;
+  padding: 40px 20px;
+  text-align: center;
 }
 
 .tournament-wrap {
-  width: 1000px;
-  max-width: 94vw;
+  max-width: 1600px;
+  margin: 0 auto;
   text-align: center;
 }
 
@@ -42,6 +47,258 @@ body {
   color: #ff9d3d;
 }
 
+.season-context-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.season-context {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #6f8bff;
+}
+
+.season-guide-btn {
+  margin-bottom: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b3bede;
+  background: #171f3d;
+  border: 1px solid #2a3660;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.season-guide-btn:hover {
+  color: #ffffff;
+  border-color: #6f8bff;
+}
+
+.season-guide-box {
+  max-width: 560px;
+  text-align: left;
+}
+
+.season-guide-steps {
+  margin: 14px 0 20px;
+}
+
+.season-guide-step {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #232c4d;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #b3bede;
+}
+
+.season-guide-step:last-child {
+  border-bottom: none;
+}
+
+.season-guide-step-icon {
+  flex: none;
+  font-size: 20px;
+}
+
+.season-guide-step strong {
+  color: #ffffff;
+}
+
+.season-guide-footnote {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #8b98bd;
+  font-style: italic;
+}
+
+.season-context-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.points-standing {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b3bede;
+}
+
+.points-standing .points-standing-value {
+  color: #ffd873;
+  font-weight: 800;
+}
+
+/* ── Punktestand-Tabelle ───────────────────────────────────────────────── */
+.standings-box {
+  max-width: 640px;
+  width: 100%;
+  text-align: left;
+}
+
+.standings-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 4px 0 14px;
+  font-size: 12px;
+  color: #8b98bd;
+}
+
+.standings-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.standings-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.standings-dot.standings-green, .standings-row.standings-green .standings-status-dot { background: #22c55e; }
+.standings-dot.standings-neutral, .standings-row.standings-neutral .standings-status-dot { background: #6f8bff; }
+.standings-dot.standings-red, .standings-row.standings-red .standings-status-dot { background: #ef4444; }
+
+.standings-list {
+  max-height: 56vh;
+  overflow-y: auto;
+  border: 1px solid #232c4d;
+  border-radius: 10px;
+}
+
+.standings-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 70px 24px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid #1a2340;
+}
+
+.standings-row:last-child { border-bottom: none; }
+
+.standings-row.is-player {
+  background: rgba(255, 216, 115, 0.08);
+}
+
+.standings-rank {
+  font-weight: 800;
+  color: #8b98bd;
+}
+
+.standings-name {
+  color: #d8e0f7;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.standings-row.is-player .standings-name {
+  color: #ffd873;
+  font-weight: 800;
+}
+
+.standings-points {
+  text-align: right;
+  font-weight: 700;
+  color: #b3bede;
+}
+
+.standings-status-dot {
+  justify-self: center;
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+/* ── Einstellungen ─────────────────────────────────────────────────────── */
+.settings-box {
+  max-width: 460px;
+  width: 100%;
+  text-align: left;
+}
+
+.settings-row {
+  margin: 16px 0;
+}
+
+.settings-row-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b3bede;
+  margin-bottom: 8px;
+}
+
+.settings-row-toggle .settings-label {
+  margin-bottom: 0;
+}
+
+.settings-speed-options {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settings-speed-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #b3bede;
+  background: #171f3d;
+  border: 1px solid #2a3660;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.settings-speed-btn:hover {
+  color: #ffffff;
+  border-color: #6f8bff;
+}
+
+.settings-speed-btn.is-active {
+  background: #6f8bff;
+  border-color: #6f8bff;
+  color: #0d1220;
+}
+
+.settings-checkbox {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: #6f8bff;
+  cursor: pointer;
+}
+
+.settings-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
 .champion-banner {
   padding: 16px;
   margin-bottom: 20px;
@@ -54,13 +311,159 @@ body {
 }
 
 .bracket-container {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  /* Kein eigenes overflow/Scroll-Fenster mehr — bei zu breitem Inhalt wächst
+     die SVG ganz normal nach rechts über diese Box hinaus, die SEITE selbst
+     scrollt dann (siehe body { overflow-x: auto }). */
   margin-bottom: 20px;
   padding: 16px 12px;
   background: linear-gradient(160deg, #0a1120 0%, #080f1d 100%);
   border: 1px solid #1a2748;
   border-radius: 14px;
+}
+
+/* ── Doppel-K.O.-Bracket (Open Qualifier) ─────────────────────────────────── */
+.bracket-delim-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.bracket-delim-group {
+  margin-bottom: 20px;
+}
+
+.bracket-delim-group-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #6f8bff;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 10px;
+}
+
+.bracket-delim-matches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.bracket-delim-match,
+.bracket-gsl-match {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #10152a;
+  border: 1px solid #1e2a52;
+  font-size: 12.5px;
+}
+
+.bracket-delim-match.is-played,
+.bracket-gsl-match.is-played {
+  border-color: #2e6b47;
+}
+
+.delim-team {
+  flex: 1;
+  color: #b3bede;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delim-team.is-winner {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.delim-score {
+  flex-shrink: 0;
+  font-weight: 800;
+  color: #ffd873;
+  min-width: 42px;
+  text-align: center;
+}
+
+.bracket-delim-eliminated {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #ff8a6a;
+  font-weight: 700;
+}
+
+/* ── GSL-Mini-Gruppen ──────────────────────────────────────────────────────── */
+.bracket-gsl-wrap {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.bracket-gsl-group {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #10152a;
+  border: 1px solid #1e2a52;
+}
+
+.bracket-gsl-group-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffd873;
+  margin-bottom: 10px;
+}
+
+.bracket-gsl-match {
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.gsl-match-label {
+  flex-basis: 100%;
+  font-size: 10px;
+  font-weight: 700;
+  color: #6f8bff;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.bracket-gsl-result {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6fe89a;
+}
+
+/* ── Info-/Übergangsbildschirme zwischen Events ───────────────────────────── */
+.season-info-box {
+  max-width: 640px;
+  margin: 20px auto;
+  padding: 24px 28px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
+  border: 1px solid #2a3660;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #b3bede;
+}
+
+.season-info-box h2 {
+  margin: 0 0 12px;
+  font-size: 19px;
+  color: #ffd873;
+}
+
+.season-info-box .season-info-line {
+  margin: 4px 0;
+}
+
+.season-info-box .season-info-highlight {
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .tournament-action-row {
@@ -84,11 +487,16 @@ body {
 
 #screen-match {
   position: relative;
-  height: 100vh;
+  min-height: 100vh;
+  /* min-height statt height (siehe #screen-tournament) — sonst wird der
+     untere Teil (Speed-Regler/Roster/Ticker) auf kleineren Fenstern/kürzeren
+     Bildschirmen zur Hälfte unerreichbar, weil zentrierter Flex-Inhalt in
+     einem HÖHEN-FIXIERTEN Container nicht normal nach unten scrollen kann. */
   display: flex;
   align-items: center;
   justify-content: center;
   background: radial-gradient(circle at 50% 15%, #1c2650 0%, #0d1220 60%);
+  padding: 24px 20px;
 }
 
 .match-wrap {
@@ -99,6 +507,7 @@ body {
 
 .match-wrap-wide {
   width: 760px;
+  max-width: 94vw;
 }
 
 .match-clock-row {
@@ -288,6 +697,32 @@ body {
   margin-bottom: 8px;
 }
 
+.series-dots {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.series-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid #2a3660;
+  background: transparent;
+}
+
+.series-dot-win {
+  background: #22c55e;
+  border-color: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+}
+
+.series-dot-loss {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
 .match-scoreboard {
   display: flex;
   align-items: center;
@@ -376,14 +811,244 @@ body {
   width: 260px;
 }
 
-/* ── Org-Intro & Spielautomat ──────────────────────────────────────────── */
-#screen-org-intro {
+/* ── Charaktererstellung ───────────────────────────────────────────────── */
+#screen-character {
   position: relative;
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: radial-gradient(circle at 50% 20%, #1c2650 0%, #0d1220 60%);
+  padding: 40px 20px;
+}
+
+.character-wrap {
+  max-width: 640px;
+  width: 100%;
+  text-align: center;
+}
+
+.character-subtitle {
+  margin: -10px 0 26px;
+  color: #7c8bb5;
+  font-size: 14px;
+}
+
+.character-field {
+  text-align: left;
+  margin-bottom: 18px;
+}
+
+.character-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.character-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #8fa0cc;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.character-field input,
+.character-field select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #171f3d;
+  border: 1px solid #2a3660;
+  border-radius: 10px;
+  padding: 11px 14px;
+  color: #e2e8f5;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.character-field input:focus,
+.character-field select:focus {
+  outline: none;
+  border-color: #4c6fff;
+}
+
+.character-path-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.character-path-card {
+  position: relative;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #2a3660;
+  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.character-path-card:hover {
+  transform: translateY(-2px);
+  border-color: #4c6fff;
+}
+
+.character-path-card.selected {
+  border-color: #3ecf72;
+  box-shadow: 0 0 0 1px #3ecf72, 0 8px 20px rgba(62, 207, 114, 0.2);
+}
+
+.character-path-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffd873;
+}
+
+.character-path-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #b3bede;
+}
+
+.character-path-effect {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.character-path-effect.effect-bonus { color: #6fe89a; }
+.character-path-effect.effect-malus { color: #ff8a6a; }
+.character-path-effect.effect-neutral { color: #8fa0cc; }
+
+.character-error {
+  color: #ff8a6a;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 4px 0 14px;
+}
+
+#btn-character-continue {
+  width: 260px;
+  margin-top: 8px;
+}
+
+/* ── Org-Auswahlmenü ───────────────────────────────────────────────────── */
+#screen-org-select {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 15%, #1c2650 0%, #0d1220 60%);
+  padding: 40px 20px;
+}
+
+.org-select-wrap {
+  max-width: 1000px;
+  width: 100%;
+  text-align: center;
+}
+
+.org-select-subtitle {
+  margin: -10px 0 26px;
+  color: #7c8bb5;
+  font-size: 14px;
+}
+
+.org-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 4px 4px 12px;
+  text-align: left;
+}
+
+.org-select-card {
+  position: relative;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid #2a3660;
+  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.org-select-card:hover {
+  transform: translateY(-3px);
+  border-color: #4c6fff;
+  box-shadow: 0 10px 24px rgba(76, 111, 255, 0.2);
+}
+
+.org-select-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.org-select-card-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffd873;
+}
+
+.org-select-card-strength {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8fa0cc;
+  white-space: nowrap;
+}
+
+.org-select-card-budget {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #8fe7a8;
+}
+
+.org-select-card-line {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.org-select-card-line.line-pro { color: #6fe89a; }
+.org-select-card-line.line-con { color: #ff8a6a; }
+
+.org-select-card.org-select-card-disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(0.7);
+}
+
+.org-select-card.org-select-card-disabled:hover {
+  transform: none;
+  border-color: #2a3660;
+  box-shadow: none;
+}
+
+.org-select-card-soon {
+  margin-top: 6px;
+  font-size: 12px;
+  font-style: italic;
+  color: #5a6690;
+}
+
+/* ── Org-Intro & Spielautomat ──────────────────────────────────────────── */
+#screen-org-intro {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 20%, #1c2650 0%, #0d1220 60%);
+  padding: 24px 20px;
 }
 
 .intro-wrap {
@@ -499,12 +1164,13 @@ body {
 
 /* ── Hauptmenü ─────────────────────────────────────────────────────────── */
 #screen-menu {
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background:
     radial-gradient(circle at 50% 20%, #1c2650 0%, #0d1220 60%);
+  padding: 24px 20px;
 }
 
 .menu-wrap {
@@ -575,6 +1241,12 @@ body {
   background: linear-gradient(135deg, #5c7dff, #8fb0ff);
 }
 
+.menu-btn-danger {
+  background: #2a1420;
+  border-color: #5a2a38;
+  color: #ff9fb0;
+}
+
 .menu-btn-danger:hover:not(:disabled) {
   background: #3a1c26;
   border-color: #6b2f3a;
@@ -584,6 +1256,16 @@ body {
   margin-top: 34px;
   font-size: 11px;
   color: #3f4a75;
+}
+
+.menu-disclaimer {
+  margin-top: 10px;
+  font-size: 9.5px;
+  line-height: 1.4;
+  color: #2e3757;
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .update-check-btn {
@@ -622,6 +1304,269 @@ body {
   margin-top: 20px;
 }
 
+/* ── Verhandlungs-Popup ────────────────────────────────────────────────── */
+.negotiation-box {
+  max-width: 480px;
+  width: 100%;
+  text-align: left;
+}
+
+.negotiation-subtitle {
+  font-size: 13px;
+  color: #9aa7c9;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.negotiation-log {
+  max-height: 220px;
+  overflow-y: auto;
+  background: #0a0f22;
+  border: 1px solid #232d52;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.negotiation-line {
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 6px 10px;
+  border-radius: 8px;
+  max-width: 90%;
+}
+
+.negotiation-line-system {
+  color: #7c8bb5;
+  font-style: italic;
+  align-self: center;
+  text-align: center;
+  max-width: 100%;
+}
+
+.negotiation-line-user {
+  align-self: flex-end;
+  background: #1d3a6b;
+  color: #d7e4ff;
+}
+
+.negotiation-line-org {
+  align-self: flex-start;
+  background: #2a1f3d;
+  color: #e6d8ff;
+}
+
+.negotiation-line-player {
+  align-self: flex-start;
+  background: #1d3a2e;
+  color: #cdf5df;
+}
+
+.negotiation-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #7c8bb5;
+  margin: 8px 0 4px;
+}
+
+.negotiation-offer-input,
+.negotiation-message-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0a0f22;
+  border: 1px solid #232d52;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #e2e8f5;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.negotiation-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.negotiation-buttons .menu-btn {
+  flex: 1;
+}
+
+.negotiation-frustration-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.negotiation-attempts-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7c8bb5;
+}
+
+.negotiation-frustration-track {
+  height: 8px;
+  border-radius: 5px;
+  background: #1c2444;
+  overflow: hidden;
+  margin: 4px 0 12px;
+}
+
+.negotiation-frustration-fill {
+  height: 100%;
+  border-radius: 5px;
+  width: 0%;
+  background: linear-gradient(90deg, #3ecf72, #6fd6e8);
+  transition: width 0.25s ease, background 0.25s ease;
+}
+
+/* ── Transfer-Historie ─────────────────────────────────────────────────── */
+.transfer-log-list {
+  max-width: 720px;
+  margin: 24px auto 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 20px;
+}
+
+.transfer-season-heading {
+  margin: 18px 0 4px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #6f8bff;
+}
+
+.transfer-season-heading:first-child {
+  margin-top: 0;
+}
+
+.transfer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
+  border: 1px solid #2a3660;
+  font-size: 13px;
+}
+
+.transfer-row-from,
+.transfer-row-to {
+  font-weight: 700;
+  color: #c7d1f0;
+}
+
+.transfer-row-player {
+  color: #ffd873;
+  font-weight: 700;
+}
+
+.transfer-row-arrow {
+  color: #5a6690;
+}
+
+.transfer-row-price {
+  margin-left: auto;
+  color: #8fe7a8;
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.transfer-log-empty {
+  color: #5a6690;
+  font-size: 13px;
+  text-align: center;
+  margin-top: 30px;
+}
+
+/* ── Kader-Aufstellung (Drag&Drop) ─────────────────────────────────────── */
+.roster-board {
+  max-width: 900px;
+  margin: 24px auto 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding: 0 20px;
+}
+
+.roster-board-heading {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: #8fa0cc;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.roster-board-hint {
+  text-transform: none;
+  letter-spacing: 0;
+  color: #4a5788;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.roster-board-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.roster-board-slot {
+  border-radius: 10px;
+  padding: 14px 10px;
+  text-align: center;
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.roster-board-slot.empty {
+  border: 1px dashed #2a3660;
+  color: #4a5788;
+  font-size: 12px;
+}
+
+.roster-board-slot.filled {
+  background: linear-gradient(160deg, #17301f 0%, #10152a 100%);
+  border: 1px solid #2e6b47;
+  cursor: grab;
+}
+
+.roster-board-slot.filled:active {
+  cursor: grabbing;
+}
+
+.roster-board-slot.drag-over {
+  border-color: #7fa3ff;
+  box-shadow: 0 0 0 2px rgba(127, 163, 255, 0.4);
+}
+
+.roster-board-slot-rating {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.roster-board-slot-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c7d1f0;
+}
+
 .update-modal-buttons .menu-btn {
   margin-top: 0;
   flex: 1;
@@ -635,7 +1580,8 @@ body {
 }
 
 /* ── Speicherstand-Auswahl (Slots) ─────────────────────────────────────── */
-#screen-slots {
+#screen-slots,
+#screen-mode-select {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -709,6 +1655,143 @@ body {
   font-size: 14px;
   color: #5a6690;
   font-weight: 700;
+}
+
+/* ── Spielmodus-Auswahl ────────────────────────────────────────────────── */
+.mode-select-wrap {
+  width: 600px;
+  max-width: 90vw;
+  text-align: center;
+}
+
+.mode-select-subtitle {
+  margin: -8px 0 28px;
+  color: #7c8bb5;
+  font-size: 14px;
+}
+
+.mode-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mode-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 22px 26px;
+  border-radius: 16px;
+  border: 1px solid #2a3660;
+  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.mode-card:hover {
+  transform: translateY(-3px);
+  border-color: #4c6fff;
+  box-shadow: 0 10px 28px rgba(76, 111, 255, 0.25);
+}
+
+.mode-card-icon {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: rgba(255, 216, 115, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+
+.mode-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.mode-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mode-card-title {
+  font-size: 19px;
+  font-weight: 800;
+  color: #ffd873;
+}
+
+.mode-card-badge {
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.mode-card-badge-live {
+  background: rgba(62, 207, 114, 0.15);
+  color: #6fe89a;
+  border: 1px solid rgba(62, 207, 114, 0.35);
+}
+
+.mode-card-badge-soon {
+  background: rgba(122, 138, 180, 0.15);
+  color: #8fa0cc;
+  border: 1px solid rgba(122, 138, 180, 0.3);
+}
+
+.mode-card-desc {
+  margin-top: 6px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #b3bede;
+}
+
+.mode-card.mode-card-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  filter: grayscale(0.7);
+}
+
+.mode-card.mode-card-disabled:hover {
+  transform: none;
+  border-color: #2a3660;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.mode-card.mode-card-disabled .mode-card-icon {
+  background: rgba(122, 138, 180, 0.08);
+}
+
+.mode-card.mode-card-disabled .mode-card-title {
+  color: #8fa0cc;
+}
+
+.mode-card.mode-card-disabled .mode-card-desc {
+  font-size: 12px;
+  font-style: italic;
+  color: #5a6690;
+}
+
+.slot-mode-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  background: #232d52;
+  color: #8fa0cc;
+  vertical-align: middle;
 }
 
 .slot-delete-btn {
@@ -930,6 +2013,37 @@ main {
   padding: 3px 8px;
   border-radius: 6px;
   border: 1px solid #3ecf72;
+}
+
+/* Spieler unter Vertrag bei einer Bot-Org — ausgegraut, aber (anders als
+   is-locked) weiter anklickbar: öffnet die Verhandlung statt direktem Draft. */
+.player-card.is-contracted {
+  filter: grayscale(0.8);
+  opacity: 0.55;
+}
+
+.player-card.is-contracted:hover {
+  opacity: 0.8;
+  transform: translateY(-4px);
+}
+
+.contract-badge {
+  position: absolute;
+  top: -9px;
+  left: 12px;
+  right: 12px;
+  background: #4a3414;
+  color: #ffc98a;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #8a5a1e;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Karten-Tier-Rahmen — visuelle Seltenheitsstufen wie bei Sammelkarten */

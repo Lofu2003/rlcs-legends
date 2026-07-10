@@ -59,8 +59,24 @@ Saison spielen."
 - **Draft-Modus:** Budget-Cap-Draft — festes Budget, Spieler-Preis wird aus den Stats
   abgeleitet (bessere Spieler kosten mehr)
 - **Custom-Spieler:** vorerst weggelassen, kommt erst nach dem Kern-Loop dran
-- **Datenbasis:** Test-Pool (ähnlich `TEST_PLAYERS` aus rocket-sim), keine echten
-  RLCS-Pro-Daten in v1
+- **Datenbasis:** Ab v0.2 echte RLCS-Profispieler-NAMEN (verifiziert über
+  Liquipedia/aktuelle RLCS-2025-Rosters, auf Community-Feedback hin) — die
+  Stats/Overalls sind aber weiterhin reine, zufällig verteilte Spielwerte fürs
+  Budget-System, KEINE echte Einschätzung der realen Fähigkeiten. RLCS Legends
+  ist ein inoffizielles Fan-Projekt ohne Verbindung zu Psyonix, Epic Games
+  oder den genannten Spielern/Organisationen (Disclaimer auch im Hauptmenü).
+  Ab v0.3 auch Coaches mit echten, verifizierten RLCS-Coach-Namen — auf
+  denselben Stat-Achsen wie Spieler (statt eigener Coach-Stats), damit Preis/
+  Overall direkt vergleichbar sind.
+- **Transfermarkt/Verträge (ab v0.3):** Ein Teil der Spieler steht bereits bei
+  Bot-Orgas unter Vertrag (ausgegraut im Markt, "Spielt bereits für X"). Um
+  einen Vertragsspieler abzuwerben, muss mindestens das Doppelte des
+  Marktwerts geboten UND eine Verhandlung mit Orga/Spieler geführt werden
+  (regelbasierte Simulation mit frei schreibbarer Nachricht — bewusst kein
+  LLM-API-Call, da die .exe öffentlich verteilt wird und ein API-Key im
+  Client unsicher wäre). Die Verhandlung kann scheitern; die KI verteidigt
+  ihren eigenen besten Spieler zäher, um sich nicht selbst für die nächste
+  Saison zu schwächen.
 
 ## Modi — priorisiert, nicht alles in Version 1
 

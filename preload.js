@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteSave: (slotId) => ipcRenderer.invoke('delete-save', slotId),
   listSaveSlots: () => ipcRenderer.invoke('list-save-slots'),
 
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
+
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.send('download-update'),
   installUpdate: () => ipcRenderer.send('install-update'),

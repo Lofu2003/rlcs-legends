@@ -42,8 +42,10 @@ ipcMain.handle('list-save-slots', () => {
         slotId: i,
         exists: true,
         orgName: data.assignedOrg ? data.assignedOrg.name : '?',
+        characterName: data.careerCharacter ? data.careerCharacter.name : 'Manager', // ältere Spielstände kannten noch keinen Charakter
         seasonNumber: data.careerState ? data.careerState.seasonNumber : 1,
         titlesWon: data.careerState ? data.careerState.titlesWon : 0,
+        gameMode: data.gameMode || 'career', // ältere Spielstände kannten nur Karriere
       });
     } catch {
       slots.push({ slotId: i, exists: false });
@@ -52,12 +54,35 @@ ipcMain.handle('list-save-slots', () => {
   return slots;
 });
 
+// ── Einstellungen (globale App-Präferenzen, getrennt von den Speicherständen —
+// gelten karrieren-/slot-übergreifend, z.B. bevor überhaupt eine Karriere
+// existiert) ──────────────────────────────────────────────────────────────
+const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+const DEFAULT_SETTINGS = { autoCheckUpdates: true, defaultMatchSpeed: 1, quickSimPace: 'normal' };
+
+function loadSettingsSync() {
+  try {
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+ipcMain.handle('get-settings', () => loadSettingsSync());
+ipcMain.handle('save-settings', (_event, settings) => {
+  const merged = { ...DEFAULT_SETTINGS, ...settings };
+  fs.writeFileSync(settingsPath, JSON.stringify(merged));
+  return merged;
+});
+
 let mainWindow = null;
 
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    minWidth: 1000,
+    minHeight: 680,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -105,7 +130,9 @@ ipcMain.on('install-update', () => autoUpdater.quitAndInstall());
 
 app.whenReady().then(() => {
   createWindow();
-  if (app.isPackaged) autoUpdater.checkForUpdates(); // stille Prüfung beim Start
+  // Stille Prüfung beim Start — respektiert die "Automatisch nach Updates
+  // suchen"-Einstellung (Standard: an).
+  if (app.isPackaged && loadSettingsSync().autoCheckUpdates) autoUpdater.checkForUpdates();
 });
 
 app.on('window-all-closed', () => {

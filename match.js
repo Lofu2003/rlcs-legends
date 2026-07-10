@@ -89,6 +89,12 @@ const MISS_TEMPLATES = [
 
 const LATE_GAME_THRESHOLD_SECONDS = 20;
 
+// Chance pro Ereignis, dass ein Spieler disconnected (löst den Sub-Zwangswechsel
+// aus) — bei ~13 Ereignissen pro Spiel (300s / ~23s Ø) ergibt das eine Chance von
+// ca. 1-(1-p)^13 ≈ 33%, dass der Sub überhaupt zum Einsatz kommt. Bewusst nicht
+// höher, damit es sich wie ein echter Notfall anfühlt statt einer garantierten Rotation.
+const DISCONNECT_CHANCE_PER_EVENT = 0.03;
+
 /**
  * Löst EIN Ballbesitz-Ereignis auf (Duell, ggf. Torschuss/Parade/Fehlschuss).
  * Gibt ein Ereignis-Objekt zurück (ohne time/stepSeconds — die setzt der Aufrufer).
@@ -171,14 +177,16 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
 
   let activeTeamA = teamA.slice();
   let subDone = !myOptions.sub;
-  const subSwapClock = myOptions.sub ? 130 + Math.random() * 40 : null; // zw. 2:10 und 2:50 Restzeit
 
   while (clock > 0) {
     const step = 14 + Math.random() * 18; // 14-32 Spiel-Sekunden pro Ereignis
     clock -= step;
     const timeStr = formatClock(clock);
 
-    if (!subDone && clock <= subSwapClock) {
+    // Sub kommt nicht mehr zu einem festen Zeitpunkt, sondern nur, wenn ein
+    // Spieler "disconnected" — realistischer (Subs sind im echten Spiel reine
+    // Notfall-Ersatzspieler) und unvorhersehbar. Kann auch gar nicht passieren.
+    if (!subDone && Math.random() < DISCONNECT_CHANCE_PER_EVENT) {
       const outIdx = Math.floor(Math.random() * activeTeamA.length);
       const outPlayer = activeTeamA[outIdx];
       activeTeamA = activeTeamA.slice();
@@ -186,7 +194,8 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
       subDone = true;
       events.push({
         time: timeStr, stepSeconds: step, type: 'sub',
-        msg: 'Wechsel: ' + myOptions.sub.name + ' kommt für ' + outPlayer.name + ' (' + nameA + ')',
+        msg: 'DISCONNECT! ' + outPlayer.name + ' (' + nameA + ') verliert die Verbindung — '
+          + myOptions.sub.name + ' kommt sofort ins Spiel!',
         team: 'A', player: myOptions.sub.name, subOutName: outPlayer.name,
         subInPlayer: myOptions.sub,
       });

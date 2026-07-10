@@ -1,6 +1,7 @@
 const MAIN_SIZE = 3;
 const SUB_SIZE = 1;
-const TOTAL_PLAYER_PICKS = MAIN_SIZE + SUB_SIZE;
+const RESERVE_SIZE = 2; // Reserve-Spieler zählen zum Kader/Budget, spielen aber nie mit
+const TOTAL_ROSTER_SIZE = MAIN_SIZE + SUB_SIZE + RESERVE_SIZE;
 
 const STAT_LABELS = [
   ['mechanics', 'MEC'],
@@ -11,18 +12,108 @@ const STAT_LABELS = [
   ['boostMgmt', 'BST'],
 ];
 
-const COACH_STAT_LABELS = [
-  ['taktik', 'TAK'],
-  ['teamgeist', 'TMG'],
-  ['entwicklung', 'ENT'],
-];
+// Gleiche Stat-Achsen wie Spieler (User-Wunsch) — Coach-Overall/Preis damit
+// direkt mit Spielern vergleichbar (siehe data/test-coaches.js).
+const COACH_STAT_LABELS = STAT_LABELS;
 
 // Wird erst bei "Neues Spiel" gesetzt (siehe startNewGame())
 let assignedOrg = null;
 let BUDGET = 0;
 
-let draftedPlayerNames = [];   // Reihenfolge zählt: erste MAIN_SIZE = Starter, Rest = Sub
+// Spielmodus — aktuell nur 'career' spielbar, 'randomizer' ist als zweiter
+// Modus angekündigt (ausgegraut in der Auswahl) aber noch nicht implementiert.
+// Wird pro Speicherstand mitgespeichert, damit die Fortsetzen-Liste zeigt,
+// welcher Modus in welchem Slot läuft.
+let gameMode = 'career';
+
+// ── Einstellungen (globale App-Präferenzen, siehe main.js settings.json) ──
+let appSettings = { autoCheckUpdates: true, defaultMatchSpeed: 1, quickSimPace: 'normal' };
+const SETTINGS_SPEED_OPTIONS = [1, 2, 4, 8, 16, 32];
+const SETTINGS_PACE_OPTIONS = [
+  { id: 'normal', label: 'Normal', ms: 700 },
+  { id: 'fast', label: 'Schnell', ms: 250 },
+  { id: 'instant', label: 'Sofort', ms: 0 },
+];
+
+function quickSimPaceMs() {
+  const opt = SETTINGS_PACE_OPTIONS.find((o) => o.id === appSettings.quickSimPace);
+  return opt ? opt.ms : 700;
+}
+
+// Kader-Slots statt eines flachen Arrays — damit Main/Sub/Reserve echte,
+// einzeln adressierbare Plätze sind (nötig für die Drag&Drop-Kader-Ansicht,
+// siehe renderRosterBoard()). Kauf füllt automatisch den nächsten freien
+// Slot in der Reihenfolge Main -> Sub -> Reserve (siehe toggleDraftPlayer()).
+function emptySlotArray(size) { return new Array(size).fill(null); }
+function padToSize(names, size) {
+  const arr = names.slice(0, size);
+  while (arr.length < size) arr.push(null);
+  return arr;
+}
+let rosterSlots = { main: emptySlotArray(MAIN_SIZE), sub: emptySlotArray(SUB_SIZE), reserve: emptySlotArray(RESERVE_SIZE) };
 let draftedCoachName = null;
+
+function getAllOwnedPlayerNames() {
+  return [...rosterSlots.main, ...rosterSlots.sub, ...rosterSlots.reserve].filter(Boolean);
+}
+// Spieler, die tatsächlich mitspielen (Main+Sub) — Reserve zählt bewusst
+// NICHT dazu (spielt laut Konzept nie mit).
+function getActivePlayerNames() {
+  return [...rosterSlots.main, ...rosterSlots.sub].filter(Boolean);
+}
+function findPlayerSlot(name) {
+  for (const type of ['main', 'sub', 'reserve']) {
+    const idx = rosterSlots[type].indexOf(name);
+    if (idx !== -1) return { type, index: idx };
+  }
+  return null;
+}
+// Entfernt einen Spieler aus dem Kader — rückt bei einem Main-Verkauf den Sub
+// automatisch nach (falls vorhanden), damit die 3 aktiven Main-Plätze soweit
+// möglich voll bleiben (siehe canSellPlayer()).
+function removePlayerFromRoster(name) {
+  const slot = findPlayerSlot(name);
+  if (!slot) return;
+  if (slot.type === 'main' && rosterSlots.sub[0]) {
+    rosterSlots.main[slot.index] = rosterSlots.sub[0];
+    rosterSlots.sub[0] = null;
+  } else {
+    rosterSlots[slot.type][slot.index] = null;
+  }
+}
+// Verkauf (an eine Bot-Org) darf die aktive Mindestbesetzung (3 Main-Spieler)
+// nie unterschreiten — Reserve- und Sub-Verkäufe sind davon nie betroffen,
+// ein Main-Verkauf nur, wenn ein Sub zum Nachrücken bereitsteht.
+function canSellPlayer(name) {
+  const slot = findPlayerSlot(name);
+  if (!slot || slot.type !== 'main') return true;
+  return !!rosterSlots.sub[0];
+}
+
+// Ein Spieler darf laut User-Vorgabe pro Saison nur EIN einziges Mal den
+// Besitzer wechseln — egal ob eigener Kauf, eigener Verkauf oder Bot-zu-Bot-
+// Trade. Wird bei jedem abgeschlossenen Transfer befüllt (siehe
+// completeNegotiationSuccess/acceptIncomingOffer/generateBotTrades) und bei
+// jedem Saisonwechsel geleert.
+let playersTradedThisSeason = new Set();
+
+// Spieler, die per Verhandlung von einer Bot-Org abgeworben wurden, zahlen
+// die ausgehandelte (mindestens doppelte) Ablöse statt des normalen Preises
+// gegen den Budget-Cap — siehe getSpent()/completeNegotiationSuccess(). Gilt
+// nur für die laufende Draft-Session (wird bei neuer Saison zurückgesetzt,
+// siehe confirmOrgAndProceed()/startNextSeason()), da der Spieler ab der
+// nächsten Saison ganz normal "dein" Kaderspieler ist.
+let negotiatedPremiumPlayers = {};
+
+// Chronologisches Log ALLER abgeschlossenen Transfers (eigene Käufe/Verkäufe
+// UND Bot-zu-Bot-Trades, siehe generateBotTrades()) — für die Transfer-
+// Historie-Ansicht. Bleibt über die GANZE Karriere bestehen (anders als
+// negotiatedPremiumPlayers), wird nur bei neuer Karriere geleert.
+let transferLog = []; // { season, from, to, player, price }
+
+function logTransfer(from, to, player, price) {
+  transferLog.unshift({ season: careerState.seasonNumber, from, to, player, price });
+}
 
 // ── Karriere-Kontinuität über mehrere Saisons ────────────────────────────
 // careerState existiert ab der ersten Saison und trackt Saison-Nummer + Titel.
@@ -33,6 +124,7 @@ let draftedCoachName = null;
 // App-Sitzung bereits hochentwickelte Spieler im Pool vorfinden).
 let careerState = null;
 let careerRosterPlayers = null;
+let careerReservePlayers = null; // entwickelte Reserve-Spieler, analog zu careerRosterPlayers
 let careerCoach = null;
 
 // Rivalitäten: Bot-Teams bleiben über die gesamte Karriere bestehen (statt
@@ -50,11 +142,12 @@ function tierForOverall(overall) {
 }
 
 // Karriere-entwickelte Version hat Vorrang vor dem statischen Pool — dadurch
-// zeigen draftedPlayerNames/findPlayer(name) automatisch überall (Kader,
-// Preisberechnung, Pool-Anzeige) den aktuellen Entwicklungsstand, ohne dass
-// jede aufrufende Stelle das extra wissen muss.
+// zeigt findPlayer(name) automatisch überall (Kader, Preisberechnung, Pool-
+// Anzeige) den aktuellen Entwicklungsstand, ohne dass jede aufrufende Stelle
+// das extra wissen muss.
 function findPlayer(name) {
-  const developed = careerRosterPlayers && careerRosterPlayers.find((p) => p.name === name);
+  const developed = (careerRosterPlayers && careerRosterPlayers.find((p) => p.name === name))
+    || (careerReservePlayers && careerReservePlayers.find((p) => p.name === name));
   return developed || TEST_PLAYERS.find((p) => p.name === name);
 }
 function findCoach(name) {
@@ -63,7 +156,9 @@ function findCoach(name) {
 }
 
 function getSpent() {
-  const playerSpend = draftedPlayerNames.reduce((sum, n) => sum + calculatePrice(findPlayer(n).overall), 0);
+  const playerSpend = getAllOwnedPlayerNames().reduce((sum, n) => {
+    return sum + (negotiatedPremiumPlayers[n] || calculatePrice(findPlayer(n).overall));
+  }, 0);
   const coachSpend = draftedCoachName ? calculatePrice(findCoach(draftedCoachName).overall) : 0;
   return playerSpend + coachSpend;
 }
@@ -71,13 +166,15 @@ function getSpent() {
 function getRemaining() { return BUDGET - getSpent(); }
 
 function toggleDraftPlayer(player) {
-  const idx = draftedPlayerNames.indexOf(player.name);
-  if (idx >= 0) {
-    draftedPlayerNames.splice(idx, 1);
+  const slot = findPlayerSlot(player.name);
+  if (slot) {
+    rosterSlots[slot.type][slot.index] = null;
+    delete negotiatedPremiumPlayers[player.name];
   } else {
-    if (draftedPlayerNames.length >= TOTAL_PLAYER_PICKS) return;
+    const targetType = ['main', 'sub', 'reserve'].find((type) => rosterSlots[type].includes(null));
+    if (!targetType) return; // Kader komplett voll (Main+Sub+Reserve)
     if (calculatePrice(player.overall) > getRemaining()) return;
-    draftedPlayerNames.push(player.name);
+    rosterSlots[targetType][rosterSlots[targetType].indexOf(null)] = player.name;
   }
   renderAll();
   saveGameState();
@@ -120,17 +217,25 @@ function buildStatBar(label, value) {
   return wrap;
 }
 
-function buildCard({ overall, name, price, isDrafted, isLocked, statPairs, extraClass, onClick }) {
+function buildCard({ overall, name, price, isDrafted, isLocked, statPairs, extraClass, contractTeamName, onClick }) {
   const card = document.createElement('div');
   card.className = 'player-card ' + tierForOverall(overall) + (extraClass ? ' ' + extraClass : '');
   if (isDrafted) card.classList.add('is-drafted');
   if (isLocked) card.classList.add('is-locked');
+  if (contractTeamName) card.classList.add('is-contracted');
   card.addEventListener('click', onClick);
 
   if (isDrafted) {
     const badge = document.createElement('div');
     badge.className = 'drafted-badge';
     badge.textContent = '✓ GEDRAFTET';
+    card.appendChild(badge);
+  }
+
+  if (contractTeamName) {
+    const badge = document.createElement('div');
+    badge.className = 'contract-badge';
+    badge.textContent = 'Spielt bereits für ' + contractTeamName;
     card.appendChild(badge);
   }
 
@@ -162,12 +267,32 @@ function buildCard({ overall, name, price, isDrafted, isLocked, statPairs, extra
   return card;
 }
 
+// Findet das Bot-Team, das einen Spieler (per Name) aktuell unter Vertrag hat
+// — null, wenn der Spieler ein freier Agent ist (oder gerade beim Nutzer).
+function findBotTeamOwning(playerName) {
+  if (!careerBotTeams) return null;
+  return careerBotTeams.find((t) => t.players.some((p) => p.name === playerName)) || null;
+}
+
 function buildPlayerCard(p) {
-  const price = calculatePrice(p.overall);
-  const isDrafted = draftedPlayerNames.includes(p.name);
-  const rosterFull = draftedPlayerNames.length >= TOTAL_PLAYER_PICKS;
+  const basePrice = calculatePrice(p.overall);
+  const isDrafted = !!findPlayerSlot(p.name);
+  const rosterFull = getAllOwnedPlayerNames().length >= TOTAL_ROSTER_SIZE;
+  const owningTeam = isDrafted ? null : findBotTeamOwning(p.name);
+  const blocked = owningTeam ? isNegotiationBlocked(owningTeam.name) : false;
+  const alreadyTraded = owningTeam ? playersTradedThisSeason.has(p.name) : false;
+  // Vertragsspieler kosten mindestens das Doppelte (Verhandlungs-Startforderung,
+  // siehe openNegotiationModal) — das wird schon auf der Karte angezeigt.
+  const price = owningTeam ? basePrice * 2 : basePrice;
   const canAfford = price <= getRemaining();
-  const isLocked = !isDrafted && (rosterFull || !canAfford);
+  const isLocked = !isDrafted && (rosterFull || !canAfford || blocked || alreadyTraded);
+
+  let contractTeamName = null;
+  if (owningTeam) {
+    contractTeamName = owningTeam.name;
+    if (blocked) contractTeamName += ' — gesperrt bis Saison ' + negotiationBlocklist[owningTeam.name];
+    else if (alreadyTraded) contractTeamName += ' — schon getradet, erst nächste Saison wieder';
+  }
 
   return buildCard({
     overall: p.overall,
@@ -176,8 +301,399 @@ function buildPlayerCard(p) {
     isDrafted,
     isLocked,
     statPairs: STAT_LABELS.map(([key, label]) => [key, label, p[key]]),
-    onClick: () => toggleDraftPlayer(p),
+    contractTeamName,
+    onClick: () => {
+      if (isLocked) return;
+      if (owningTeam) { openNegotiationModal(p, owningTeam); return; }
+      toggleDraftPlayer(p);
+    },
   });
+}
+
+// ── Verhandlungssystem: Vertragsspieler von Bot-Orgs abwerben ───────────────
+// Regelbasierte Simulation statt echter LLM-API (User-Entscheidung) — RLCS
+// Legends wird als öffentliche .exe verteilt, ein API-Key im Client wäre
+// extrahierbar/missbrauchbar, und ein Backend dafür ist außerhalb des Scopes.
+// Trotzdem "frei schreibbar": der Nutzer tippt ein echtes Argument, das per
+// Schlüsselwörtern ausgewertet wird (siehe analyzeNegotiationMessage), nicht
+// nur Buttons klickt.
+//
+// Regeln (User-Vorgabe, 2. Runde): die Org startet bei doppeltem Marktwert,
+// bewegt sich aber über mehrere Angebote hinweg auf den Nutzer zu ("kommt
+// entgegen"), statt starr auf dem Doppelten zu beharren — ein deutlich zu
+// niedriges Angebot (unter der Hälfte des aktuellen Ask-Preises, z.B. 150
+// gegen eine Forderung von 390) wird trotzdem sofort und hart abgelehnt statt
+// bloß eine niedrige Erfolgschance zu haben. Max. 3 Verhandlungsversuche pro
+// Spieler; ein Frust-Balken der Org steigt bei schlechten Angeboten — wird er
+// voll (oder sind die 3 Versuche aufgebraucht), bricht die Org ab und blockt
+// jede weitere Verhandlung mit ihr für die nächsten 3 Saisons. Die KI behält
+// dabei ihr EIGENES Interesse im Blick: der beste Spieler eines Bot-Teams
+// wird zäher verteidigt als ein Rollenspieler, damit sich die Org durch einen
+// Verkauf nicht selbst für die nächste Saison schwächt.
+const NEGOTIATION_POSITIVE_WORDS = ['bitte', 'zukunft', 'chance', 'projekt', 'vertrauen', 'fair', 'stern', 'wachsen', 'gemeinsam', 'top', 'wichtig', 'familie', 'langfristig', 'respekt', 'perspektive'];
+const NEGOTIATION_NEGATIVE_WORDS = ['muss', 'sofort', 'zwing', 'billig', 'schrott', 'egal', 'befehl', 'verlangen', 'nervt'];
+
+const NEGOTIATION_MAX_ATTEMPTS = 3;
+const NEGOTIATION_FRUSTRATION_MAX = 100;
+const NEGOTIATION_INSTANT_REJECT_RATIO = 0.5; // Angebot < 50% des aktuellen Ask-Preises = "zu dreist"
+const NEGOTIATION_MIN_ASK_MULTIPLIER = 1.3;   // die Org geht nie unter das 1.3-fache des Marktwerts
+const NEGOTIATION_MEET_FACTOR = 0.35;         // wie stark sich der Ask-Preis pro Runde Richtung Angebot bewegt
+const NEGOTIATION_BLOCK_SEASONS = 3;
+
+let negotiationState = null; // { player, botTeam, basePrice, askPrice, attempts, frustration, ended }
+let negotiationBlocklist = {}; // botTeamName -> Saison-Nummer, ab der wieder verhandelt werden darf
+
+function isNegotiationBlocked(botTeamName) {
+  const until = negotiationBlocklist[botTeamName];
+  return !!until && careerState.seasonNumber < until;
+}
+
+function openNegotiationModal(player, botTeam) {
+  const basePrice = calculatePrice(player.overall);
+  negotiationState = { player, botTeam, basePrice, askPrice: basePrice * 2, attempts: 0, frustration: 0, ended: false };
+
+  document.getElementById('negotiation-title').textContent = 'Verhandlung: ' + player.name;
+  updateNegotiationSubtitle();
+  updateNegotiationFrustrationBar();
+
+  document.getElementById('negotiation-log').innerHTML = '';
+  appendNegotiationLine('system', botTeam.name + ' hört sich Angebote für ' + player.name + ' an — Summe und Auftreten müssen aber stimmen. Max. ' + NEGOTIATION_MAX_ATTEMPTS + ' Versuche.');
+
+  document.getElementById('negotiation-offer').value = negotiationState.askPrice;
+  document.getElementById('negotiation-message').value = '';
+  document.getElementById('btn-negotiation-send').disabled = false;
+  document.getElementById('negotiation-modal').classList.remove('hidden');
+}
+
+function updateNegotiationSubtitle() {
+  const { player, botTeam, askPrice } = negotiationState;
+  document.getElementById('negotiation-subtitle').textContent =
+    player.name + ' (' + player.overall + ' Overall) steht aktuell bei ' + botTeam.name +
+    ' unter Vertrag. Aktuelle Forderung: ' + Math.round(askPrice).toLocaleString('de-DE') + ' Cr.';
+}
+
+function updateNegotiationFrustrationBar() {
+  const { attempts, frustration } = negotiationState;
+  const fill = document.getElementById('negotiation-frustration-fill');
+  fill.style.width = Math.min(100, frustration) + '%';
+  fill.style.background = frustration >= 70
+    ? 'linear-gradient(90deg, #e8543e, #ff8a6a)'
+    : frustration >= 35
+      ? 'linear-gradient(90deg, #e0a83e, #ffce6a)'
+      : 'linear-gradient(90deg, #3ecf72, #6fd6e8)';
+  document.getElementById('negotiation-attempts-label').textContent = 'Versuch ' + attempts + '/' + NEGOTIATION_MAX_ATTEMPTS;
+}
+
+function hideNegotiationModal() {
+  document.getElementById('negotiation-modal').classList.add('hidden');
+  negotiationState = null;
+}
+
+function appendNegotiationLine(who, text) {
+  const log = document.getElementById('negotiation-log');
+  const line = document.createElement('div');
+  line.className = 'negotiation-line negotiation-line-' + who;
+  const prefix = who === 'user' ? 'Du: ' : who === 'org' ? negotiationState.botTeam.name + ': ' : who === 'player' ? negotiationState.player.name + ': ' : '';
+  line.textContent = prefix + text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+// Grobe Stimmungsanalyse per Schlüsselwörtern statt echtem NLP — bewusst
+// einfach/deterministisch statt eines LLM-Aufrufs (siehe Kommentar oben).
+function analyzeNegotiationMessage(message) {
+  const lower = message.toLowerCase();
+  let score = 0;
+  NEGOTIATION_POSITIVE_WORDS.forEach((w) => { if (lower.includes(w)) score += 0.02; });
+  NEGOTIATION_NEGATIVE_WORDS.forEach((w) => { if (lower.includes(w)) score -= 0.03; });
+  return Math.max(-0.1, Math.min(0.12, score));
+}
+
+function sendNegotiationOffer() {
+  if (!negotiationState || negotiationState.ended) return;
+  const st = negotiationState;
+  const { player, botTeam } = st;
+  const offerInput = document.getElementById('negotiation-offer');
+  const messageInput = document.getElementById('negotiation-message');
+  const offer = Math.round(Number(offerInput.value) || 0);
+  const message = messageInput.value.trim();
+
+  if (message) appendNegotiationLine('user', message);
+  appendNegotiationLine('user', 'Angebot: ' + offer.toLocaleString('de-DE') + ' Cr.');
+  messageInput.value = '';
+
+  if (offer > getRemaining()) {
+    appendNegotiationLine('system', 'Das kannst du dir nicht leisten — dein Budget reicht dafür nicht aus.');
+    return; // zählt nicht als Verhandlungsversuch, ist nur eine UI-Validierung
+  }
+
+  st.attempts += 1;
+  const ratio = offer / st.askPrice;
+
+  if (ratio < NEGOTIATION_INSTANT_REJECT_RATIO) {
+    appendNegotiationLine('org', 'Das ist unverschämt wenig — wir verlangen ' + Math.round(st.askPrice).toLocaleString('de-DE') + ' Cr, kein Grund für uns, darüber überhaupt nachzudenken.');
+    st.frustration = NEGOTIATION_FRUSTRATION_MAX;
+    updateNegotiationFrustrationBar();
+    endNegotiationIfNeeded();
+    return;
+  }
+
+  const isTeamsBest = player.overall === Math.max(...botTeam.players.map((p) => p.overall));
+  const messageBonus = analyzeNegotiationMessage(message);
+
+  if (offer >= st.askPrice) {
+    const surplus = (offer - st.askPrice) / st.askPrice;
+    let chance = 0.5 + surplus * 0.6 + messageBonus - (isTeamsBest ? 0.2 : 0);
+    chance = Math.max(0.05, Math.min(0.92, chance));
+
+    if (Math.random() < chance) {
+      appendNegotiationLine('org', 'Abgemacht — ' + player.name + ' wechselt für ' + offer.toLocaleString('de-DE') + ' Cr zu ' + assignedOrg.name + '.');
+      appendNegotiationLine('player', 'Neue Herausforderung, neues Kapitel. Ich bin dabei.');
+      completeNegotiationSuccess(offer);
+      return;
+    }
+    st.frustration = Math.min(NEGOTIATION_FRUSTRATION_MAX, st.frustration + 15 * findCharacterPath(careerCharacter.pathId).frustrationMultiplier);
+    const voice = Math.random() < 0.5 ? 'org' : 'player';
+    const rejectionPool = voice === 'org'
+      ? ['Die Ablöse ist uns die Trennung noch nicht wert — wir planen mit ' + player.name + ' für die nächste Saison.', 'Unser Management sieht aktuell keinen Grund für einen Verkauf.', 'Wir reden gerne weiter, aber so noch nicht.']
+      : ['Ich fühle mich hier gerade wohl — vielleicht ein andermal.', 'Der Zeitpunkt passt für mich nicht.', 'Ich will erst sehen, wie diese Saison für uns läuft.'];
+    appendNegotiationLine(voice, rejectionPool[Math.floor(Math.random() * rejectionPool.length)]);
+  } else {
+    // Angebot liegt unter der Forderung, aber nicht dreist niedrig — die Org
+    // kommt ein Stück entgegen, statt starr auf dem alten Ask-Preis zu bleiben.
+    const floor = st.basePrice * NEGOTIATION_MIN_ASK_MULTIPLIER;
+    const oldAsk = st.askPrice;
+    st.askPrice = Math.max(floor, st.askPrice - (st.askPrice - offer) * NEGOTIATION_MEET_FACTOR);
+    st.frustration = Math.min(NEGOTIATION_FRUSTRATION_MAX, st.frustration + (25 - messageBonus * 100) * findCharacterPath(careerCharacter.pathId).frustrationMultiplier);
+    if (Math.round(st.askPrice) < Math.round(oldAsk)) {
+      appendNegotiationLine('org', 'Das ist uns noch zu wenig, aber wir bewegen uns: ' + Math.round(oldAsk).toLocaleString('de-DE') + ' Cr -> ' + Math.round(st.askPrice).toLocaleString('de-DE') + ' Cr wäre inzwischen unsere Untergrenze.');
+    } else {
+      appendNegotiationLine('org', 'Weiter unter unserer Schmerzgrenze von ' + Math.round(st.askPrice).toLocaleString('de-DE') + ' Cr — mehr geht bei uns gerade nicht runter.');
+    }
+    updateNegotiationSubtitle();
+  }
+
+  updateNegotiationFrustrationBar();
+  endNegotiationIfNeeded();
+}
+
+// Prüft nach jedem Versuch, ob die Org endgültig abbricht (Frust voll ODER
+// die 3 Versuche aufgebraucht) — sperrt die Org dann für die nächsten 3
+// Saisons für weitere Verhandlungen.
+function endNegotiationIfNeeded() {
+  const st = negotiationState;
+  if (!st || st.ended) return;
+  if (st.frustration >= NEGOTIATION_FRUSTRATION_MAX || st.attempts >= NEGOTIATION_MAX_ATTEMPTS) {
+    st.ended = true;
+    negotiationBlocklist[st.botTeam.name] = careerState.seasonNumber + NEGOTIATION_BLOCK_SEASONS;
+    appendNegotiationLine('system', st.botTeam.name + ' bricht die Verhandlung endgültig ab — für die nächsten ' + NEGOTIATION_BLOCK_SEASONS + ' Saisons ist mit dieser Org nichts mehr zu verhandeln.');
+    document.getElementById('btn-negotiation-send').disabled = true;
+  }
+}
+
+function completeNegotiationSuccess(paidPrice) {
+  const { player, botTeam } = negotiationState;
+
+  // Ersatz-Rollenspieler beim Bot-Team nachrücken lassen — das Team bleibt so
+  // mit 3 Spielern turnierfähig, wird durch den Verkauf aber trotzdem
+  // schwächer (realistische Konsequenz eines gelungenen Transfers).
+  const idx = botTeam.players.findIndex((p) => p.name === player.name);
+  if (idx !== -1) {
+    const usedNames = new Set(botTeam.players.map((p) => p.name));
+    botTeam.players[idx] = generateBotPlayer(usedNames);
+  }
+
+  negotiatedPremiumPlayers[player.name] = paidPrice;
+  logTransfer(botTeam.name, assignedOrg.name, player.name, paidPrice);
+  playersTradedThisSeason.add(player.name);
+  hideNegotiationModal();
+  toggleDraftPlayer(player); // rendert + speichert bereits
+}
+
+// ── Bot-zu-Bot-Trades: Bots verhandeln auch UNTEREINANDER ──────────────────
+// User-Wunsch: die Bot-Liga soll sich auch ohne den Nutzer weiterbewegen.
+// Dieselbe Grundidee wie generateIncomingOffers() (Team sucht einen Spieler,
+// der deutlich stärker ist als der eigene schwächste), nur dass hier JEDES
+// Bot-Team sowohl Käufer als auch Verkäufer sein kann. Läuft automatisch und
+// ohne Nutzer-Interaktion ab (kein Verhandlungs-Popup nötig, da beide Seiten
+// KI sind) — landet aber sichtbar im transferLog/der Transfer-Historie.
+const BOT_TRADE_OVERALL_MARGIN = 6;
+const BOT_TRADE_CHANCE = 0.25;
+const MAX_BOT_TRADES_PER_SEASON = 5;
+
+function generateBotTrades() {
+  const teams = careerBotTeams;
+  let executed = 0;
+  const buyOrder = teams.slice().sort(() => Math.random() - 0.5); // Reihenfolge variieren, kein Team immer zuerst
+
+  buyOrder.forEach((buyer) => {
+    if (executed >= MAX_BOT_TRADES_PER_SEASON) return;
+    const weakest = buyer.players.reduce((min, p) => (p.overall < min.overall ? p : min), buyer.players[0]);
+
+    let bestSeller = null;
+    let bestPlayer = null;
+    teams.forEach((seller) => {
+      if (seller === buyer) return;
+      seller.players.forEach((p) => {
+        if (playersTradedThisSeason.has(p.name)) return; // schon diese Saison getradet — tabu
+        if (p.overall - weakest.overall >= BOT_TRADE_OVERALL_MARGIN && (!bestPlayer || p.overall > bestPlayer.overall)) {
+          bestPlayer = p;
+          bestSeller = seller;
+        }
+      });
+    });
+
+    if (!bestPlayer || Math.random() >= BOT_TRADE_CHANCE) return;
+
+    const buyerIdx = buyer.players.findIndex((p) => p.name === weakest.name);
+    const sellerIdx = bestSeller.players.findIndex((p) => p.name === bestPlayer.name);
+    if (buyerIdx === -1 || sellerIdx === -1) return;
+
+    buyer.players[buyerIdx] = { ...bestPlayer };
+    const usedNames = new Set(bestSeller.players.map((p) => p.name));
+    bestSeller.players[sellerIdx] = generateBotPlayer(usedNames); // Verkäufer bekommt frischen Rollenspieler nach
+
+    const price = Math.round(calculatePrice(bestPlayer.overall) * (1 + Math.random() * 0.5) / 5) * 5;
+    logTransfer(bestSeller.name, buyer.name, bestPlayer.name, price);
+    playersTradedThisSeason.add(bestPlayer.name);
+    executed += 1;
+  });
+}
+
+// ── Eingehende Angebote: Bots fragen umgekehrt bei DIR an ──────────────────
+// User-Wunsch: Bots sollen nicht nur passiv abgeworben werden können, sondern
+// selbst aktiv Interesse an Spielern im eigenen Roster zeigen, wenn diese
+// deutlich stärker sind als ihr eigener schwächster Spieler — dieselbe
+// regelbasierte Verhandlungslogik wie beim Abwerben, nur in umgekehrter
+// Richtung. Wird einmal pro Saisonwechsel neu ermittelt (siehe
+// startNextSeason()), NICHT bei jedem Rendern — sonst würde sich die Anfrage
+// bei jedem Bildschirmwechsel neu würfeln.
+const INCOMING_OFFER_OVERALL_MARGIN = 8; // ab wie viel Overall-Vorsprung ein Spieler für einen Bot interessant wird
+const INCOMING_OFFER_CHANCE = 0.35;      // pro geeignetem Team-Spieler-Paar, ob die Saison tatsächlich angefragt wird
+const MAX_INCOMING_OFFERS_PER_SEASON = 3;
+
+let pendingIncomingOffers = [];
+let currentIncomingOffer = null; // { botTeam, player, weakest, offerPrice }
+
+function generateIncomingOffers() {
+  const myRoster = getAllOwnedPlayerNames().map(findPlayer);
+  const candidates = [];
+
+  careerBotTeams.forEach((team) => {
+    const weakest = team.players.reduce((min, p) => (p.overall < min.overall ? p : min), team.players[0]);
+    let best = null;
+    myRoster.forEach((p) => {
+      if (playersTradedThisSeason.has(p.name)) return; // schon diese Saison getradet — tabu
+      if (!canSellPlayer(p.name)) return; // Main-Verkauf ohne Sub zum Nachrücken würde unter 3 Aktive drücken
+      if (p.overall - weakest.overall >= INCOMING_OFFER_OVERALL_MARGIN && (!best || p.overall > best.overall)) best = p;
+    });
+    if (best && Math.random() < INCOMING_OFFER_CHANCE) {
+      const multiplier = 1.3 + Math.random() * 0.5; // 1.3x - 1.8x Marktwert als Lockangebot
+      const offerPrice = Math.round(calculatePrice(best.overall) * multiplier / 5) * 5;
+      candidates.push({ botTeam: team, player: best, weakest, offerPrice });
+    }
+  });
+
+  // Größte Aufwertung für den Bot zuerst — pro Saison nur eine Handvoll
+  // Anfragen zeigen, sonst wirkt es wie Spam.
+  candidates.sort((a, b) => (b.player.overall - b.weakest.overall) - (a.player.overall - a.weakest.overall));
+  pendingIncomingOffers = candidates.slice(0, MAX_INCOMING_OFFERS_PER_SEASON);
+}
+
+function showNextIncomingOffer() {
+  if (pendingIncomingOffers.length === 0) { currentIncomingOffer = null; return; }
+  currentIncomingOffer = pendingIncomingOffers.shift();
+  const { botTeam, player, weakest, offerPrice } = currentIncomingOffer;
+
+  document.getElementById('incoming-offer-title').textContent = botTeam.name + ' fragt an: ' + player.name;
+  document.getElementById('incoming-offer-subtitle').textContent =
+    botTeam.name + ' interessiert sich für ' + player.name + ' (' + player.overall + ' Overall) — deutlich stärker als ihr aktuell schwächster Spieler ' +
+    weakest.name + ' (' + weakest.overall + ' Overall). Erstes Angebot: ' + offerPrice.toLocaleString('de-DE') + ' Cr.';
+
+  document.getElementById('incoming-offer-log').innerHTML = '';
+  appendIncomingOfferLine('org', 'Wir würden uns über ' + player.name + ' in unserem Kader sehr freuen. Wärt ihr für ' + offerPrice.toLocaleString('de-DE') + ' Cr bereit, ihn/sie ziehen zu lassen?');
+
+  document.getElementById('incoming-offer-counter').value = offerPrice;
+  document.getElementById('incoming-offer-message').value = '';
+  document.getElementById('incoming-offer-modal').classList.remove('hidden');
+}
+
+function appendIncomingOfferLine(who, text) {
+  const log = document.getElementById('incoming-offer-log');
+  const line = document.createElement('div');
+  line.className = 'negotiation-line negotiation-line-' + who;
+  const prefix = who === 'user' ? 'Du: ' : who === 'org' ? currentIncomingOffer.botTeam.name + ': ' : '';
+  line.textContent = prefix + text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function hideIncomingOfferModal() {
+  document.getElementById('incoming-offer-modal').classList.add('hidden');
+}
+
+function acceptIncomingOffer(paidPrice) {
+  const { botTeam, player, weakest } = currentIncomingOffer;
+
+  // Verkauf darf die aktive Mindestbesetzung (3 Main-Spieler) nie unterschreiten
+  // — ohne Sub zum Nachrücken ist ein Main-Verkauf blockiert (User-Vorgabe).
+  if (!canSellPlayer(player.name)) {
+    appendIncomingOfferLine('system', 'Verkauf nicht möglich — dir würden dann weniger als 3 aktive Spieler bleiben. Hol dir erst einen Sub, bevor du diesen Starter abgibst.');
+    return;
+  }
+
+  // Verkaufserlös über dem Marktwert wird als zusätzliches Saison-Budget
+  // gutgeschrieben (Transfer-Gewinn) — der reguläre Marktwert-Anteil ist
+  // durch den Wegfall aus dem Kader ohnehin automatisch als freies
+  // Budget-Cap verfügbar (siehe getSpent()).
+  BUDGET += Math.max(0, paidPrice - calculatePrice(player.overall));
+  logTransfer(assignedOrg.name, botTeam.name, player.name, paidPrice);
+  playersTradedThisSeason.add(player.name);
+  delete negotiatedPremiumPlayers[player.name];
+  removePlayerFromRoster(player.name); // rückt ggf. den Sub in den frei werdenden Main-Slot nach
+
+  // Der verkaufte Spieler ersetzt den bisher schwächsten Spieler des Bot-Teams.
+  const idx = botTeam.players.findIndex((p) => p.name === weakest.name);
+  if (idx !== -1) botTeam.players[idx] = { ...player };
+
+  hideIncomingOfferModal();
+  showNextIncomingOffer();
+  renderAll();
+  saveGameState();
+}
+
+function declineIncomingOffer() {
+  hideIncomingOfferModal();
+  showNextIncomingOffer();
+}
+
+function sendIncomingOfferCounter() {
+  if (!currentIncomingOffer) return;
+  const { botTeam, player, offerPrice } = currentIncomingOffer;
+  const counterInput = document.getElementById('incoming-offer-counter');
+  const messageInput = document.getElementById('incoming-offer-message');
+  const counterPrice = Math.round(Number(counterInput.value) || 0);
+  const message = messageInput.value.trim();
+
+  if (message) appendIncomingOfferLine('user', message);
+  appendIncomingOfferLine('user', 'Unsere Forderung: ' + counterPrice.toLocaleString('de-DE') + ' Cr.');
+  messageInput.value = '';
+
+  // Je mehr über dem ursprünglichen Angebot gefordert wird, desto unwilliger
+  // wird die Org — dasselbe Prinzip wie beim Abwerben, nur umgekehrt.
+  const demandSurplus = (counterPrice - offerPrice) / Math.max(1, offerPrice);
+  const messageBonus = analyzeNegotiationMessage(message);
+  let chance = 0.6 - demandSurplus * 0.5 + messageBonus;
+  chance = Math.max(0.05, Math.min(0.9, chance));
+
+  if (Math.random() < chance) {
+    appendIncomingOfferLine('org', 'Abgemacht — wir zahlen ' + counterPrice.toLocaleString('de-DE') + ' Cr für ' + player.name + '.');
+    acceptIncomingOffer(counterPrice);
+  } else {
+    appendIncomingOfferLine('org', 'Das übersteigt unser Budget für diesen Transfer — wir ziehen das Angebot zurück.');
+    hideIncomingOfferModal();
+    showNextIncomingOffer();
+  }
 }
 
 function buildCoachCard(c) {
@@ -225,8 +741,9 @@ function renderBudgetBar() {
   bar.innerHTML = '';
 
   const remaining = getRemaining();
-  const startersCount = Math.min(draftedPlayerNames.length, MAIN_SIZE);
-  const subCount = Math.max(0, Math.min(draftedPlayerNames.length - MAIN_SIZE, SUB_SIZE));
+  const startersCount = rosterSlots.main.filter(Boolean).length;
+  const subCount = rosterSlots.sub.filter(Boolean).length;
+  const reserveCount = rosterSlots.reserve.filter(Boolean).length;
 
   const makeChip = (text) => {
     const chip = document.createElement('span');
@@ -237,6 +754,7 @@ function renderBudgetBar() {
 
   bar.appendChild(makeChip('Spieler: ' + startersCount + ' / ' + MAIN_SIZE));
   bar.appendChild(makeChip('Sub: ' + subCount + ' / ' + SUB_SIZE));
+  bar.appendChild(makeChip('Reserve: ' + reserveCount + ' / ' + RESERVE_SIZE));
   bar.appendChild(makeChip('Coach: ' + (draftedCoachName ? '1' : '0') + ' / 1'));
 
   const remainingChip = document.createElement('span');
@@ -247,7 +765,7 @@ function renderBudgetBar() {
 
 function renderMatchButton() {
   const btn = document.getElementById('btn-start-match');
-  const startersReady = draftedPlayerNames.length >= MAIN_SIZE;
+  const startersReady = rosterSlots.main.filter(Boolean).length >= MAIN_SIZE;
   const startLabel = careerState && careerState.seasonNumber > 1
     ? 'Saison ' + careerState.seasonNumber + ' starten'
     : 'Turnier starten';
@@ -298,20 +816,26 @@ function renderMyRoster() {
   const slots = document.createElement('div');
   slots.className = 'roster-slots';
 
-  for (let i = 0; i < MAIN_SIZE; i++) {
-    const name = draftedPlayerNames[i];
+  rosterSlots.main.forEach((name, i) => {
     renderRosterSlot(slots, 'Starter ' + (i + 1), () =>
       name ? buildSlotContent(name, calculatePrice(findPlayer(name).overall)) : null);
-  }
-  for (let i = MAIN_SIZE; i < MAIN_SIZE + SUB_SIZE; i++) {
-    const name = draftedPlayerNames[i];
-    renderRosterSlot(slots, 'Sub', () =>
+  });
+  renderRosterSlot(slots, 'Sub', () =>
+    rosterSlots.sub[0] ? buildSlotContent(rosterSlots.sub[0], calculatePrice(findPlayer(rosterSlots.sub[0]).overall)) : null);
+  rosterSlots.reserve.forEach((name, i) => {
+    renderRosterSlot(slots, 'Reserve ' + (i + 1), () =>
       name ? buildSlotContent(name, calculatePrice(findPlayer(name).overall)) : null);
-  }
+  });
   renderRosterSlot(slots, 'Coach', () =>
     draftedCoachName ? buildSlotContent(draftedCoachName, calculatePrice(findCoach(draftedCoachName).overall)) : null);
 
   section.appendChild(slots);
+
+  const editBtn = document.createElement('button');
+  editBtn.className = 'update-check-btn roster-edit-btn';
+  editBtn.textContent = '🔀 Aufstellung bearbeiten (Main/Sub/Reserve/Coach tauschen)';
+  editBtn.addEventListener('click', () => { renderRosterBoard(); showScreen('screen-roster'); });
+  section.appendChild(editBtn);
 }
 
 function renderPlayerPool() {
@@ -360,6 +884,232 @@ function showScreen(id) {
   document.getElementById(id).classList.remove('hidden');
 }
 
+// ── Transfer-Historie: alle abgeschlossenen Wechsel als Liste ───────────────
+function renderTransferLog() {
+  const container = document.getElementById('transfer-log-list');
+  container.innerHTML = '';
+
+  if (transferLog.length === 0) {
+    container.innerHTML = '<div class="transfer-log-empty">Noch keine Transfers in dieser Karriere.</div>';
+    return;
+  }
+
+  let lastSeason = null;
+  transferLog.forEach((entry) => {
+    if (entry.season !== lastSeason) {
+      const heading = document.createElement('div');
+      heading.className = 'transfer-season-heading';
+      heading.textContent = 'Saison ' + entry.season;
+      container.appendChild(heading);
+      lastSeason = entry.season;
+    }
+
+    const row = document.createElement('div');
+    row.className = 'transfer-row';
+    row.innerHTML =
+      '<span class="transfer-row-from">' + entry.from + '</span>' +
+      '<span class="transfer-row-player">(' + entry.player + ')</span>' +
+      '<span class="transfer-row-arrow">→</span>' +
+      '<span class="transfer-row-to">' + entry.to + '</span>' +
+      '<span class="transfer-row-price">' + entry.price.toLocaleString('de-DE') + ' Cr</span>';
+    container.appendChild(row);
+  });
+}
+
+// ── Kader-Aufstellung: Drag&Drop zwischen Main/Sub/Reserve/Coach ────────────
+// Main/Sub/Reserve sind echte, einzeln adressierbare Slots (rosterSlots) —
+// Drag&Drop tauscht einfach den Inhalt von zwei Slots. "kind" trennt Spieler-
+// von Coach-Slots: ein Spieler kann nie auf den Coach-Slot gezogen werden
+// (und umgekehrt), da dataTransfer beim Drop-Handler auf gleiches "kind"
+// geprüft wird. Der Coach-Slot ist rein statisch (es gibt nur 1 Coach-Platz,
+// also nichts zum Tauschen) — kein Drag-Handler nötig.
+function buildDraggableSlotCard(kind, slotType, index, name) {
+  const box = document.createElement('div');
+  box.className = 'roster-board-slot' + (name ? ' filled' : ' empty');
+
+  if (!name) {
+    box.textContent = kind === 'coach' ? 'Kein Coach' : 'Leer';
+    if (kind === 'player') {
+      box.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('drag-over'); });
+      box.addEventListener('dragleave', () => box.classList.remove('drag-over'));
+      box.addEventListener('drop', (e) => {
+        e.preventDefault();
+        box.classList.remove('drag-over');
+        const from = JSON.parse(e.dataTransfer.getData('text/plain'));
+        handleRosterSlotDrop(from, { kind, slotType, index });
+      });
+    }
+    return box;
+  }
+
+  const entity = kind === 'coach' ? findCoach(name) : findPlayer(name);
+  box.innerHTML =
+    '<div class="roster-board-slot-rating">' + entity.overall + '</div>' +
+    '<div class="roster-board-slot-name">' + name + '</div>';
+
+  if (kind === 'player') {
+    box.draggable = true;
+    box.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ kind, slotType, index }));
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    box.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('drag-over'); });
+    box.addEventListener('dragleave', () => box.classList.remove('drag-over'));
+    box.addEventListener('drop', (e) => {
+      e.preventDefault();
+      box.classList.remove('drag-over');
+      const from = JSON.parse(e.dataTransfer.getData('text/plain'));
+      handleRosterSlotDrop(from, { kind, slotType, index });
+    });
+  }
+
+  return box;
+}
+
+// Tauscht den Inhalt zweier Spieler-Slots (Main/Sub/Reserve, in jeder
+// Kombination) — funktioniert auch, wenn das Ziel leer ist (dann rückt einfach
+// null in den Ursprungs-Slot). Coach wird hier bewusst nicht behandelt (siehe
+// Kommentar oben — es gibt nichts zum Tauschen).
+function handleRosterSlotDrop(from, to) {
+  if (from.kind !== to.kind || from.kind !== 'player') return;
+  if (from.slotType === to.slotType && from.index === to.index) return;
+
+  const fromArr = rosterSlots[from.slotType];
+  const toArr = rosterSlots[to.slotType];
+  const tmp = toArr[to.index];
+  toArr[to.index] = fromArr[from.index];
+  fromArr[from.index] = tmp;
+
+  renderAll();
+  renderRosterBoard();
+  saveGameState();
+}
+
+function renderRosterBoard() {
+  const mainEl = document.getElementById('roster-board-main');
+  const subEl = document.getElementById('roster-board-sub');
+  const reserveEl = document.getElementById('roster-board-reserve');
+  const coachEl = document.getElementById('roster-board-coach');
+  [mainEl, subEl, reserveEl, coachEl].forEach((el) => { el.innerHTML = ''; });
+
+  rosterSlots.main.forEach((name, i) => mainEl.appendChild(buildDraggableSlotCard('player', 'main', i, name)));
+  rosterSlots.sub.forEach((name, i) => subEl.appendChild(buildDraggableSlotCard('player', 'sub', i, name)));
+  rosterSlots.reserve.forEach((name, i) => reserveEl.appendChild(buildDraggableSlotCard('player', 'reserve', i, name)));
+  coachEl.appendChild(buildDraggableSlotCard('coach', 'coach', 0, draftedCoachName));
+}
+
+// ── Charaktererstellung (läuft VOR der Org-Zuweisung) ───────────────────
+// User-Wunsch: bevor man eine Organisation übernimmt, erstellt man einen
+// eigenen Charakter (Name/Geburtsdatum/Herkunft/Weg). Der Weg bringt einen
+// klaren spielmechanischen Effekt (siehe data/character-paths.js), nicht nur
+// Flavourtext. "Manager" im UI wird ab hier durch den Charakternamen ersetzt.
+let careerCharacter = null; // { name, birthdate, region, pathId }
+let selectedCharacterPathId = null; // transiente Auswahl während der Erstellung
+
+function goToCharacterCreation() {
+  careerCharacter = null;
+  document.getElementById('char-name-input').value = '';
+  document.getElementById('char-birthdate-input').value = '';
+  document.getElementById('char-region-select').value = 'EU';
+  document.getElementById('character-error').classList.add('hidden');
+  selectedCharacterPathId = null;
+  renderCharacterPathList();
+  updateCharacterContinueState();
+  showScreen('screen-character');
+}
+
+function renderCharacterPathList() {
+  const container = document.getElementById('character-path-list');
+  container.innerHTML = '';
+  CHARACTER_PATHS.forEach((path) => {
+    const card = document.createElement('div');
+    card.className = 'character-path-card' + (path.id === selectedCharacterPathId ? ' selected' : '');
+    const effectClass = path.budgetMultiplier > 1 || path.developmentBonus > 0 || path.seasonIncomeBonus > 0 || path.frustrationMultiplier < 1
+      ? 'effect-bonus'
+      : path.budgetMultiplier < 1
+        ? 'effect-malus'
+        : 'effect-neutral';
+    card.innerHTML =
+      '<div class="character-path-title">' + path.title + '</div>' +
+      '<div class="character-path-desc">' + path.description + '</div>' +
+      '<div class="character-path-effect ' + effectClass + '">' + path.effectLabel + '</div>';
+    card.addEventListener('click', () => {
+      selectedCharacterPathId = path.id;
+      renderCharacterPathList();
+      updateCharacterContinueState();
+    });
+    container.appendChild(card);
+  });
+}
+
+function updateCharacterContinueState() {
+  const name = document.getElementById('char-name-input').value.trim();
+  const ready = name.length > 0 && !!selectedCharacterPathId;
+  document.getElementById('btn-character-continue').disabled = !ready;
+}
+
+function confirmCharacterAndProceed() {
+  const name = document.getElementById('char-name-input').value.trim();
+  if (!name || !selectedCharacterPathId) {
+    const err = document.getElementById('character-error');
+    err.textContent = 'Bitte Name eingeben und einen Weg auswählen.';
+    err.classList.remove('hidden');
+    return;
+  }
+  careerCharacter = {
+    name,
+    birthdate: document.getElementById('char-birthdate-input').value || null,
+    region: document.getElementById('char-region-select').value,
+    pathId: selectedCharacterPathId,
+  };
+  goToOrgSelection();
+}
+
+// ── Org-Auswahlmenü (ersetzt den Zufalls-Automat in der Karriere) ────────
+// User-Wunsch: statt einer zufälligen Zuweisung wählt man seine Org jetzt
+// selbst aus einem Menü, das alle Boni/Mali zeigt. Der alte Zufalls-Automat
+// (goToOrgIntro()/spinReel(), weiter unten) bleibt im Code erhalten, wird
+// aber im Karriere-Modus nicht mehr aufgerufen — er ist für den späteren
+// Randomizer-Challenge-Modus vorgesehen (der genau diese Zufallszuweisung
+// nutzen soll).
+function goToOrgSelection() {
+  document.getElementById('org-select-heading').textContent = 'Willkommen, ' + careerCharacter.name;
+  renderOrgSelectGrid();
+  showScreen('screen-org-select');
+}
+
+function renderOrgSelectGrid() {
+  const grid = document.getElementById('org-select-grid');
+  grid.innerHTML = '';
+
+  ORGANIZATIONS.slice().sort((a, b) => b.strength - a.strength).forEach((org) => {
+    const instance = instantiateOrg(org);
+    const card = document.createElement('div');
+    card.className = 'org-select-card';
+    card.innerHTML =
+      '<div class="org-select-card-header">' +
+        '<span class="org-select-card-name">' + org.name + '</span>' +
+        '<span class="org-select-card-strength">Stärke ' + org.strength + '</span>' +
+      '</div>' +
+      '<div class="org-select-card-budget">Startbudget: ' + org.budget.toLocaleString('de-DE') + ' Cr</div>' +
+      '<div class="org-select-card-line line-pro">+ ' + instance.pro + '</div>' +
+      '<div class="org-select-card-line line-con">– ' + instance.con + '</div>';
+    card.addEventListener('click', () => {
+      pendingOrg = instance;
+      showOrgModal(pendingOrg);
+    });
+    grid.appendChild(card);
+  });
+
+  const customCard = document.createElement('div');
+  customCard.className = 'org-select-card org-select-card-disabled';
+  customCard.innerHTML =
+    '<div class="org-select-card-header"><span class="org-select-card-name">Eigene Organisation</span></div>' +
+    '<div class="org-select-card-soon">Kommt noch...</div>';
+  grid.appendChild(customCard);
+  // customCard bekommt bewusst KEINEN Klick-Handler — "Kommt noch", nicht wählbar.
+}
+
 // ── Org-Zuweisung: Intro-Seite → Spielautomat → Popup → Kader ───────────
 const REEL_ITEM_HEIGHT = 60;
 const REEL_LAPS = 5;
@@ -368,6 +1118,11 @@ let pendingOrg = null; // schon zufällig bestimmt, aber dem Spieler noch nicht 
 
 function goToOrgIntro() {
   pendingOrg = assignRandomOrg();
+  document.getElementById('intro-welcome-heading').textContent = 'Willkommen, ' + careerCharacter.name;
+  document.getElementById('intro-text-main').innerHTML =
+    'Du startest jetzt als ' + careerCharacter.name + ' für eine <strong>zufällig zugeordnete ' +
+    'Organisation</strong>. Du suchst dir die Organisation nicht aus — so wie im ' +
+    'echten Esport wird dir ein Verein zugeteilt, mit dem du arbeiten musst.';
   document.getElementById('intro-text-block').classList.remove('hidden');
   document.getElementById('reel-block').classList.add('hidden');
   showScreen('screen-org-intro');
@@ -449,14 +1204,24 @@ function showOrgModal(org) {
 function confirmOrgAndProceed() {
   document.getElementById('org-modal').classList.add('hidden');
   assignedOrg = pendingOrg;
-  BUDGET = assignedOrg.budget;
-  draftedPlayerNames = [];
+  gameMode = 'career'; // aktuell der einzige spielbare Modus
+  const charPath = findCharacterPath(careerCharacter.pathId);
+  BUDGET = Math.round(assignedOrg.budget * charPath.budgetMultiplier / 10) * 10;
+  rosterSlots = { main: emptySlotArray(MAIN_SIZE), sub: emptySlotArray(SUB_SIZE), reserve: emptySlotArray(RESERVE_SIZE) };
   draftedCoachName = null;
+  negotiatedPremiumPlayers = {};
+  negotiationBlocklist = {};
+  playersTradedThisSeason = new Set();
+  transferLog = [];
   tournamentState = null;
-  careerState = { seasonNumber: 1, titlesWon: 0 };
+  careerState = { seasonNumber: 1, titlesWon: 0, seasonGuideShown: false };
   careerRosterPlayers = null;
+  careerReservePlayers = null;
   careerCoach = null;
-  careerBotTeams = null;
+  // Bot-Teams (inkl. Vertrags-Zuordnung echter Spieler) schon HIER erzeugen,
+  // nicht erst bei startTournament() — die Markt-/Draft-Ansicht muss von
+  // Anfang an wissen, welche Spieler schon anderswo unter Vertrag sind.
+  careerBotTeams = generateBotTeams(TOURNAMENT_TEAM_COUNT - 1, assignedOrg.name);
   careerRivalRecords = {};
   showScreen('screen-draft');
   renderAll();
@@ -553,6 +1318,7 @@ let matchNextEventIndex = 0;
 let matchLastTickTime = null;
 let matchWentToOvertime = false;
 let matchOnFinished = null; // Callback, wenn der Nutzer nach dem Ticker auf "Weiter" klickt
+let matchSeriesDotsInfo = null; // { bestOf, priorResults, pendingResult } fürs Serien-Punkte-Anzeige
 
 const MATCH_DURATION_SECONDS = 300; // 5 Minuten Spielzeit
 const MATCH_TICK_MS = 100;          // Ziel-Intervall — Browser können das drosseln
@@ -604,6 +1370,14 @@ function playMatchTicker(result, nameA, nameB, playersA, playersB, coach, sub, o
   } else {
     seriesInfoEl.textContent = '';
   }
+
+  // Serien-Punkte: bereits gespielte Spiele sofort sichtbar, das GERADE laufende
+  // Spiel wird erst am Ende (synthetisches "series"-Ereignis) aufgedeckt, damit
+  // der Ticker sein eigenes Ergebnis nicht vorab verrät.
+  matchSeriesDotsInfo = seriesInfo
+    ? { bestOf: seriesInfo.bestOf, priorResults: seriesInfo.priorResults, pendingResult: seriesInfo.pendingResult }
+    : null;
+  renderSeriesDots(false);
 
   document.getElementById('match-name-a').textContent = nameA;
   document.getElementById('match-name-b').textContent = nameB;
@@ -707,6 +1481,27 @@ function revealMatchEvent(e) {
   }
 
   highlightPlayerTile(e.team, e.player, e.type);
+
+  // Das synthetische Serien-Ergebnis-Ereignis ist der Moment, in dem das GERADE
+  // gespielte Spiel selbst als Punkt aufgedeckt wird (vorher nur die früheren
+  // Spiele der Serie) — kein Spoiler vor Ende des Ticker-Verlaufs.
+  if (e.type === 'series') renderSeriesDots(true);
+}
+
+// Zeichnet die Serien-Punkte (grün = Sieg, rot = Niederlage, leer = noch offen).
+// revealCurrent=false zeigt nur die bereits abgeschlossenen Spiele der Serie.
+function renderSeriesDots(revealCurrent) {
+  const el = document.getElementById('match-series-dots');
+  if (!matchSeriesDotsInfo) { el.innerHTML = ''; return; }
+  const { bestOf, priorResults, pendingResult } = matchSeriesDotsInfo;
+  const results = revealCurrent ? [...priorResults, pendingResult] : priorResults;
+  let html = '';
+  for (let i = 0; i < bestOf; i++) {
+    const r = results[i];
+    const cls = r === 'win' ? 'series-dot-win' : r === 'loss' ? 'series-dot-loss' : '';
+    html += '<span class="series-dot' + (cls ? ' ' + cls : '') + '"></span>';
+  }
+  el.innerHTML = html;
 }
 
 // ── Turnier: echtes Swiss-Bracket-Format (r1 → r2w/r2l → r3-Decider → Playoffs) ──
@@ -715,19 +1510,57 @@ let tournamentAutoSimRunning = false; // true während "Turnier sofort simuliere
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
-function findTournamentTeam(id) {
-  return tournamentState.teams.find((t) => t.id === id);
+const TOURNAMENT_TEAM_COUNT = 32; // Open-Qualifier-Feldgröße (voll RLCS-1:1-Struktur, komprimiert — siehe season.js)
+
+// ── Saison-Orchestrierung: 3 Open Qualifier -> Major -> LCQ/Direkt -> WM ────
+// User-Wunsch: volle 1:1-Nachbildung der echten RLCS-Saisonstruktur (siehe
+// season.js für die reine Logik-Schicht — hier wird sie an UI/Match-Ticker
+// angebunden). `seasonState` trägt die saisonweiten Daten (alle 32 Teams
+// bleiben über die GANZE Saison bestehen, Punkte akkumulieren); `tournamentState`
+// bleibt bewusst als Konzept erhalten und beschreibt IMMER nur die AKTUELL
+// sichtbare Bracket-Stufe (Name, ob die Runde schon gespielt wurde, Status-
+// Hinweis) — dadurch funktioniert der bestehende Match-Ticker-Flow
+// (playNextSeriesGame() etc.) so gut wie unverändert weiter, er kennt nur
+// "eine Serie spielen", nicht welchem der 4 Turnierformate sie entstammt.
+let seasonState = null;
+
+function resetTeamRecords(teams) {
+  teams.forEach((t) => { t.wins = 0; t.losses = 0; t.scoreFor = 0; t.scoreAgainst = 0; });
 }
 
-// Liefert die Matches der aktuell zu spielenden Stufe als flache Liste.
+function findTournamentTeam(id) {
+  return seasonState.allTeams.find((t) => t.id === id);
+}
+
+// Liefert die Matches der aktuell zu spielenden Stufe als flache Liste —
+// zentraler Dispatch über alle 4 Event-Typen (Open/Major/LCQ/WM) und deren
+// jeweilige interne Stufen.
 function getCurrentStageMatches() {
-  const ts = tournamentState;
-  if (ts.stage === 'r1') return ts.r1;
-  if (ts.stage === 'r2') return ts.r2w.concat(ts.r2l);
-  if (ts.stage === 'r3') return ts.r3;
-  if (ts.stage === 'playoff-semi') return [ts.sf1, ts.sf2];
-  if (ts.stage === 'playoff-final') return [ts.final];
-  return [];
+  const ss = seasonState;
+  if (!ss || !ss.event) return [];
+  const ev = ss.event;
+  const stage = tournamentState.stage;
+
+  if (stage === 'open-bracket') return getDoubleElimRoundMatches(ev.bracket);
+  if (stage === 'open-swiss') return getRoundMatches(ev.swiss, tournamentState.swissRoundNum);
+  if (stage === 'open-gsl') return ev.gslGroups.flatMap((g) => getGslGroupPendingMatches(g));
+  if (stage === 'open-playoff-semi') return [ev.playoffs.sf1, ev.playoffs.sf2];
+  if (stage === 'open-playoff-final') return [ev.playoffs.final];
+
+  if (stage === 'major-swiss') return getRoundMatches(ev.swiss, tournamentState.swissRoundNum);
+  if (stage === 'major-playoff-quarter') return [ev.playoffs.qf1, ev.playoffs.qf2, ev.playoffs.qf3, ev.playoffs.qf4];
+  if (stage === 'major-playoff-semi') return [ev.playoffs.sf1, ev.playoffs.sf2];
+  if (stage === 'major-playoff-final') return [ev.playoffs.final];
+
+  if (stage === 'lcq-quarter') return [ev.bracket.qf1, ev.bracket.qf2, ev.bracket.qf3, ev.bracket.qf4];
+  if (stage === 'lcq-semi') return [ev.bracket.sf1, ev.bracket.sf2];
+
+  if (stage === 'worlds-gsl') return ev.groups.flatMap((g) => getGslGroupPendingMatches(g));
+  if (stage === 'worlds-playoff-quarter') return [ev.playoffs.qf1, ev.playoffs.qf2, ev.playoffs.qf3, ev.playoffs.qf4];
+  if (stage === 'worlds-playoff-semi') return [ev.playoffs.sf1, ev.playoffs.sf2];
+  if (stage === 'worlds-playoff-final') return [ev.playoffs.final];
+
+  return []; // Info-/Übergangsstufen (z.B. 'major-check') haben keine Matches
 }
 
 function findPlayerMatch() {
@@ -735,59 +1568,112 @@ function findPlayerMatch() {
 }
 
 function startTournament() {
-  const myStarters = draftedPlayerNames.slice(0, MAIN_SIZE).map(findPlayer);
-  const subName = draftedPlayerNames[MAIN_SIZE];
-  const mySub = subName ? findPlayer(subName) : null;
+  const myStarters = rosterSlots.main.filter(Boolean).map(findPlayer);
+  const mySub = rosterSlots.sub[0] ? findPlayer(rosterSlots.sub[0]) : null;
   const myCoach = draftedCoachName ? findCoach(draftedCoachName) : null;
 
   // Bot-Teams bleiben über die ganze Karriere bestehen (Rivalitäten) — nur bei
   // der allerersten Saison neu würfeln, danach den entwickelten Bestand nutzen.
-  if (!careerBotTeams) careerBotTeams = generateBotTeams(7);
+  if (!careerBotTeams) careerBotTeams = generateBotTeams(TOURNAMENT_TEAM_COUNT - 1, assignedOrg.name);
   const botTeams = careerBotTeams;
   const teams = [
     createTournamentTeam('player', assignedOrg.name, true, myStarters, mySub, myCoach),
     ...botTeams.map((b, i) => createTournamentTeam('bot' + i, b.name, false, b.players, null, null)),
   ];
 
-  tournamentState = {
-    teams,
-    stage: 'r1',
-    r1: pairGroup(teams, SWISS_BEST_OF),
-    r2w: null, r2l: null, r3: null, sf1: null, sf2: null, final: null,
-    stageMatchPlayed: false,
-    playerStatusNote: null,
-    playerEliminated: false,
-    champion: null,
+  seasonState = {
+    allTeams: teams,
+    seasonPoints: initSeasonPoints(teams),
+    playerWins: 0, playerLosses: 0, // akkumuliert über die ganze Saison (für startNextSeason())
+    eventType: 'open',
+    openIndex: 0,
+    event: createOpenQualifier(teams),
+    majorField: null,
+    worldsField: null,
+    seasonComplete: false,
+    finalChampionId: null, // gesetzt, sobald ein WM-Champion feststeht
   };
 
+  enterOpenBracketStage();
   renderTournamentScreen();
   showScreen('screen-tournament');
   saveGameState();
+  if (!careerState.seasonGuideShown) showSeasonGuide();
+}
+
+// Setzt tournamentState für die (erste oder nächste) Doppel-K.O.-Runde des
+// aktuellen Open Qualifiers auf.
+// Alle "enter*Stage()"-Funktionen (hier und in advanceTournamentStage() weiter
+// unten) setzen NUR den Zustand auf — Rendern/Speichern passiert zentral am
+// Ende von advanceTournamentStage() bzw. explizit in startTournament().
+function enterOpenBracketStage() {
+  pairDoubleElimRound(seasonState.event.bracket, SWISS_BEST_OF);
+  tournamentState = { stage: 'open-bracket', stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false };
+}
+
+const SWISS_ROUND_LABELS = ['', 'Runde 1 (0-0)', 'Runde 2', 'Runde 3', 'Runde 4', 'Runde 5 (Decider)'];
+
+// Stufen ohne eigenes Match (reine Info-/Übergangsbildschirme zwischen zwei
+// Events, z.B. "hast du dich fürs Major qualifiziert?") — stageMatchPlayed
+// wird für diese Stufen sofort auf true gesetzt (siehe die jeweiligen
+// enter*()-Funktionen), der Aktions-Button zeigt direkt "Weiter".
+const INFO_STAGES = new Set(['open-complete', 'major-check', 'major-complete', 'worlds-check', 'lcq-complete']);
+
+function seasonContextLabel() {
+  const ss = seasonState;
+  if (!ss) return '';
+  if (ss.eventType === 'open') return 'Open Qualifier ' + (ss.openIndex + 1) + ' / 3';
+  if (ss.eventType === 'major') return 'Major';
+  if (ss.eventType === 'lcq') return 'Last Chance Qualifier';
+  if (ss.eventType === 'worlds') return 'Weltmeisterschaft';
+  return '';
 }
 
 function stageTitle(ts) {
-  if (ts.stage === 'r1') return 'Swiss-Stage — Runde 1 (0-0, Bo5)';
-  if (ts.stage === 'r2') return 'Swiss-Stage — Runde 2 (1-0 / 0-1, Bo5)';
-  if (ts.stage === 'r3') return 'Swiss-Stage — Decider-Runde (1-1, Bo5)';
-  if (ts.stage === 'playoff-semi') return 'Playoffs — Halbfinale (Bo7)';
-  if (ts.stage === 'playoff-final') return 'Playoffs — Finale (Bo7)';
+  const s = ts.stage;
+  if (s === 'open-bracket') return 'Open Qualifier — Doppel-K.O.-Bracket (Bo5)';
+  if (s === 'open-swiss') return 'Open Qualifier — Swiss (' + (SWISS_ROUND_LABELS[ts.swissRoundNum] || ('Runde ' + ts.swissRoundNum)) + ', Bo5)';
+  if (s === 'open-gsl') return 'Open Qualifier — GSL-Gruppen (Bo5)';
+  if (s === 'open-playoff-semi') return 'Open Qualifier — Halbfinale (Bo7)';
+  if (s === 'open-playoff-final') return 'Open Qualifier — Finale (Bo7)';
+  if (s === 'open-complete') return 'Open Qualifier ' + (seasonState.openIndex + 1) + ' abgeschlossen';
+
+  if (s === 'major-check') return 'Punkte-Auswertung nach den Opens';
+  if (s === 'major-swiss') return 'Major — Swiss (' + (SWISS_ROUND_LABELS[ts.swissRoundNum] || ('Runde ' + ts.swissRoundNum)) + ', Bo5)';
+  if (s === 'major-playoff-quarter') return 'Major — Viertelfinale (Bo7)';
+  if (s === 'major-playoff-semi') return 'Major — Halbfinale (Bo7)';
+  if (s === 'major-playoff-final') return 'Major — Finale (Bo7)';
+  if (s === 'major-complete') return 'Major abgeschlossen';
+
+  if (s === 'worlds-check') return 'Weltmeisterschaft-Qualifikation';
+  if (s === 'lcq-quarter') return 'Last Chance Qualifier — Viertelfinale (Bo5)';
+  if (s === 'lcq-semi') return 'Last Chance Qualifier — Halbfinale (Bo5)';
+  if (s === 'lcq-complete') return 'Last Chance Qualifier abgeschlossen';
+
+  if (s === 'worlds-gsl') return 'Weltmeisterschaft — GSL-Gruppen (Bo5)';
+  if (s === 'worlds-playoff-quarter') return 'Weltmeisterschaft — Viertelfinale (Bo7)';
+  if (s === 'worlds-playoff-semi') return 'Weltmeisterschaft — Halbfinale (Bo7)';
+  if (s === 'worlds-playoff-final') return 'Weltmeisterschaft — Finale (Bo7)';
   return '';
 }
 
 function renderTournamentScreen() {
   const ts = tournamentState;
+  const contextEl = document.getElementById('season-context');
   const titleEl = document.getElementById('tournament-title');
   const banner = document.getElementById('tournament-champion-banner');
   const actionBtn = document.getElementById('btn-tournament-action');
   const quickSimRoundBtn = document.getElementById('btn-quick-sim-round');
   const quickSimAllBtn = document.getElementById('btn-quick-sim-all');
 
-  if (ts.stage === 'complete') {
-    const totalTitles = careerState.titlesWon + (ts.champion.isPlayer ? 1 : 0);
+  contextEl.textContent = ts.stage === 'season-complete' ? '' : seasonContextLabel();
+
+  if (ts.stage === 'season-complete') {
+    const wasChampion = seasonState.finalChampionId === 'player';
+    const totalTitles = careerState.titlesWon + (wasChampion ? 1 : 0);
     titleEl.textContent = 'Saison ' + careerState.seasonNumber + ' beendet';
     banner.classList.remove('hidden');
-    banner.textContent = '🏆 ' + ts.champion.name + ' ist Champion!' + (ts.champion.isPlayer ? ' (das bist du!)' : '')
-      + ' — Titel gesamt: ' + totalTitles;
+    banner.textContent = ts.seasonSummary + ' — Titel gesamt: ' + totalTitles;
     actionBtn.textContent = 'Nächste Saison starten';
     quickSimRoundBtn.classList.add('hidden');
     quickSimAllBtn.classList.add('hidden');
@@ -797,13 +1683,84 @@ function renderTournamentScreen() {
     if (ts.playerStatusNote) title += ' — ' + ts.playerStatusNote;
     titleEl.textContent = title;
     actionBtn.textContent = ts.stageMatchPlayed ? 'Weiter' : 'Match spielen';
-    quickSimRoundBtn.classList.toggle('hidden', ts.stageMatchPlayed || tournamentAutoSimRunning);
+    const isInfoStage = INFO_STAGES.has(ts.stage);
+    quickSimRoundBtn.classList.toggle('hidden', ts.stageMatchPlayed || tournamentAutoSimRunning || isInfoStage);
     quickSimAllBtn.classList.toggle('hidden', tournamentAutoSimRunning);
   }
 
   actionBtn.disabled = tournamentAutoSimRunning;
   renderRivalryNote();
-  renderSwissBracket();
+  renderPointsStanding();
+  renderBracketForCurrentStage();
+}
+
+// ── Punktestand & Tabelle ─────────────────────────────────────────────────
+function renderPointsStanding() {
+  const el = document.getElementById('points-standing');
+  if (!seasonState) { el.textContent = ''; return; }
+  const ranked = rankTeamsByPoints(seasonState.allTeams, seasonState.seasonPoints);
+  const rank = ranked.findIndex((t) => t.id === 'player') + 1;
+  const points = seasonState.seasonPoints['player'] || 0;
+  el.innerHTML = 'Dein Punktestand: <span class="points-standing-value">' + points + ' Punkte</span> — Rang ' + rank + ' von ' + ranked.length;
+}
+
+// Qualifikationsstatus eines Teams fürs Tabellen-Popup — bewusst nur an den
+// PUNKTE-Cutoffs zwischen den Events festgemacht (Top16 fürs Major, Top12
+// direkt zur WM, LCQ-Pool, LCQ-Ergebnis), NICHT am internen Bracket-Stand
+// innerhalb eines einzelnen Events (Doppel-K.O./Swiss/GSL) — das würde für
+// alle 31 Bot-Teams über 4 verschiedene Event-Strukturen hinweg getrackt
+// werden müssen, für eine reine "wo stehe ich in der Saison"-Übersicht nicht
+// nötig. 'green' = qualifiziert/durch, 'red' = an diesem Cutoff ausgeschieden,
+// 'neutral' = noch offen/unentschieden.
+function computeTeamSeasonStatus(team) {
+  const ss = seasonState;
+  if (ss.worldsDirect) {
+    if (ss.worldsDirect.some((t) => t.id === team.id)) return 'green';
+    const inLcqPool = ss.worldsLcqPool && ss.worldsLcqPool.some((t) => t.id === team.id);
+    if (inLcqPool) {
+      const lcqQualifiers = ss.eventType === 'lcq' ? ss.event.qualifiedForWorlds : ss.lcqQualifiersForBots;
+      if (!lcqQualifiers) return 'neutral';
+      return lcqQualifiers.some((t) => t.id === team.id) ? 'green' : 'red';
+    }
+    return 'red';
+  }
+  if (ss.majorField) {
+    return ss.majorField.some((t) => t.id === team.id) ? 'green' : 'red';
+  }
+  // Noch mitten in den Opens — nichts ist final, zeigt nur die aktuelle
+  // Top16-Projektion als Orientierung.
+  const ranked = rankTeamsByPoints(ss.allTeams, ss.seasonPoints);
+  const rank = ranked.findIndex((t) => t.id === team.id);
+  return rank < MAJOR_SIZE ? 'green' : 'neutral';
+}
+
+function computeStandingsRows() {
+  const ranked = rankTeamsByPoints(seasonState.allTeams, seasonState.seasonPoints);
+  return ranked.map((team, i) => ({
+    rank: i + 1,
+    name: team.name,
+    points: seasonState.seasonPoints[team.id] || 0,
+    isPlayer: team.id === 'player',
+    status: computeTeamSeasonStatus(team),
+  }));
+}
+
+function showStandings() {
+  document.getElementById('standings-context').textContent = seasonContextLabel();
+  const rows = computeStandingsRows();
+  document.getElementById('standings-list').innerHTML = rows.map((r) =>
+    '<div class="standings-row standings-' + r.status + (r.isPlayer ? ' is-player' : '') + '">' +
+      '<span class="standings-rank">#' + r.rank + '</span>' +
+      '<span class="standings-name">' + escapeXml(r.name) + '</span>' +
+      '<span class="standings-points">' + r.points + ' Pkt</span>' +
+      '<span class="standings-status-dot"></span>' +
+    '</div>'
+  ).join('');
+  document.getElementById('standings-modal').classList.remove('hidden');
+}
+
+function hideStandings() {
+  document.getElementById('standings-modal').classList.add('hidden');
 }
 
 // Zeigt die Kopf-an-Kopf-Bilanz gegen den aktuellen Gegner, falls es schon eine
@@ -812,7 +1769,7 @@ function renderTournamentScreen() {
 function renderRivalryNote() {
   const ts = tournamentState;
   const noteEl = document.getElementById('rivalry-note');
-  const playerMatch = ts.stage === 'complete' ? null : findPlayerMatch();
+  const playerMatch = ts.stage === 'season-complete' ? null : findPlayerMatch();
   if (!playerMatch) { noteEl.classList.add('hidden'); return; }
 
   const opponentId = playerMatch.aId === 'player' ? playerMatch.bId : playerMatch.aId;
@@ -827,7 +1784,7 @@ function renderRivalryNote() {
 function onTournamentActionClick() {
   const ts = tournamentState;
 
-  if (ts.stage === 'complete') {
+  if (ts.stage === 'season-complete') {
     startNextSeason();
     return;
   }
@@ -839,7 +1796,7 @@ function onTournamentActionClick() {
     if (!playerMatch) {
       // Spieler ist ausgeschieden ODER schon qualifiziert und wartet — die gesamte
       // Stufe läuft ohne Ticker durch, er sieht nur die Ergebnisse.
-      stageMatches.forEach((m) => simulateFullSeriesInstant(ts.teams, m, simulateMatch));
+      stageMatches.forEach((m) => simulateFullSeriesInstant(seasonState.allTeams, m, simulateMatch));
       ts.stageMatchPlayed = true;
       renderTournamentScreen();
       saveGameState();
@@ -849,7 +1806,7 @@ function onTournamentActionClick() {
     // Alle Bot-vs-Bot-Serien dieser Stufe sofort simulieren (kein Ticker nötig)
     stageMatches.forEach((m) => {
       if (m === playerMatch) return;
-      simulateFullSeriesInstant(ts.teams, m, simulateMatch);
+      simulateFullSeriesInstant(seasonState.allTeams, m, simulateMatch);
     });
 
     const playerIsA = playerMatch.aId === 'player';
@@ -880,9 +1837,9 @@ function recordRivalResultIfPlayerMatch(match) {
 
 function quickSimulateCurrentRound() {
   const ts = tournamentState;
-  if (ts.stage === 'complete' || ts.stageMatchPlayed) return;
+  if (ts.stage === 'season-complete' || ts.stageMatchPlayed) return;
   const stageMatches = getCurrentStageMatches();
-  stageMatches.forEach((m) => simulateFullSeriesInstant(ts.teams, m, simulateMatch));
+  stageMatches.forEach((m) => simulateFullSeriesInstant(seasonState.allTeams, m, simulateMatch));
   recordRivalResultIfPlayerMatch(stageMatches.find((m) => m.aId === 'player' || m.bId === 'player'));
   ts.stageMatchPlayed = true;
   renderTournamentScreen();
@@ -895,23 +1852,23 @@ function quickSimulateCurrentRound() {
 // in einem Sprung zum Endstand — fühlt sich wie eine Turnier-Auflösungs-
 // Animation an (ähnlich wie bei draftrlcs.app), nicht wie ein abrupter Cut.
 async function quickSimulateEntireTournament() {
-  if (tournamentState.stage === 'complete' || tournamentAutoSimRunning) return;
+  if (tournamentState.stage === 'season-complete' || tournamentAutoSimRunning) return;
 
   tournamentAutoSimRunning = true;
   renderTournamentScreen();
 
-  while (tournamentState.stage !== 'complete') {
+  while (tournamentState.stage !== 'season-complete') {
     const ts = tournamentState;
     if (!ts.stageMatchPlayed) {
       const stageMatches = getCurrentStageMatches();
-      stageMatches.forEach((m) => simulateFullSeriesInstant(ts.teams, m, simulateMatch));
+      stageMatches.forEach((m) => simulateFullSeriesInstant(seasonState.allTeams, m, simulateMatch));
       recordRivalResultIfPlayerMatch(stageMatches.find((m) => m.aId === 'player' || m.bId === 'player'));
       ts.stageMatchPlayed = true;
       renderTournamentScreen();
-      await sleep(700);
+      await sleep(quickSimPaceMs());
     }
     advanceTournamentStage(); // rendert + speichert bereits selbst
-    if (tournamentState.stage !== 'complete') await sleep(700);
+    if (tournamentState.stage !== 'season-complete') await sleep(quickSimPaceMs());
   }
 
   tournamentAutoSimRunning = false;
@@ -923,12 +1880,24 @@ async function quickSimulateEntireTournament() {
 // dem Match-Screen direkt ins nächste Einzelspiel derselben Serie (statt
 // zurück zum Turnier-Screen) — der Spieler bleibt also auf dem Match-Screen,
 // bis die Serie entschieden ist.
+// Leitet aus einem Serien-Einzelspiel das Ergebnis AUS SICHT DES SPIELERS ab
+// ('win'/'loss') — die goalsA/goalsB in match.games beziehen sich immer auf
+// match.aId/match.bId, nicht auf "Spieler"/"Gegner".
+function gameResultFromPlayerPerspective(game, playerIsA) {
+  const playerGoals = playerIsA ? game.goalsA : game.goalsB;
+  const oppGoals = playerIsA ? game.goalsB : game.goalsA;
+  return playerGoals > oppGoals ? 'win' : 'loss';
+}
+
 function playNextSeriesGame(match, opponent, playerIsA) {
   const ts = tournamentState;
   const playerTeam = findTournamentTeam('player');
   const preGameWinsA = match.seriesWinsA;
   const preGameWinsB = match.seriesWinsB;
   const gameNumber = match.games.length + 1;
+  // Ergebnisse der BEREITS gespielten Spiele dieser Serie — vor recordSeriesGame()
+  // erfasst, damit das gerade laufende Spiel hier noch nicht enthalten ist.
+  const priorResults = match.games.map((g) => gameResultFromPlayerPerspective(g, playerIsA));
 
   const result = simulateMatch(
     playerTeam.players, opponent.players, playerTeam.name, opponent.name,
@@ -940,7 +1909,8 @@ function playNextSeriesGame(match, opponent, playerIsA) {
   // playerIsA in der richtigen Reihenfolge eingetragen werden.
   const goalsA = playerIsA ? result.scoreA : result.scoreB;
   const goalsB = playerIsA ? result.scoreB : result.scoreA;
-  recordSeriesGame(ts.teams, match, goalsA, goalsB);
+  recordSeriesGame(seasonState.allTeams, match, goalsA, goalsB);
+  const pendingResult = gameResultFromPlayerPerspective(match.games[match.games.length - 1], playerIsA);
 
   const seriesDone = match.played;
   if (seriesDone) {
@@ -964,75 +1934,423 @@ function playNextSeriesGame(match, opponent, playerIsA) {
       preGameWinsA: playerIsA ? preGameWinsA : preGameWinsB,
       preGameWinsB: playerIsA ? preGameWinsB : preGameWinsA,
       finalWinsA: playerSeriesWins, finalWinsB: opponentSeriesWins,
-      seriesDone,
+      seriesDone, priorResults, pendingResult,
       continueLabel: seriesDone ? 'Weiter zum Turnier' : 'Nächstes Spiel (Serie ' + playerSeriesWins + ':' + opponentSeriesWins + ')',
     }
   );
 }
 
+// ── Enter*-Funktionen: setzen NUR tournamentState/seasonState auf (kein
+// Rendern/Speichern — das passiert zentral am Ende von advanceTournamentStage()).
+
+function enterOpenSwissStage() {
+  const open = seasonState.event;
+  tournamentState = { stage: 'open-swiss', engine: open.swiss, swissRoundNum: 1, stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false };
+}
+
+function enterOpenGslStage() {
+  tournamentState = { stage: 'open-gsl', stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false };
+}
+
+function enterOpenPlayoffSemiStage() {
+  const open = seasonState.event;
+  tournamentState = {
+    stage: 'open-playoff-semi',
+    playoffMatches: { qf1: null, qf2: null, qf3: null, qf4: null, sf1: open.playoffs.sf1, sf2: open.playoffs.sf2, final: null },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+function enterOpenPlayoffFinalStage() {
+  const open = seasonState.event;
+  tournamentState = {
+    stage: 'open-playoff-final',
+    playoffMatches: { qf1: null, qf2: null, qf3: null, qf4: null, sf1: open.playoffs.sf1, sf2: open.playoffs.sf2, final: open.playoffs.final },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+function buildInfoHtml(heading, lines) {
+  return '<h2>' + heading + '</h2>' + lines.map((l) => '<div class="season-info-line">' + l + '</div>').join('');
+}
+
+function enterOpenCompleteStage() {
+  const open = seasonState.event;
+  const player = findTournamentTeam('player');
+  const playerPoints = seasonState.seasonPoints['player'] || 0;
+  const lines = [
+    '🏆 Champion: <span class="season-info-highlight">' + open.champion.name + '</span>',
+    'Dein Ergebnis: ' + (open.placements['player'] || '?') + ' (' + player.wins + '-' + player.losses + ')',
+    'Deine Punkte aus diesem Open: <span class="season-info-highlight">' + (OPEN_POINTS[open.placements['player']] || 0) + '</span>',
+    'Gesamtpunkte bisher: <span class="season-info-highlight">' + playerPoints + '</span>',
+  ];
+  tournamentState = {
+    stage: 'open-complete', stageMatchPlayed: true, playerStatusNote: null, playerEliminated: false,
+    infoHtml: buildInfoHtml('Open Qualifier ' + (seasonState.openIndex + 1) + ' abgeschlossen', lines),
+  };
+}
+
+function enterMajorCheckStage() {
+  const ranked = rankTeamsByPoints(seasonState.allTeams, seasonState.seasonPoints);
+  seasonState.majorField = ranked.slice(0, MAJOR_SIZE);
+  const qualified = seasonState.majorField.some((t) => t.id === 'player');
+  const rank = ranked.findIndex((t) => t.id === 'player') + 1;
+  const lines = qualified
+    ? ['Du hast Rang ' + rank + ' erreicht — <span class="season-info-highlight">fürs Major qualifiziert!</span>']
+    : ['Du hast Rang ' + rank + ' erreicht — das reicht knapp nicht fürs Major (Top ' + MAJOR_SIZE + ').',
+       'Deine Saison endet hier.'];
+  tournamentState = { stage: 'major-check', stageMatchPlayed: true, playerStatusNote: null, playerEliminated: false, majorQualified: qualified, infoHtml: buildInfoHtml('Punkte-Auswertung nach den Opens', lines) };
+}
+
+function enterMajorSwissStage() {
+  resetTeamRecords(seasonState.majorField);
+  seasonState.eventType = 'major';
+  seasonState.event = createMajor(seasonState.majorField);
+  pairRound(seasonState.event.swiss, 1, SWISS_BEST_OF);
+  tournamentState = { stage: 'major-swiss', engine: seasonState.event.swiss, swissRoundNum: 1, stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false };
+}
+
+function enterMajorPlayoffQuarterStage() {
+  const major = seasonState.event;
+  tournamentState = {
+    stage: 'major-playoff-quarter',
+    playoffMatches: { qf1: major.playoffs.qf1, qf2: major.playoffs.qf2, qf3: major.playoffs.qf3, qf4: major.playoffs.qf4, sf1: null, sf2: null, final: null },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+function enterMajorPlayoffSemiStage() {
+  const major = seasonState.event;
+  tournamentState = {
+    stage: 'major-playoff-semi',
+    playoffMatches: { qf1: major.playoffs.qf1, qf2: major.playoffs.qf2, qf3: major.playoffs.qf3, qf4: major.playoffs.qf4, sf1: major.playoffs.sf1, sf2: major.playoffs.sf2, final: null },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+function enterMajorPlayoffFinalStage() {
+  const major = seasonState.event;
+  tournamentState = {
+    stage: 'major-playoff-final',
+    playoffMatches: { qf1: major.playoffs.qf1, qf2: major.playoffs.qf2, qf3: major.playoffs.qf3, qf4: major.playoffs.qf4, sf1: major.playoffs.sf1, sf2: major.playoffs.sf2, final: major.playoffs.final },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+function enterMajorCompleteStage() {
+  const major = seasonState.event;
+  const player = findTournamentTeam('player');
+  const lines = [
+    '🏆 Major-Champion: <span class="season-info-highlight">' + major.champion.name + '</span>',
+    'Dein Ergebnis: ' + (major.placements['player'] || '?') + ' (' + player.wins + '-' + player.losses + ')',
+    'Gesamtpunkte (Opens + Major): <span class="season-info-highlight">' + (seasonState.seasonPoints['player'] || 0) + '</span>',
+  ];
+  tournamentState = { stage: 'major-complete', stageMatchPlayed: true, playerStatusNote: null, playerEliminated: false, infoHtml: buildInfoHtml('Major abgeschlossen', lines) };
+}
+
+function enterWorldsCheckStage() {
+  const rankedForWorlds = rankTeamsByPoints(seasonState.majorField, seasonState.seasonPoints);
+  const { direct, lcqPool } = determineWorldsQualification(rankedForWorlds);
+  seasonState.worldsDirect = direct;
+  seasonState.worldsLcqPool = lcqPool;
+  const isDirect = direct.some((t) => t.id === 'player');
+  const isLcq = lcqPool.some((t) => t.id === 'player');
+  let lines, qualification;
+  if (isDirect) {
+    qualification = 'direct';
+    lines = ['<span class="season-info-highlight">Direkt für die Weltmeisterschaft qualifiziert!</span> (Top ' + WORLDS_DIRECT_QUALIFIERS + ' der Saison-Punkte)'];
+  } else if (isLcq) {
+    qualification = 'lcq';
+    lines = ['Knapp verpasst — aber du bekommst eine letzte Chance im <span class="season-info-highlight">Last Chance Qualifier</span>.'];
+  } else {
+    qualification = 'none';
+    lines = ['Deine Saison-Punkte reichen nicht für die Weltmeisterschaft oder den Last Chance Qualifier.', 'Deine Saison endet hier.'];
+  }
+  tournamentState = { stage: 'worlds-check', stageMatchPlayed: true, playerStatusNote: null, playerEliminated: false, worldsQualification: qualification, infoHtml: buildInfoHtml('Weltmeisterschaft-Qualifikation', lines) };
+}
+
+function enterLcqQuarterStage() {
+  const lcqField = buildLcqField(seasonState.allTeams, seasonState.majorField, seasonState.worldsLcqPool, seasonState.seasonPoints);
+  resetTeamRecords(lcqField);
+  seasonState.eventType = 'lcq';
+  seasonState.event = createLastChanceQualifier(lcqField);
+  tournamentState = {
+    stage: 'lcq-quarter',
+    playoffMatches: { qf1: seasonState.event.bracket.qf1, qf2: seasonState.event.bracket.qf2, qf3: seasonState.event.bracket.qf3, qf4: seasonState.event.bracket.qf4, sf1: null, sf2: null, final: null },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+function enterLcqSemiStage() {
+  const lcq = seasonState.event;
+  tournamentState = {
+    stage: 'lcq-semi',
+    playoffMatches: { qf1: lcq.bracket.qf1, qf2: lcq.bracket.qf2, qf3: lcq.bracket.qf3, qf4: lcq.bracket.qf4, sf1: lcq.bracket.sf1, sf2: lcq.bracket.sf2, final: null },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+function enterLcqCompleteStage() {
+  const lcq = seasonState.event;
+  const madeIt = lcq.qualifiedForWorlds.some((t) => t.id === 'player');
+  const lines = madeIt
+    ? ['<span class="season-info-highlight">Geschafft!</span> Du hast dich über den Last Chance Qualifier für die Weltmeisterschaft qualifiziert.']
+    : ['Knapp gescheitert — der Last Chance Qualifier war deine letzte Chance.', 'Deine Saison endet hier.'];
+  tournamentState = { stage: 'lcq-complete', stageMatchPlayed: true, playerStatusNote: null, playerEliminated: false, lcqQualified: madeIt, infoHtml: buildInfoHtml('Last Chance Qualifier abgeschlossen', lines) };
+}
+
+// Ist der Spieler direkt qualifiziert (nicht Teil des LCQ), muss der LCQ
+// trotzdem gespielt werden — er entscheidet die letzten 4 der 16 WM-Plätze,
+// unabhängig davon, ob der Spieler selbst daran teilnimmt. Da diese Bots-only-
+// Austragung für den Spieler nicht sichtbar/interaktiv ist, wird sie hier
+// sofort (ohne Ticker) komplett durchsimuliert.
+function autoSimulateLcqForBots(lcqField) {
+  resetTeamRecords(lcqField);
+  const lcq = createLastChanceQualifier(lcqField);
+  [lcq.bracket.qf1, lcq.bracket.qf2, lcq.bracket.qf3, lcq.bracket.qf4].forEach((m) => simulateFullSeriesInstant(seasonState.allTeams, m, simulateMatch));
+  finalizeLcqQuarterfinals(lcq);
+  [lcq.bracket.sf1, lcq.bracket.sf2].forEach((m) => simulateFullSeriesInstant(seasonState.allTeams, m, simulateMatch));
+  finalizeLcqSemifinals(lcq);
+  return lcq.qualifiedForWorlds;
+}
+
+function enterWorldsGslStage() {
+  const lcqQualifiers = seasonState.eventType === 'lcq' ? seasonState.event.qualifiedForWorlds : seasonState.lcqQualifiersForBots;
+  const worldsField = [...seasonState.worldsDirect, ...lcqQualifiers];
+  seasonState.worldsField = worldsField;
+  resetTeamRecords(worldsField);
+  seasonState.eventType = 'worlds';
+  seasonState.event = createWorldsGslStage(worldsField);
+  tournamentState = { stage: 'worlds-gsl', stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false };
+}
+
+function enterWorldsPlayoffQuarterStage() {
+  const worlds = seasonState.event;
+  tournamentState = {
+    stage: 'worlds-playoff-quarter',
+    playoffMatches: { qf1: worlds.playoffs.qf1, qf2: worlds.playoffs.qf2, qf3: worlds.playoffs.qf3, qf4: worlds.playoffs.qf4, sf1: null, sf2: null, final: null },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+function enterWorldsPlayoffSemiStage() {
+  const worlds = seasonState.event;
+  tournamentState = {
+    stage: 'worlds-playoff-semi',
+    playoffMatches: { qf1: worlds.playoffs.qf1, qf2: worlds.playoffs.qf2, qf3: worlds.playoffs.qf3, qf4: worlds.playoffs.qf4, sf1: worlds.playoffs.sf1, sf2: worlds.playoffs.sf2, final: null },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+function enterWorldsPlayoffFinalStage() {
+  const worlds = seasonState.event;
+  tournamentState = {
+    stage: 'worlds-playoff-final',
+    playoffMatches: { qf1: worlds.playoffs.qf1, qf2: worlds.playoffs.qf2, qf3: worlds.playoffs.qf3, qf4: worlds.playoffs.qf4, sf1: worlds.playoffs.sf1, sf2: worlds.playoffs.sf2, final: worlds.playoffs.final },
+    stageMatchPlayed: false, playerStatusNote: null, playerEliminated: false,
+  };
+}
+
+// Beendet die Saison — egal ob nach einem verpassten Cut oder nach der
+// Weltmeisterschaft. `summary` ist der Text für das Champion-Banner.
+function enterSeasonCompleteStage(summary, championId) {
+  seasonState.finalChampionId = championId || null;
+  seasonState.seasonComplete = true;
+  tournamentState = { stage: 'season-complete', stageMatchPlayed: true, playerStatusNote: null, playerEliminated: false, seasonSummary: summary };
+}
+
 function advanceTournamentStage() {
   const ts = tournamentState;
+  const open = seasonState.eventType === 'open' ? seasonState.event : null;
 
-  if (ts.stage === 'r1') {
-    const winners = ts.r1.map((m) => winnerOf(ts.teams, m));
-    const losers = ts.r1.map((m) => loserOf(ts.teams, m));
-    ts.r2w = pairGroup(winners, SWISS_BEST_OF);
-    ts.r2l = pairGroup(losers, SWISS_BEST_OF);
-    ts.stage = 'r2';
-    ts.stageMatchPlayed = false;
-  } else if (ts.stage === 'r2') {
-    const qual20 = ts.r2w.map((m) => winnerOf(ts.teams, m));
-    const elim02 = ts.r2l.map((m) => loserOf(ts.teams, m));
-    const decider = [...ts.r2w.map((m) => loserOf(ts.teams, m)), ...ts.r2l.map((m) => winnerOf(ts.teams, m))];
-    ts.qual20 = qual20; // für Playoff-Seeding gebraucht
-    ts.elim02 = elim02;
-    ts.r3 = pairGroup(decider, SWISS_BEST_OF);
-    ts.stage = 'r3';
-    ts.stageMatchPlayed = false;
-
-    if (elim02.some((t) => t.id === 'player')) ts.playerEliminated = true;
-  } else if (ts.stage === 'r3') {
-    const qual21 = ts.r3.map((m) => winnerOf(ts.teams, m));
-    const elim12 = ts.r3.map((m) => loserOf(ts.teams, m));
-    const seeded = seedPlayoffs(ts.qual20, qual21);
-    ts.sf1 = createSeriesMatch(seeded[0], seeded[3], PLAYOFF_BEST_OF);
-    ts.sf2 = createSeriesMatch(seeded[1], seeded[2], PLAYOFF_BEST_OF);
-    ts.stage = 'playoff-semi';
-    ts.stageMatchPlayed = false;
-
-    if (elim12.some((t) => t.id === 'player')) ts.playerEliminated = true;
-  } else if (ts.stage === 'playoff-semi') {
-    const w1 = winnerOf(ts.teams, ts.sf1);
-    const w2 = winnerOf(ts.teams, ts.sf2);
-    ts.final = createSeriesMatch(w1, w2, PLAYOFF_BEST_OF);
-    ts.stage = 'playoff-final';
-    ts.stageMatchPlayed = false;
-
-    const playerWasInSemis = ts.sf1.aId === 'player' || ts.sf1.bId === 'player' ||
-                              ts.sf2.aId === 'player' || ts.sf2.bId === 'player';
-    if (playerWasInSemis && w1.id !== 'player' && w2.id !== 'player') ts.playerEliminated = true;
-  } else if (ts.stage === 'playoff-final') {
-    ts.champion = winnerOf(ts.teams, ts.final);
-    ts.stage = 'complete';
+  if (ts.stage === 'open-bracket') {
+    advanceDoubleElimRound(open.bracket);
+    if (finalizeDoubleElimCutoff(open.bracket, OPEN_BRACKET_CUTOFF)) {
+      finalizeOpenBracketStage(open);
+      pairRound(open.swiss, 1, SWISS_BEST_OF);
+      enterOpenSwissStage();
+      if (open.bracket.eliminated.some((t) => t.id === 'player')) tournamentState.playerEliminated = true;
+    } else {
+      pairDoubleElimRound(open.bracket, SWISS_BEST_OF);
+      tournamentState.stageMatchPlayed = false;
+    }
+  } else if (ts.stage === 'open-swiss') {
+    advanceRound(open.swiss, ts.swissRoundNum);
+    if (isSwissComplete(open.swiss, OPEN_BRACKET_CUTOFF)) {
+      finalizeOpenSwissStage(open);
+      enterOpenGslStage();
+      if (open.swiss.eliminated.some((t) => t.id === 'player')) tournamentState.playerEliminated = true;
+    } else {
+      const nextRound = ts.swissRoundNum + 1;
+      pairRound(open.swiss, nextRound, SWISS_BEST_OF);
+      ts.swissRoundNum = nextRound;
+      ts.stageMatchPlayed = false;
+    }
+  } else if (ts.stage === 'open-gsl') {
+    open.gslGroups.forEach((g) => advanceGslGroup(seasonState.allTeams, g));
+    if (open.gslGroups.every(isGslGroupComplete)) {
+      const playerWasInGsl = open.gslGroups.some((g) => g.teams.some((t) => t.id === 'player'));
+      finalizeOpenGslStage(open);
+      enterOpenPlayoffSemiStage();
+      const stillIn = open.playoffs.sf1.aId === 'player' || open.playoffs.sf1.bId === 'player' ||
+        open.playoffs.sf2.aId === 'player' || open.playoffs.sf2.bId === 'player';
+      if (playerWasInGsl && !stillIn) tournamentState.playerEliminated = true;
+    } else {
+      tournamentState.stageMatchPlayed = false;
+    }
+  } else if (ts.stage === 'open-playoff-semi') {
+    const wasIn = ts.playoffMatches.sf1.aId === 'player' || ts.playoffMatches.sf1.bId === 'player' ||
+      ts.playoffMatches.sf2.aId === 'player' || ts.playoffMatches.sf2.bId === 'player';
+    finalizeOpenPlayoffStage(open);
+    enterOpenPlayoffFinalStage();
+    const stillIn = open.playoffs.final.aId === 'player' || open.playoffs.final.bId === 'player';
+    if (wasIn && !stillIn) tournamentState.playerEliminated = true;
+  } else if (ts.stage === 'open-playoff-final') {
+    finalizeOpenChampion(open);
+    awardOpenPlacementPoints(open, seasonState.seasonPoints);
+    accumulatePlayerRecord();
+    enterOpenCompleteStage();
+  } else if (ts.stage === 'open-complete') {
+    if (seasonState.openIndex < 2) {
+      seasonState.openIndex += 1;
+      resetTeamRecords(seasonState.allTeams);
+      seasonState.event = createOpenQualifier(seasonState.allTeams);
+      enterOpenBracketStage();
+    } else {
+      enterMajorCheckStage();
+    }
+  } else if (ts.stage === 'major-check') {
+    if (ts.majorQualified) enterMajorSwissStage();
+    else enterSeasonCompleteStage('Saison beendet — nicht fürs Major qualifiziert.', null);
+  } else if (ts.stage === 'major-swiss') {
+    const major = seasonState.event;
+    advanceRound(major.swiss, ts.swissRoundNum);
+    if (isSwissComplete(major.swiss, MAJOR_SIZE)) {
+      finalizeMajorSwissStage(major);
+      enterMajorPlayoffQuarterStage();
+      if (major.swiss.eliminated.some((t) => t.id === 'player')) tournamentState.playerEliminated = true;
+    } else {
+      const nextRound = ts.swissRoundNum + 1;
+      pairRound(major.swiss, nextRound, SWISS_BEST_OF);
+      ts.swissRoundNum = nextRound;
+      ts.stageMatchPlayed = false;
+    }
+  } else if (ts.stage === 'major-playoff-quarter') {
+    const major = seasonState.event;
+    const wasIn = [ts.playoffMatches.qf1, ts.playoffMatches.qf2, ts.playoffMatches.qf3, ts.playoffMatches.qf4]
+      .some((m) => m.aId === 'player' || m.bId === 'player');
+    finalizeMajorQuarterfinals(major);
+    enterMajorPlayoffSemiStage();
+    const stillIn = major.playoffs.sf1.aId === 'player' || major.playoffs.sf1.bId === 'player' ||
+      major.playoffs.sf2.aId === 'player' || major.playoffs.sf2.bId === 'player';
+    if (wasIn && !stillIn) tournamentState.playerEliminated = true;
+  } else if (ts.stage === 'major-playoff-semi') {
+    const major = seasonState.event;
+    const wasIn = ts.playoffMatches.sf1.aId === 'player' || ts.playoffMatches.sf1.bId === 'player' ||
+      ts.playoffMatches.sf2.aId === 'player' || ts.playoffMatches.sf2.bId === 'player';
+    finalizeMajorSemifinals(major);
+    enterMajorPlayoffFinalStage();
+    const stillIn = major.playoffs.final.aId === 'player' || major.playoffs.final.bId === 'player';
+    if (wasIn && !stillIn) tournamentState.playerEliminated = true;
+  } else if (ts.stage === 'major-playoff-final') {
+    const major = seasonState.event;
+    finalizeMajorChampion(major);
+    awardMajorPlacementPoints(major, seasonState.seasonPoints);
+    accumulatePlayerRecord();
+    enterMajorCompleteStage();
+  } else if (ts.stage === 'major-complete') {
+    enterWorldsCheckStage();
+  } else if (ts.stage === 'worlds-check') {
+    if (ts.worldsQualification === 'direct') {
+      const lcqField = buildLcqField(seasonState.allTeams, seasonState.majorField, seasonState.worldsLcqPool, seasonState.seasonPoints);
+      seasonState.lcqQualifiersForBots = autoSimulateLcqForBots(lcqField);
+      enterWorldsGslStage();
+    }
+    else if (ts.worldsQualification === 'lcq') enterLcqQuarterStage();
+    else enterSeasonCompleteStage('Saison beendet — nicht für die WM qualifiziert.', null);
+  } else if (ts.stage === 'lcq-quarter') {
+    const lcq = seasonState.event;
+    finalizeLcqQuarterfinals(lcq);
+    enterLcqSemiStage();
+  } else if (ts.stage === 'lcq-semi') {
+    const lcq = seasonState.event;
+    const wasIn = ts.playoffMatches.sf1.aId === 'player' || ts.playoffMatches.sf1.bId === 'player' ||
+      ts.playoffMatches.sf2.aId === 'player' || ts.playoffMatches.sf2.bId === 'player';
+    finalizeLcqSemifinals(lcq);
+    accumulatePlayerRecord();
+    const madeIt = lcq.qualifiedForWorlds.some((t) => t.id === 'player');
+    if (wasIn && !madeIt) tournamentState.playerEliminated = true;
+    enterLcqCompleteStage();
+  } else if (ts.stage === 'lcq-complete') {
+    if (ts.lcqQualified) enterWorldsGslStage();
+    else enterSeasonCompleteStage('Saison beendet — im Last Chance Qualifier gescheitert.', null);
+  } else if (ts.stage === 'worlds-gsl') {
+    const worlds = seasonState.event;
+    worlds.groups.forEach((g) => advanceGslGroup(seasonState.allTeams, g));
+    if (worlds.groups.every(isGslGroupComplete)) {
+      const wasIn = worlds.groups.some((g) => g.teams.some((t) => t.id === 'player'));
+      finalizeWorldsGslStage(worlds);
+      enterWorldsPlayoffQuarterStage();
+      const stillIn = [worlds.playoffs.qf1, worlds.playoffs.qf2, worlds.playoffs.qf3, worlds.playoffs.qf4]
+        .some((m) => m.aId === 'player' || m.bId === 'player');
+      if (wasIn && !stillIn) tournamentState.playerEliminated = true;
+    } else {
+      tournamentState.stageMatchPlayed = false;
+    }
+  } else if (ts.stage === 'worlds-playoff-quarter') {
+    const worlds = seasonState.event;
+    const wasIn = [ts.playoffMatches.qf1, ts.playoffMatches.qf2, ts.playoffMatches.qf3, ts.playoffMatches.qf4]
+      .some((m) => m.aId === 'player' || m.bId === 'player');
+    finalizeWorldsQuarterfinals(worlds);
+    enterWorldsPlayoffSemiStage();
+    const stillIn = worlds.playoffs.sf1.aId === 'player' || worlds.playoffs.sf1.bId === 'player' ||
+      worlds.playoffs.sf2.aId === 'player' || worlds.playoffs.sf2.bId === 'player';
+    if (wasIn && !stillIn) tournamentState.playerEliminated = true;
+  } else if (ts.stage === 'worlds-playoff-semi') {
+    const worlds = seasonState.event;
+    const wasIn = ts.playoffMatches.sf1.aId === 'player' || ts.playoffMatches.sf1.bId === 'player' ||
+      ts.playoffMatches.sf2.aId === 'player' || ts.playoffMatches.sf2.bId === 'player';
+    finalizeWorldsSemifinals(worlds);
+    enterWorldsPlayoffFinalStage();
+    const stillIn = worlds.playoffs.final.aId === 'player' || worlds.playoffs.final.bId === 'player';
+    if (wasIn && !stillIn) tournamentState.playerEliminated = true;
+  } else if (ts.stage === 'worlds-playoff-final') {
+    const worlds = seasonState.event;
+    finalizeWorldsChampion(worlds);
+    accumulatePlayerRecord();
+    const wasChampion = worlds.champion.id === 'player';
+    enterSeasonCompleteStage(
+      '🏆 ' + worlds.champion.name + ' ist Weltmeister!' + (wasChampion ? ' (das bist du!)' : ''),
+      worlds.champion.id
+    );
   }
 
   // Status-Hinweis wird IMMER frisch abgeleitet (nicht nur beim Übergang selbst
   // gesetzt) — sonst geht die "ausgeschieden"-Meldung in einer späteren Stufe
   // verloren, in der der Spieler ohnehin nicht mehr mitspielt.
-  if (ts.stage !== 'complete') {
+  if (tournamentState.stage !== 'season-complete' && !INFO_STAGES.has(tournamentState.stage)) {
     const player = findTournamentTeam('player');
     const inCurrentStage = getCurrentStageMatches().some((m) => m.aId === 'player' || m.bId === 'player');
     if (inCurrentStage) {
-      ts.playerStatusNote = null;
-    } else if (ts.playerEliminated) {
-      ts.playerStatusNote = 'du bist ausgeschieden (' + player.wins + '-' + player.losses + ') — das Turnier läuft weiter';
+      tournamentState.playerStatusNote = null;
+    } else if (tournamentState.playerEliminated) {
+      tournamentState.playerStatusNote = 'du bist ausgeschieden (' + player.wins + '-' + player.losses + ') — die Stufe läuft weiter';
     } else {
-      ts.playerStatusNote = 'du bist qualifiziert (' + player.wins + '-' + player.losses + ') — wartest auf die nächste Runde';
+      tournamentState.playerStatusNote = 'du bist qualifiziert (' + player.wins + '-' + player.losses + ') — wartest auf die nächste Runde';
     }
   }
 
   renderTournamentScreen();
   saveGameState();
+}
+
+// Addiert den aktuellen Win/Loss-Stand des Spieler-Teams auf die Saison-
+// Gesamtbilanz (für startNextSeason()'s performanceFactor) — wird aufgerufen,
+// BEVOR die Team-Records für das nächste Event zurückgesetzt werden.
+function accumulatePlayerRecord() {
+  const player = findTournamentTeam('player');
+  seasonState.playerWins += player.wins;
+  seasonState.playerLosses += player.losses;
 }
 
 // ── Saison-Ende: Spieler-Entwicklung + Upgrade-Budget + nächste Saison ──────
@@ -1045,8 +2363,9 @@ const DEV_STAT_MAX = 99;
 
 function developPlayer(p, performanceFactor) {
   const developed = { ...p };
+  const charPath = findCharacterPath(careerCharacter.pathId);
   STAT_LABELS.forEach(([key]) => {
-    const drift = Math.round((Math.random() * 6 - 2.5) + performanceFactor * 4);
+    const drift = Math.round((Math.random() * 6 - 2.5) + performanceFactor * 4) + charPath.developmentBonus;
     developed[key] = Math.max(DEV_STAT_MIN, Math.min(DEV_STAT_MAX, p[key] + drift));
   });
   developed.overall = Math.round(STAT_LABELS.reduce((sum, [key]) => sum + developed[key], 0) / STAT_LABELS.length);
@@ -1067,29 +2386,45 @@ function calculateSeasonIncome(playerTeam, wasChampion) {
   const winRatio = playerTeam.wins / Math.max(1, playerTeam.wins + playerTeam.losses);
   let income = 250 + Math.round(winRatio * 400);
   if (wasChampion) income += 500;
+  const charPath = findCharacterPath(careerCharacter.pathId);
+  income += charPath.seasonIncomeBonus;
   return income;
 }
 
 function startNextSeason() {
-  const ts = tournamentState;
   const playerTeam = findTournamentTeam('player');
-  const wasChampion = ts.champion.id === 'player';
-  const performanceFactor = playerTeam.wins / Math.max(1, playerTeam.wins + playerTeam.losses); // 0..1
+  const wasChampion = seasonState.finalChampionId === 'player';
+  // Erfolgsfaktor über die GESAMTE Saison (alle Events, nicht nur das letzte
+  // gespielte) — seasonState.playerWins/-Losses akkumulieren das laufend
+  // (siehe accumulatePlayerRecord(), aufgerufen am Ende jedes Events).
+  const performanceFactor = seasonState.playerWins / Math.max(1, seasonState.playerWins + seasonState.playerLosses); // 0..1
 
   const developedStarters = playerTeam.players.map((p) => developPlayer(p, performanceFactor));
   const developedSub = playerTeam.sub ? developPlayer(playerTeam.sub, performanceFactor) : null;
   const developedCoach = playerTeam.coach ? developCoach(playerTeam.coach, performanceFactor) : null;
+  // Reserve spielt nie mit, entwickelt sich aber mit demselben Team-Erfolgsfaktor
+  // weiter wie der Rest des Kaders (trainiert schließlich mit).
+  const reserveBefore = rosterSlots.reserve.filter(Boolean).map(findPlayer);
+  const developedReserve = reserveBefore.map((p) => developPlayer(p, performanceFactor));
 
   careerRosterPlayers = developedSub ? [...developedStarters, developedSub] : developedStarters;
+  careerReservePlayers = developedReserve;
   careerCoach = developedCoach;
 
-  const income = calculateSeasonIncome(playerTeam, wasChampion);
+  const income = calculateSeasonIncome({ wins: seasonState.playerWins, losses: seasonState.playerLosses }, wasChampion);
   const rosterValue = careerRosterPlayers.reduce((sum, p) => sum + calculatePrice(p.overall), 0)
+    + careerReservePlayers.reduce((sum, p) => sum + calculatePrice(p.overall), 0)
     + (careerCoach ? calculatePrice(careerCoach.overall) : 0);
   BUDGET = rosterValue + income;
 
-  draftedPlayerNames = developedStarters.map((p) => p.name).concat(developedSub ? [developedSub.name] : []);
+  rosterSlots = {
+    main: padToSize(developedStarters.map((p) => p.name), MAIN_SIZE),
+    sub: padToSize(developedSub ? [developedSub.name] : [], SUB_SIZE),
+    reserve: padToSize(developedReserve.map((p) => p.name), RESERVE_SIZE),
+  };
   draftedCoachName = developedCoach ? developedCoach.name : null;
+  negotiatedPremiumPlayers = {}; // neue Saison — kein Vertragsspieler mehr, keine Prämie fällig
+  playersTradedThisSeason = new Set(); // neue Saison — Trade-Sperre pro Spieler läuft ab
 
   if (wasChampion) careerState.titlesWon += 1;
   careerState.seasonNumber += 1;
@@ -1099,40 +2434,28 @@ function startNextSeason() {
   showScreen('screen-draft');
   renderAll();
   saveGameState();
+
+  generateBotTrades();
+  generateIncomingOffers();
+  showNextIncomingOffer();
 }
 
 // ── Swiss-Bracket-Visualisierung (SVG) — angelehnt an Lykon Regional Grid ────
-const BR_HH  = 30;   // Kopfzeilen-Höhe
-const BR_MH  = 38;   // Match-Zeilen-Höhe ("Team1 vs Team2")
-const BR_SH  = 32;   // Slot-Zeilen-Höhe (einzelnes Team)
+// Generalisiert für 16 Teams / 5 Swiss-Runden + 8er-Playoffs: statt fixer
+// Positionen pro (früher exakt 4) Spalte wird die Spalten-/Boxen-Höhe aus dem
+// tatsächlichen Turnierzustand berechnet (siehe buildSwissColumn()).
+// Bewusst wieder größer/gut lesbar (User-Feedback) — die Seite selbst darf
+// jetzt scrollen (kein verschachteltes Scroll-Fenster mehr, siehe style.css
+// .bracket-container/body), daher muss das Bracket nicht mehr in eine kleine
+// feste Fläche gequetscht werden.
+const BR_HH  = 24;   // Kopfzeilen-Höhe
+const BR_MH  = 30;   // Match-Zeilen-Höhe ("Team1 vs Team2")
+const BR_SH  = 26;   // Slot-Zeilen-Höhe (einzelnes Team)
 const BR_MS  = 3;    // Abstand zwischen Matches innerhalb einer Gruppe
-const BR_GG  = 16;   // Abstand zwischen Gruppen-Boxen in derselben Spalte
-const BR_W1  = 220;  // Breite Spalte 1 (0-0, alle 8 Teams)
-const BR_W2  = 200;  // Breite Spalten 2-4
-const BR_CG  = 50;   // Spaltenabstand
-
-const BR_C1X = 10;
-const BR_C2X = BR_C1X + BR_W1 + BR_CG;
-const BR_C3X = BR_C2X + BR_W2 + BR_CG;
-const BR_C4X = BR_C3X + BR_W2 + BR_CG;
-
-const BR_R1H    = BR_HH + 4 * BR_MH + 3 * BR_MS;
-const BR_R2H    = BR_HH + 2 * BR_MH + 1 * BR_MS;
-const BR_SLOT2H = BR_HH + 2 * BR_SH;
-
-const BR_TOP  = 20;
-const BR_R2W_Y = BR_TOP;
-const BR_R2L_Y = BR_TOP + BR_R2H + BR_GG;
-const BR_R1_Y  = BR_TOP + Math.round(((BR_R2H * 2 + BR_GG) - BR_R1H) / 2);
-
-const BR_QUAL20_Y = BR_TOP;
-const BR_R3_Y     = BR_TOP + BR_SLOT2H + BR_GG;
-const BR_ELIM02_Y = BR_R3_Y + BR_R2H + BR_GG;
-
-const BR_R3_CY_VAL = BR_R3_Y + BR_R2H / 2;
-const BR_C4_SPAN    = BR_SLOT2H * 2 + BR_GG;
-const BR_QUAL21_Y  = Math.round(BR_R3_CY_VAL - BR_C4_SPAN / 2);
-const BR_ELIM12_Y  = BR_QUAL21_Y + BR_SLOT2H + BR_GG;
+const BR_GG  = 12;   // Abstand zwischen Gruppen-Boxen in derselben Spalte
+const BR_W2  = 230;  // Spaltenbreite (einheitlich)
+const BR_CG  = 44;   // Spaltenabstand
+const BR_TOP = 16;
 
 const COL_BLUE = '#3b82f6', COL_GREEN = '#22c55e', COL_AMBER = '#f59e0b',
       COL_RED = '#ef4444', COL_GOLD = '#f59e0b', COL_PURPLE = '#7c3aed';
@@ -1144,7 +2467,7 @@ function escapeXml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function truncateName(name) {
-  return name.length > 15 ? name.slice(0, 14) + '…' : name;
+  return name.length > 18 ? name.slice(0, 17) + '…' : name;
 }
 
 function svgLine(x1, y1, x2, y2, color) {
@@ -1155,15 +2478,15 @@ function svgLine(x1, y1, x2, y2, color) {
 
 function svgGroupBox(x, y, w, h, label, sublabel, color, innerSvg) {
   const hasSubLabel = !!sublabel;
-  const labelY = hasSubLabel ? y + BR_HH / 2 + 1 : y + BR_HH / 2 + 5;
-  const sublabelY = y + BR_HH - 6;
+  const labelY = hasSubLabel ? y + BR_HH / 2 : y + BR_HH / 2 + 4;
+  const sublabelY = y + BR_HH - 5;
   return (
-    '<rect x="' + (x - 1) + '" y="' + (y - 1) + '" width="' + (w + 2) + '" height="' + (h + 2) + '" rx="7" fill="none" stroke="' + color + '" stroke-opacity="0.12" stroke-width="3" />' +
-    '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="6" fill="#080f1e" stroke="' + color + '" stroke-opacity="0.5" stroke-width="1.5" />' +
-    '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + BR_HH + '" rx="6" fill="' + color + '" fill-opacity="0.2" />' +
-    '<rect x="' + (x + 6) + '" y="' + (y + BR_HH - 1) + '" width="' + (w - 12) + '" height="1" fill="' + color + '" fill-opacity="0.35" />' +
-    '<text x="' + (x + w / 2) + '" y="' + labelY + '" text-anchor="middle" fill="' + color + '" font-size="' + (hasSubLabel ? 11 : 12) + '" font-family="monospace" font-weight="700" letter-spacing="2" opacity="0.95">' + label + '</text>' +
-    (sublabel ? '<text x="' + (x + w / 2) + '" y="' + sublabelY + '" text-anchor="middle" fill="' + color + '" font-size="7.5" font-family="monospace" font-weight="700" letter-spacing="1.5" opacity="0.65">' + sublabel + '</text>' : '') +
+    '<rect x="' + (x - 1) + '" y="' + (y - 1) + '" width="' + (w + 2) + '" height="' + (h + 2) + '" rx="6" fill="none" stroke="' + color + '" stroke-opacity="0.12" stroke-width="2" />' +
+    '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="5" fill="#080f1e" stroke="' + color + '" stroke-opacity="0.5" stroke-width="1.2" />' +
+    '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + BR_HH + '" rx="5" fill="' + color + '" fill-opacity="0.2" />' +
+    '<rect x="' + (x + 5) + '" y="' + (y + BR_HH - 1) + '" width="' + (w - 10) + '" height="1" fill="' + color + '" fill-opacity="0.35" />' +
+    '<text x="' + (x + w / 2) + '" y="' + labelY + '" text-anchor="middle" fill="' + color + '" font-size="' + (hasSubLabel ? 11 : 12) + '" font-family="monospace" font-weight="700" letter-spacing="1.5" opacity="0.95">' + label + '</text>' +
+    (sublabel ? '<text x="' + (x + w / 2) + '" y="' + sublabelY + '" text-anchor="middle" fill="' + color + '" font-size="7.5" font-family="monospace" font-weight="700" letter-spacing="1" opacity="0.65">' + sublabel + '</text>' : '') +
     innerSvg
   );
 }
@@ -1210,120 +2533,305 @@ function svgSlotRow(x, y, w, team, sepTop) {
   return out;
 }
 
+// Baut die Boxen-Liste für EINE Swiss-Spalte (Runde N): aktive Match-Gruppen
+// dieser Runde + Gruppen, die durch die VORrunde gerade terminal (qualifiziert/
+// eliminiert) geworden sind — genau die, die "ab jetzt" bekannt sind.
+// Sortierung IMMER nach Sieg-Anzahl absteigend (nicht alphabetisch!) — dadurch
+// steht die bessere Gruppe oben, egal ob aktiv oder terminal, und QUALIFIZIERT
+// (mehr Siege) landet automatisch über ELIMINIERT (weniger Siege) — genau wie
+// bei einem echten Swiss-Bracket üblich.
+function buildSwissColumnBoxes(engine, round) {
+  const records = Object.keys(engine.groups).filter((record) => {
+    const group = engine.groups[record];
+    return group.teams && group.teams.length > 0 && recordGamesPlayed(record) === round - 1;
+  }).sort((a, b) => Number(b.split('-')[0]) - Number(a.split('-')[0]));
+
+  return records.map((record) => {
+    const group = engine.groups[record];
+    const wins = Number(record.split('-')[0]);
+    const losses = Number(record.split('-')[1]);
+    if (isTerminalRecord(record)) {
+      const qualified = wins >= WINS_TARGET;
+      return { type: 'slot', record, teams: group.teams, qualified, color: qualified ? COL_GREEN : COL_RED };
+    }
+    return { type: 'match', record, matches: group.matches, color: losses >= 1 ? COL_AMBER : COL_BLUE };
+  });
+}
+
+function swissBoxHeight(box) {
+  if (box.type === 'match') return BR_HH + box.matches.length * BR_MH + Math.max(0, box.matches.length - 1) * BR_MS;
+  return BR_HH + box.teams.length * BR_SH;
+}
+
+// Zeichnet eine Spalte (von oben nach unten gestapelte Boxen) an X-Position x,
+// liefert das SVG-Fragment plus die tatsächlich benötigte Gesamthöhe.
+// positions: record -> { cy } (vertikale Boxenmitte) — wird gebraucht, um im
+// Anschluss Verbindungslinien zur NÄCHSTEN Spalte zu zeichnen.
+function renderSwissColumnSvg(x, boxes) {
+  let svg = '';
+  let y = BR_TOP;
+  const positions = {};
+  boxes.forEach((box) => {
+    const h = swissBoxHeight(box);
+    positions[box.record] = { cy: y + h / 2 };
+    if (box.type === 'match') {
+      let inner = '';
+      box.matches.forEach((m, i) => { inner += svgMatchRow(x, brMatchY(y, i), BR_W2, m, i > 0); });
+      svg += svgGroupBox(x, y, BR_W2, h, box.record, 'BO5', box.color, inner);
+    } else {
+      let inner = '';
+      box.teams.forEach((t, i) => { inner += svgSlotRow(x, brSlotY(y, i), BR_W2, findTournamentTeam(t.id), i > 0); });
+      svg += svgGroupBox(x, y, BR_W2, h, box.record, box.qualified ? 'QUALIFIZIERT' : 'ELIMINIERT', box.color, inner);
+    }
+    y += h + BR_GG;
+  });
+  return { svg, height: y - BR_GG, positions };
+}
+
+// Die zwei möglichen Folge-Records einer NICHT-terminalen Gruppe (Sieg-Pfad,
+// Niederlage-Pfad) — für die Verbindungslinien zur nächsten Spalte.
+function nextSwissRecords(record) {
+  const parts = record.split('-').map(Number);
+  return [(parts[0] + 1) + '-' + parts[1], parts[0] + '-' + (parts[1] + 1)];
+}
+
+// Generalisiert (User-Wunsch "volle 1:1-Struktur"): Swiss läuft jetzt sowohl
+// beim Open Qualifier ('open-swiss', 16 Teams) als auch beim Major
+// ('major-swiss', 16 Teams) — beide nutzen exakt dieselbe Engine/Anzeige,
+// nur mit unterschiedlicher Team-Menge (`ts.engine`, gesetzt beim Betreten
+// der jeweiligen Stufe, siehe enterOpenSwissStage()/enterMajorSwissStage()).
 function renderSwissBracket() {
   const ts = tournamentState;
   const container = document.getElementById('bracket-container');
+  const engine = ts.engine;
+  const isSwissStage = ts.stage === 'open-swiss' || ts.stage === 'major-swiss';
 
-  const r1cy  = BR_R1_Y + BR_R1H / 2;
-  const r2wcy = BR_R2W_Y + BR_R2H / 2;
-  const r2lcy = BR_R2L_Y + BR_R2H / 2;
-  const q20cy = BR_QUAL20_Y + BR_SLOT2H / 2;
-  const r3cy  = BR_R3_Y + BR_R2H / 2;
-  const e02cy = BR_ELIM02_Y + BR_SLOT2H / 2;
-  const q21cy = BR_QUAL21_Y + BR_SLOT2H / 2;
-  const e12cy = BR_ELIM12_Y + BR_SLOT2H / 2;
-
-  const r1_rx = BR_C1X + BR_W1;
-  const r2_rx = BR_C2X + BR_W2;
-  const r3_rx = BR_C3X + BR_W2;
-
-  const svgH = Math.max(BR_R1_Y + BR_R1H, BR_R2L_Y + BR_R2H, BR_ELIM02_Y + BR_SLOT2H, BR_ELIM12_Y + BR_SLOT2H) + 20;
-  const svgW = BR_C4X + BR_W2 + 10;
-
-  const hasR2 = ts.r2w !== null;
-  const hasR3 = ts.r3 !== null;
-  const hasPlayoffs = ts.stage === 'playoff-semi' || ts.stage === 'playoff-final' || ts.stage === 'complete';
-
-  const qual20 = ts.qual20 || [null, null];
-  const elim02 = ts.elim02 || [null, null];
-  const qual21 = hasR3 ? ts.r3.map((m) => winnerOf(ts.teams, m)) : [null, null];
-  const elim12 = hasR3 ? ts.r3.map((m) => loserOf(ts.teams, m)) : [null, null];
+  // Solange die Swiss-Stage läuft, nur bis zur aktuellen Runde zeigen (spätere
+  // Runden existieren noch nicht); danach ist die Stage komplett aufgelöst (6
+  // Spalten: 5 Runden + die letzte Terminal-Spalte 3-2/2-3 ohne eigene Matches).
+  const maxRound = isSwissStage ? ts.swissRoundNum : 6;
 
   let svg = '';
+  let x = 10;
+  let maxHeight = 0;
+  let prevX = null;
+  let prevPositions = null;
+  for (let round = 1; round <= maxRound; round++) {
+    const boxes = buildSwissColumnBoxes(engine, round);
+    if (boxes.length === 0) continue;
+    const built = renderSwissColumnSvg(x, boxes);
 
-  if (hasR2) {
-    svg += svgLine(r1_rx, r1cy, BR_C2X, r2wcy, '#ffffff');
-    svg += svgLine(r1_rx, r1cy, BR_C2X, r2lcy, '#ffffff');
-  }
-  if (hasR3) {
-    svg += svgLine(r2_rx, r2wcy, BR_C3X, q20cy, '#ffffff');
-    svg += svgLine(r2_rx, r2wcy, BR_C3X, r3cy, '#ffffff');
-    svg += svgLine(r2_rx, r2lcy, BR_C3X, r3cy, '#ffffff');
-    svg += svgLine(r2_rx, r2lcy, BR_C3X, e02cy, '#ffffff');
-  }
-  if (hasPlayoffs) {
-    svg += svgLine(r3_rx, r3cy, BR_C4X, q21cy, '#ffffff');
-    svg += svgLine(r3_rx, r3cy, BR_C4X, e12cy, '#ffffff');
-  }
+    // Verbindungslinien von der VORHERIGEN Spalte zu dieser — jede nicht-
+    // terminale Gruppe hat genau 2 Folge-Records (Sieg-/Niederlage-Pfad).
+    if (prevPositions) {
+      let lineSvg = '';
+      Object.keys(prevPositions).forEach((record) => {
+        if (isTerminalRecord(record)) return;
+        nextSwissRecords(record).forEach((nextRecord) => {
+          if (built.positions[nextRecord]) {
+            lineSvg += svgLine(prevX + BR_W2, prevPositions[record].cy, x, built.positions[nextRecord].cy, '#ffffff');
+          }
+        });
+      });
+      svg += lineSvg;
+    }
 
-  let c1Inner = '';
-  for (let i = 0; i < 4; i++) c1Inner += svgMatchRow(BR_C1X, brMatchY(BR_R1_Y, i), BR_W1, ts.r1[i], i > 0);
-  svg += svgGroupBox(BR_C1X, BR_R1_Y, BR_W1, BR_R1H, '0 – 0', 'BO5', COL_BLUE, c1Inner);
-
-  if (hasR2) {
-    let c2wInner = '';
-    for (let i = 0; i < 2; i++) c2wInner += svgMatchRow(BR_C2X, brMatchY(BR_R2W_Y, i), BR_W2, ts.r2w[i], i > 0);
-    svg += svgGroupBox(BR_C2X, BR_R2W_Y, BR_W2, BR_R2H, '1 – 0', 'BO5', COL_GREEN, c2wInner);
-
-    let c2lInner = '';
-    for (let i = 0; i < 2; i++) c2lInner += svgMatchRow(BR_C2X, brMatchY(BR_R2L_Y, i), BR_W2, ts.r2l[i], i > 0);
-    svg += svgGroupBox(BR_C2X, BR_R2L_Y, BR_W2, BR_R2H, '0 – 1', 'BO5', COL_AMBER, c2lInner);
-  }
-
-  if (hasR3) {
-    let q20Inner = '';
-    for (let i = 0; i < 2; i++) q20Inner += svgSlotRow(BR_C3X, brSlotY(BR_QUAL20_Y, i), BR_W2, qual20[i], i > 0);
-    svg += svgGroupBox(BR_C3X, BR_QUAL20_Y, BR_W2, BR_SLOT2H, '2 – 0', 'QUALIFIZIERT', COL_GREEN, q20Inner);
-
-    let r3Inner = '';
-    for (let i = 0; i < 2; i++) r3Inner += svgMatchRow(BR_C3X, brMatchY(BR_R3_Y, i), BR_W2, ts.r3[i], i > 0);
-    svg += svgGroupBox(BR_C3X, BR_R3_Y, BR_W2, BR_R2H, '1 – 1', 'BO5', COL_AMBER, r3Inner);
-
-    let e02Inner = '';
-    for (let i = 0; i < 2; i++) e02Inner += svgSlotRow(BR_C3X, brSlotY(BR_ELIM02_Y, i), BR_W2, elim02[i], i > 0);
-    svg += svgGroupBox(BR_C3X, BR_ELIM02_Y, BR_W2, BR_SLOT2H, '0 – 2', 'ELIMINIERT', COL_RED, e02Inner);
+    svg += built.svg;
+    maxHeight = Math.max(maxHeight, built.height);
+    prevX = x;
+    prevPositions = built.positions;
+    x += BR_W2 + BR_CG;
   }
 
-  if (hasPlayoffs) {
-    let q21Inner = '';
-    for (let i = 0; i < 2; i++) q21Inner += svgSlotRow(BR_C4X, brSlotY(BR_QUAL21_Y, i), BR_W2, qual21[i], i > 0);
-    svg += svgGroupBox(BR_C4X, BR_QUAL21_Y, BR_W2, BR_SLOT2H, '2 – 1', 'QUALIFIZIERT', COL_GREEN, q21Inner);
+  const svgW = x - BR_CG + 10;
+  const svgH = maxHeight + BR_TOP + 10;
+  // Feste Pixelgröße statt "width:100%" — sonst wird die viewBox je nach
+  // Spaltenzahl unterschiedlich stark gestreckt (Runde 1 mit wenig Inhalt würde
+  // riesig hochskaliert, das komplette 6-Spalten-Bracket kaum noch skaliert).
+  // 1 viewBox-Einheit = 1 Bildschirmpixel, IMMER — dadurch bleibt Text/Boxen-
+  // Größe konstant, egal wie viele Runden gerade sichtbar sind. Der Container
+  // übernimmt bei Bedarf horizontales Scrollen (overflow-x: auto).
+  // width/height = natürliche (1:1) Größe; max-width:100%+height:auto lassen das
+  // Bracket bei Bedarf proportional SCHRUMPFEN, damit es nie über den Fensterrand
+  // hinausragt — aber NIE größer als die natürliche Größe hochskalieren (das war
+  // der Fehler mit "width:100%" davor: kleine Brackets wurden riesig aufgeblasen).
+  let html = '<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" width="' + svgW + '" height="' + svgH + '" style="display:block;margin:0 auto;max-width:100%;height:auto;">' + svg + '</svg>';
 
-    let e12Inner = '';
-    for (let i = 0; i < 2; i++) e12Inner += svgSlotRow(BR_C4X, brSlotY(BR_ELIM12_Y, i), BR_W2, elim12[i], i > 0);
-    svg += svgGroupBox(BR_C4X, BR_ELIM12_Y, BR_W2, BR_SLOT2H, '1 – 2', 'ELIMINIERT', COL_RED, e12Inner);
-  }
-
-  let html = '<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;max-width:1000px;display:block;">' + svg + '</svg>';
-
-  if (hasPlayoffs) html += renderPlayoffSvg();
+  // Major nutzt (wie das alte Einzel-Turnier) Swiss GEFOLGT von Playoffs auf
+  // demselben Bildschirm — sobald die Playoff-Stufe erreicht ist, wird das
+  // (fertige) Swiss-Bracket weiter oben mit angezeigt.
+  const majorHasPlayoffs = ts.stage === 'major-playoff-quarter' || ts.stage === 'major-playoff-semi'
+    || ts.stage === 'major-playoff-final';
+  if (majorHasPlayoffs) html += renderPlayoffSvg();
 
   container.innerHTML = html;
 }
 
-const PP_W    = 220;
-const PP_CG   = 60;
-const PP_BH   = BR_HH + BR_MH;
-const PP_GAP  = 20;
-const PP_SX   = 10;
-const PP_FX   = PP_SX + PP_W + PP_CG;
-const PP_SF1_Y = 10;
-const PP_SF2_Y = PP_SF1_Y + PP_BH + PP_GAP;
-const PP_FIN_Y = Math.round((PP_SF1_Y + PP_SF2_Y) / 2);
-const PP_SVG_H = Math.max(PP_SF2_Y + PP_BH, PP_FIN_Y + PP_BH) + 16;
-const PP_SVG_W = PP_FX + PP_W + 10;
+// ── Playoff-Bracket (8 Teams: Viertelfinale → Halbfinale → Finale, Bo7) ──────
+const PP_W   = 230;
+const PP_CG  = 44;
+const PP_BH  = BR_HH + BR_MH;
+const PP_GAP = 12;
 
+// Generalisiert (User-Wunsch "volle 1:1-Struktur"): läuft jetzt bei Major/WM
+// (8 Team-Playoffs, mit Viertelfinale) UND beim Open Qualifier (4-Team-
+// Playoffs, nur Halbfinale+Finale, siehe buildPlayoffSemifinalsOnly() in
+// tournament.js) — liest die Matches aus `ts.playoffMatches` statt fest aus
+// `ts.qf1` etc., damit dieselbe Funktion für beide Varianten reicht. Fehlt
+// `qf1` (Open Qualifier), wird die Viertelfinale-Spalte + ihre Linien
+// einfach weggelassen und das Halbfinale rückt an den linken Rand.
 function renderPlayoffSvg() {
-  const ts = tournamentState;
+  const pm = tournamentState.playoffMatches;
+  const hasQuarters = !!pm.qf1;
+
+  const sfX = hasQuarters ? (10 + PP_W + PP_CG) : 10;
+  const finX = sfX + PP_W + PP_CG;
+
   let svg = '';
-  svg += svgLine(PP_SX + PP_W, PP_SF1_Y + PP_BH / 2, PP_FX, PP_FIN_Y + PP_BH / 2, COL_GOLD);
-  svg += svgLine(PP_SX + PP_W, PP_SF2_Y + PP_BH / 2, PP_FX, PP_FIN_Y + PP_BH / 2, COL_GOLD);
+  let sfYs, sfCenters;
 
-  svg += svgGroupBox(PP_SX, PP_SF1_Y, PP_W, PP_BH, 'HALBFINALE 1', 'BO7', COL_PURPLE, svgMatchRow(PP_SX, PP_SF1_Y + BR_HH, PP_W, ts.sf1, false));
-  svg += svgGroupBox(PP_SX, PP_SF2_Y, PP_W, PP_BH, 'HALBFINALE 2', 'BO7', COL_PURPLE, svgMatchRow(PP_SX, PP_SF2_Y + BR_HH, PP_W, ts.sf2, false));
-  svg += svgGroupBox(PP_FX, PP_FIN_Y, PP_W, PP_BH, 'FINALE', 'BO7', COL_GOLD, ts.final ? svgMatchRow(PP_FX, PP_FIN_Y + BR_HH, PP_W, ts.final, false) : '');
+  if (hasQuarters) {
+    const qfX = 10;
+    const qfYs = [0, 1, 2, 3].map((i) => 10 + i * (PP_BH + PP_GAP));
+    const qfCenters = qfYs.map((y) => y + PP_BH / 2);
+    sfYs = [
+      (qfCenters[0] + qfCenters[1]) / 2 - PP_BH / 2,
+      (qfCenters[2] + qfCenters[3]) / 2 - PP_BH / 2,
+    ];
+    sfCenters = sfYs.map((y) => y + PP_BH / 2);
 
-  return '<div style="margin-top:24px;"><svg viewBox="0 0 ' + PP_SVG_W + ' ' + PP_SVG_H + '" style="width:60%;max-width:460px;display:block;">' + svg + '</svg></div>';
+    svg += svgLine(qfX + PP_W, qfCenters[0], sfX, sfCenters[0], COL_GOLD);
+    svg += svgLine(qfX + PP_W, qfCenters[1], sfX, sfCenters[0], COL_GOLD);
+    svg += svgLine(qfX + PP_W, qfCenters[2], sfX, sfCenters[1], COL_GOLD);
+    svg += svgLine(qfX + PP_W, qfCenters[3], sfX, sfCenters[1], COL_GOLD);
+
+    const qfMatches = [pm.qf1, pm.qf2, pm.qf3, pm.qf4];
+    const qfLabels = ['VIERTELFINALE 1', 'VIERTELFINALE 2', 'VIERTELFINALE 3', 'VIERTELFINALE 4'];
+    qfMatches.forEach((m, i) => {
+      svg += svgGroupBox(qfX, qfYs[i], PP_W, PP_BH, qfLabels[i], 'BO7', COL_PURPLE, svgMatchRow(qfX, qfYs[i] + BR_HH, PP_W, m, false));
+    });
+  } else {
+    sfYs = [10, 10 + PP_BH + PP_GAP];
+    sfCenters = sfYs.map((y) => y + PP_BH / 2);
+  }
+  const finY = (sfCenters[0] + sfCenters[1]) / 2 - PP_BH / 2;
+
+  svg += svgLine(sfX + PP_W, sfCenters[0], finX, finY + PP_BH / 2, COL_GOLD);
+  svg += svgLine(sfX + PP_W, sfCenters[1], finX, finY + PP_BH / 2, COL_GOLD);
+
+  svg += svgGroupBox(sfX, sfYs[0], PP_W, PP_BH, 'HALBFINALE 1', 'BO7', COL_PURPLE, svgMatchRow(sfX, sfYs[0] + BR_HH, PP_W, pm.sf1, false));
+  svg += svgGroupBox(sfX, sfYs[1], PP_W, PP_BH, 'HALBFINALE 2', 'BO7', COL_PURPLE, svgMatchRow(sfX, sfYs[1] + BR_HH, PP_W, pm.sf2, false));
+  svg += svgGroupBox(finX, finY, PP_W, PP_BH, 'FINALE', 'BO7', COL_GOLD, svgMatchRow(finX, finY + BR_HH, PP_W, pm.final, false));
+
+  const svgH = Math.max(sfYs[sfYs.length - 1] + PP_BH, finY + PP_BH) + 16;
+  const svgW = finX + PP_W + 10;
+  // Gleiche 1:1-Pixelgröße wie das Swiss-Bracket (kein "width:100%"-Stretch).
+  return '<div style="margin-top:24px;"><svg viewBox="0 0 ' + svgW + ' ' + svgH + '" width="' + svgW + '" height="' + svgH + '" style="display:block;margin:0 auto;max-width:100%;height:auto;">' + svg + '</svg></div>';
+}
+
+// ── Doppel-K.O.-Bracket-Anzeige (Open Qualifier, Tag 1-2) ────────────────────
+// Bewusst als kompakte Kartenliste statt eigener SVG-Bracket-Grafik (User-
+// Vorgabe "verständlich bleiben" hat hier Vorrang vor visueller Politur) —
+// zeigt pro "Leben-Stand" (0 oder 1 Niederlage) die aktuellen bzw. bereits
+// entschiedenen Matches dieser Runde plus die Anzahl bereits Eliminierter.
+function renderDoubleElimBracket() {
+  const container = document.getElementById('bracket-container');
+  const engine = seasonState.event.bracket;
+  const groupLabels = { '0': 'Noch ungeschlagen (0 Niederlagen)', '1': 'Eine Niederlage — letzte Chance' };
+
+  let html = '<div class="bracket-delim-wrap">';
+  ['0', '1'].forEach((lossKey) => {
+    const group = engine.groups[lossKey];
+    if (!group || !group.teams || group.teams.length === 0) return;
+    html += '<div class="bracket-delim-group">';
+    html += '<div class="bracket-delim-group-title">' + groupLabels[lossKey] + ' — ' + group.teams.length + ' Teams</div>';
+    if (group.matches) {
+      html += '<div class="bracket-delim-matches">';
+      group.matches.forEach((m) => { html += renderDelimMatchRow(m); });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html += '<div class="bracket-delim-eliminated">✕ Eliminiert: ' + engine.eliminated.length + ' Teams</div>';
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderDelimMatchRow(m) {
+  const teamA = findTournamentTeam(m.aId);
+  const teamB = findTournamentTeam(m.bId);
+  const scoreText = m.played ? (m.scoreA + ' : ' + m.scoreB) : (m.scoreA + ' : ' + m.scoreB);
+  const aWon = m.played && m.scoreA > m.scoreB;
+  const bWon = m.played && m.scoreB > m.scoreA;
+  return '<div class="bracket-delim-match' + (m.played ? ' is-played' : '') + '">' +
+    '<span class="delim-team' + (aWon ? ' is-winner' : '') + '">' + teamA.name + '</span>' +
+    '<span class="delim-score">' + scoreText + '</span>' +
+    '<span class="delim-team' + (bWon ? ' is-winner' : '') + '">' + teamB.name + '</span>' +
+    '</div>';
+}
+
+// ── GSL-Mini-Gruppen-Anzeige (Tag 4 der Opens, WM-GSL-Phase) ─────────────────
+function renderGslGroups(groups) {
+  const container = document.getElementById('bracket-container');
+  let html = '<div class="bracket-gsl-wrap">';
+  groups.forEach((group, i) => {
+    html += '<div class="bracket-gsl-group">';
+    html += '<div class="bracket-gsl-group-title">Gruppe ' + String.fromCharCode(65 + i) + '</div>';
+    html += renderGslMatchLine('Match 1', group.match1);
+    html += renderGslMatchLine('Match 2', group.match2);
+    if (group.winnersMatch) html += renderGslMatchLine('Winners-Match', group.winnersMatch);
+    if (group.losersMatch) html += renderGslMatchLine('Losers-Match', group.losersMatch);
+    if (group.deciderMatch) html += renderGslMatchLine('Decider', group.deciderMatch);
+    if (isGslGroupComplete(group)) {
+      html += '<div class="bracket-gsl-result">✓ Qualifiziert: ' + group.qualified.map((t) => t.name).join(', ') + '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderGslMatchLine(label, m) {
+  const teamA = findTournamentTeam(m.aId);
+  const teamB = findTournamentTeam(m.bId);
+  const aWon = m.played && m.scoreA > m.scoreB;
+  const bWon = m.played && m.scoreB > m.scoreA;
+  return '<div class="bracket-gsl-match' + (m.played ? ' is-played' : '') + '">' +
+    '<span class="gsl-match-label">' + label + '</span>' +
+    '<span class="delim-team' + (aWon ? ' is-winner' : '') + '">' + teamA.name + '</span>' +
+    '<span class="delim-score">' + m.scoreA + ' : ' + m.scoreB + '</span>' +
+    '<span class="delim-team' + (bWon ? ' is-winner' : '') + '">' + teamB.name + '</span>' +
+    '</div>';
+}
+
+// ── Info-/Übergangsbildschirme (zwischen zwei Events) ────────────────────────
+function renderSeasonInfoStage() {
+  const container = document.getElementById('bracket-container');
+  container.innerHTML = '<div class="season-info-box">' + (tournamentState.infoHtml || '') + '</div>';
+}
+
+// ── Master-Dispatcher: welche Bracket-Ansicht passt zur aktuellen Stufe? ────
+function renderBracketForCurrentStage() {
+  const s = tournamentState.stage;
+  if (s === 'open-bracket') { renderDoubleElimBracket(); return; }
+  if (s === 'open-swiss' || s === 'major-swiss') { renderSwissBracket(); return; }
+  if (s === 'open-gsl') { renderGslGroups(seasonState.event.gslGroups); return; }
+  if (s === 'worlds-gsl') { renderGslGroups(seasonState.event.groups); return; }
+  if (s === 'open-playoff-semi' || s === 'open-playoff-final'
+    || s === 'major-playoff-quarter' || s === 'major-playoff-semi' || s === 'major-playoff-final'
+    || s === 'worlds-playoff-quarter' || s === 'worlds-playoff-semi' || s === 'worlds-playoff-final') {
+    document.getElementById('bracket-container').innerHTML = renderPlayoffSvg();
+    return;
+  }
+  if (s === 'lcq-quarter' || s === 'lcq-semi') {
+    // LCQ nutzt dieselbe Playoff-Optik (Viertel-/Halbfinale), aber Bo5 statt
+    // Bo7 (ein einzelner Tag) — die Anzeige selbst ist identisch genug, um
+    // dieselbe Funktion zu nutzen.
+    document.getElementById('bracket-container').innerHTML = renderPlayoffSvg();
+    return;
+  }
+  // Info-/Übergangsstufen + season-complete
+  renderSeasonInfoStage();
 }
 
 // ── Speichersystem: mehrere Speicherstände (Slots) ───────────────────────
@@ -1336,8 +2844,10 @@ let slotPickerMode = null; // 'new' | 'continue'
 
 function collectSaveState() {
   return {
-    version: 3, assignedOrg, BUDGET, draftedPlayerNames, draftedCoachName, tournamentState,
-    careerState, careerRosterPlayers, careerCoach, careerBotTeams, careerRivalRecords,
+    version: 9, gameMode, careerCharacter, assignedOrg, BUDGET, rosterSlots, draftedCoachName, tournamentState,
+    careerState, careerRosterPlayers, careerReservePlayers, careerCoach, careerBotTeams, careerRivalRecords,
+    negotiatedPremiumPlayers, negotiationBlocklist, transferLog,
+    playersTradedThisSeason: Array.from(playersTradedThisSeason),
   };
 }
 
@@ -1351,15 +2861,35 @@ async function loadGameState() {
   if (!data) return;
 
   assignedOrg = data.assignedOrg;
+  gameMode = data.gameMode || 'career'; // ältere Spielstände (v1-v7) kannten nur Karriere
+  // ältere Spielstände (v1-v8) kannten noch keinen Charakter — Fallback auf
+  // neutralen Weg, damit findCharacterPath() nirgends auf null trifft.
+  careerCharacter = data.careerCharacter || { name: 'Manager', birthdate: null, region: 'EU', pathId: 'newcomer' };
   BUDGET = data.BUDGET;
-  draftedPlayerNames = data.draftedPlayerNames;
+  if (data.rosterSlots) {
+    rosterSlots = data.rosterSlots;
+  } else if (data.draftedPlayerNames) {
+    // Migration von altem flachem Format (v1-v6): erste MAIN_SIZE = Starter, Rest = Sub.
+    rosterSlots = {
+      main: padToSize(data.draftedPlayerNames.slice(0, MAIN_SIZE), MAIN_SIZE),
+      sub: padToSize(data.draftedPlayerNames.slice(MAIN_SIZE, MAIN_SIZE + SUB_SIZE), SUB_SIZE),
+      reserve: emptySlotArray(RESERVE_SIZE),
+    };
+  } else {
+    rosterSlots = { main: emptySlotArray(MAIN_SIZE), sub: emptySlotArray(SUB_SIZE), reserve: emptySlotArray(RESERVE_SIZE) };
+  }
   draftedCoachName = data.draftedCoachName;
   tournamentState = data.tournamentState;
   careerState = data.careerState || { seasonNumber: 1, titlesWon: 0 }; // ältere Spielstände (v1) hatten das Feld noch nicht
   careerRosterPlayers = data.careerRosterPlayers || null;
+  careerReservePlayers = data.careerReservePlayers || null; // ältere Spielstände (v1-v6) hatten das noch nicht
   careerCoach = data.careerCoach || null;
   careerBotTeams = data.careerBotTeams || null; // ältere Spielstände (v1/v2) hatten das noch nicht
   careerRivalRecords = data.careerRivalRecords || {};
+  negotiatedPremiumPlayers = data.negotiatedPremiumPlayers || {}; // ältere Spielstände (v1-v3) hatten das noch nicht
+  negotiationBlocklist = data.negotiationBlocklist || {}; // ältere Spielstände (v1-v4) hatten das noch nicht
+  transferLog = data.transferLog || []; // ältere Spielstände (v1-v5) hatten das noch nicht
+  playersTradedThisSeason = new Set(data.playersTradedThisSeason || []); // ältere Spielstände (v1-v6) hatten das noch nicht
 
   if (tournamentState) {
     renderTournamentScreen();
@@ -1379,6 +2909,58 @@ async function initContinueButton() {
   else btn.title = 'Noch kein Spielstand vorhanden';
 }
 initContinueButton();
+
+// ── Einstellungen (Hauptmenü-Popup) ───────────────────────────────────────
+async function initSettings() {
+  appSettings = await window.electronAPI.getSettings();
+  setMatchSpeed(appSettings.defaultMatchSpeed);
+}
+initSettings();
+
+function renderSettingsModal() {
+  const speedWrap = document.getElementById('settings-speed-options');
+  speedWrap.innerHTML = SETTINGS_SPEED_OPTIONS.map((s) =>
+    '<button class="settings-speed-btn' + (appSettings.defaultMatchSpeed === s ? ' is-active' : '') + '" data-speed="' + s + '">×' + s + '</button>'
+  ).join('');
+  speedWrap.querySelectorAll('.settings-speed-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      appSettings.defaultMatchSpeed = Number(btn.dataset.speed);
+      setMatchSpeed(appSettings.defaultMatchSpeed);
+      window.electronAPI.saveSettings(appSettings);
+      renderSettingsModal();
+    });
+  });
+
+  const paceWrap = document.getElementById('settings-pace-options');
+  paceWrap.innerHTML = SETTINGS_PACE_OPTIONS.map((o) =>
+    '<button class="settings-speed-btn' + (appSettings.quickSimPace === o.id ? ' is-active' : '') + '" data-pace="' + o.id + '">' + o.label + '</button>'
+  ).join('');
+  paceWrap.querySelectorAll('.settings-speed-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      appSettings.quickSimPace = btn.dataset.pace;
+      window.electronAPI.saveSettings(appSettings);
+      renderSettingsModal();
+    });
+  });
+
+  document.getElementById('settings-auto-update').checked = appSettings.autoCheckUpdates;
+}
+
+function showSettingsModal() {
+  renderSettingsModal();
+  document.getElementById('settings-modal').classList.remove('hidden');
+}
+
+function hideSettingsModal() {
+  document.getElementById('settings-modal').classList.add('hidden');
+}
+
+function resetSettingsToDefaults() {
+  appSettings = { autoCheckUpdates: true, defaultMatchSpeed: 1, quickSimPace: 'normal' };
+  setMatchSpeed(appSettings.defaultMatchSpeed);
+  window.electronAPI.saveSettings(appSettings);
+  renderSettingsModal();
+}
 
 // Der "Fortsetzen"-Button wird nur bei App-Start einmalig geprüft — ohne diesen
 // Refresh bliebe er nach dem ERSTEN Speicherstand der Session fälschlich
@@ -1409,8 +2991,10 @@ async function renderSlotsList() {
     card.className = 'slot-card' + (slot.exists ? '' : ' slot-empty') + (canSelect ? '' : ' slot-disabled');
 
     if (slot.exists) {
+      const modeLabel = slot.gameMode === 'randomizer' ? 'Randomizer Challenge' : 'Karriere';
       card.innerHTML =
-        '<div class="slot-org">Speicherstand ' + slot.slotId + ' — ' + slot.orgName + '</div>' +
+        '<div class="slot-org">Speicherstand ' + slot.slotId + ' — ' + slot.characterName + ' (' + slot.orgName + ')' +
+        '<span class="slot-mode-tag">' + modeLabel + '</span></div>' +
         '<div class="slot-meta">Saison ' + slot.seasonNumber + ' — ' + slot.titlesWon + ' Titel</div>';
 
       const delBtn = document.createElement('button');
@@ -1434,13 +3018,81 @@ async function renderSlotsList() {
 
 function onSlotChosen(slot) {
   if (slotPickerMode === 'new') {
-    if (slot.exists && !window.confirm('Diesen Speicherstand überschreiben?')) return;
+    if (slot.exists) {
+      showConfirmModal(
+        'Speicherstand überschreiben?',
+        'Speicherstand ' + slot.slotId + ' (' + slot.orgName + ', Saison ' + slot.seasonNumber + ') wirklich überschreiben? Der bisherige Fortschritt geht dabei unwiderruflich verloren.',
+        () => { currentSlotId = slot.slotId; goToCharacterCreation(); },
+        { confirmLabel: 'Überschreiben', danger: true }
+      );
+      return;
+    }
     currentSlotId = slot.slotId;
-    goToOrgIntro();
+    goToCharacterCreation();
   } else {
     currentSlotId = slot.slotId;
     loadGameState();
   }
+}
+
+// ── Generisches Bestätigungs-Popup (ersetzt window.confirm — passt sonst
+// nicht zum Spiel-Design, sondern zeigt den nackten Betriebssystem-Dialog) ──
+function showConfirmModal(title, bodyText, onConfirm, opts) {
+  opts = opts || {};
+  document.getElementById('confirm-modal-title').textContent = title;
+  document.getElementById('confirm-modal-body').textContent = bodyText;
+  const wrap = document.getElementById('confirm-modal-buttons');
+  wrap.innerHTML = '';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'menu-btn';
+  cancelBtn.textContent = opts.cancelLabel || 'Abbrechen';
+  cancelBtn.addEventListener('click', hideConfirmModal);
+
+  const okBtn = document.createElement('button');
+  okBtn.className = 'menu-btn menu-btn-primary' + (opts.danger ? ' menu-btn-danger' : '');
+  okBtn.textContent = opts.confirmLabel || 'Bestätigen';
+  okBtn.addEventListener('click', () => { hideConfirmModal(); onConfirm(); });
+
+  wrap.appendChild(cancelBtn);
+  wrap.appendChild(okBtn);
+  document.getElementById('confirm-modal').classList.remove('hidden');
+}
+
+// ── Saison-Ablauf-Erklärung ───────────────────────────────────────────────
+// Die volle RLCS-Saisonstruktur (3 Opens -> Major -> Last Chance Qualifier
+// oder direkt -> Weltmeisterschaft, ~19 Teilstufen) ist deutlich komplexer als
+// das frühere Einzel-Turnier — ohne kurze Vorab-Erklärung müsste man sich die
+// Zusammenhänge (wofür Punkte zählen, welche Cutoffs es gibt) erst über eine
+// ganze Saison hinweg selbst erschließen. Wird beim allerersten Turnier-Start
+// einer Karriere automatisch gezeigt (siehe startTournament()), danach
+// jederzeit über den "❓ Saison-Ablauf"-Button auf dem Turnier-Screen abrufbar.
+const SEASON_GUIDE_STEPS = [
+  { icon: '🥊', html: '<strong>3 Open Qualifier</strong> — jeder läuft über 4 Formate nacheinander: Doppel-K.O. → Swiss → GSL-Gruppen → Playoffs. Deine Platzierung bringt Punkte.' },
+  { icon: '📊', html: 'Nach den 3 Opens zählen deine <strong>Gesamtpunkte</strong>: die Top 16 aller Teams qualifizieren sich fürs Major.' },
+  { icon: '🥇', html: '<strong>Major</strong> — Swiss → Playoffs, bringt nochmal deutlich mehr Punkte.' },
+  { icon: '🌍', html: 'Nach dem Major zählen die Gesamtpunkte erneut: <strong>Top 12</strong> sind direkt für die WM qualifiziert, Rang 13-20 bekommen im <strong>Last Chance Qualifier</strong> eine letzte Chance.' },
+  { icon: '👑', html: '<strong>Weltmeisterschaft</strong> — GSL-Gruppen → Playoffs. Der Sieger wird Weltmeister der Saison.' },
+];
+
+function showSeasonGuide() {
+  const container = document.getElementById('season-guide-steps');
+  container.innerHTML = SEASON_GUIDE_STEPS.map((s) =>
+    '<div class="season-guide-step"><span class="season-guide-step-icon">' + s.icon + '</span><span>' + s.html + '</span></div>'
+  ).join('') + '<div class="season-guide-footnote">Reichen deine Punkte irgendwo nicht, endet deine Saison dort — die nächste Saison startet danach ganz normal mit deinem weiterentwickelten Kader.</div>';
+  document.getElementById('season-guide-modal').classList.remove('hidden');
+}
+
+function hideSeasonGuide() {
+  document.getElementById('season-guide-modal').classList.add('hidden');
+  if (careerState && !careerState.seasonGuideShown) {
+    careerState.seasonGuideShown = true;
+    saveGameState();
+  }
+}
+
+function hideConfirmModal() {
+  document.getElementById('confirm-modal').classList.add('hidden');
 }
 
 // ── Auto-Update (GitHub Releases) ────────────────────────────────────────
@@ -1514,13 +3166,20 @@ async function manualCheckForUpdates() {
 
 document.getElementById('btn-check-update').addEventListener('click', manualCheckForUpdates);
 
-document.getElementById('btn-new-game').addEventListener('click', () => openSlotPicker('new'));
+document.getElementById('btn-new-game').addEventListener('click', () => showScreen('screen-mode-select'));
+document.getElementById('btn-back-to-menu-mode').addEventListener('click', goToMenu);
+document.getElementById('mode-card-career').addEventListener('click', () => { gameMode = 'career'; openSlotPicker('new'); });
+// mode-card-randomizer bleibt bewusst ohne Klick-Handler — "Kommt noch", nicht spielbar.
 document.getElementById('btn-continue').addEventListener('click', () => openSlotPicker('continue'));
 document.getElementById('btn-back-to-menu-slots').addEventListener('click', goToMenu);
 document.getElementById('btn-spin').addEventListener('click', spinReel);
 document.getElementById('btn-modal-continue').addEventListener('click', confirmOrgAndProceed);
 document.getElementById('btn-quit').addEventListener('click', () => window.electronAPI.quitApp());
 document.getElementById('btn-back-to-menu-intro').addEventListener('click', goToMenu);
+document.getElementById('btn-back-to-menu-character').addEventListener('click', goToMenu);
+document.getElementById('btn-back-to-menu-orgselect').addEventListener('click', goToMenu);
+document.getElementById('btn-character-continue').addEventListener('click', confirmCharacterAndProceed);
+document.getElementById('char-name-input').addEventListener('input', updateCharacterContinueState);
 document.getElementById('btn-back-to-menu-draft').addEventListener('click', goToMenu);
 document.getElementById('btn-back-to-menu-match').addEventListener('click', () => matchOnFinished && matchOnFinished());
 document.getElementById('btn-match-continue').addEventListener('click', () => matchOnFinished && matchOnFinished());
@@ -1529,8 +3188,29 @@ document.getElementById('btn-speed-1').addEventListener('click', () => setMatchS
 document.getElementById('btn-speed-2').addEventListener('click', () => setMatchSpeed(2));
 document.getElementById('btn-speed-4').addEventListener('click', () => setMatchSpeed(4));
 document.getElementById('btn-speed-8').addEventListener('click', () => setMatchSpeed(8));
+document.getElementById('btn-speed-16').addEventListener('click', () => setMatchSpeed(16));
+document.getElementById('btn-speed-32').addEventListener('click', () => setMatchSpeed(32));
 document.getElementById('btn-instant-sim').addEventListener('click', instantFinishCurrentGame);
 document.getElementById('btn-back-to-menu-tournament').addEventListener('click', goToMenu);
 document.getElementById('btn-tournament-action').addEventListener('click', onTournamentActionClick);
 document.getElementById('btn-quick-sim-round').addEventListener('click', quickSimulateCurrentRound);
 document.getElementById('btn-quick-sim-all').addEventListener('click', quickSimulateEntireTournament);
+document.getElementById('btn-season-guide').addEventListener('click', showSeasonGuide);
+document.getElementById('btn-season-guide-close').addEventListener('click', hideSeasonGuide);
+document.getElementById('btn-standings').addEventListener('click', showStandings);
+document.getElementById('btn-standings-close').addEventListener('click', hideStandings);
+document.getElementById('btn-settings').addEventListener('click', showSettingsModal);
+document.getElementById('btn-settings-close').addEventListener('click', hideSettingsModal);
+document.getElementById('btn-settings-reset').addEventListener('click', resetSettingsToDefaults);
+document.getElementById('settings-auto-update').addEventListener('change', (e) => {
+  appSettings.autoCheckUpdates = e.target.checked;
+  window.electronAPI.saveSettings(appSettings);
+});
+document.getElementById('btn-negotiation-cancel').addEventListener('click', hideNegotiationModal);
+document.getElementById('btn-negotiation-send').addEventListener('click', sendNegotiationOffer);
+document.getElementById('btn-incoming-offer-decline').addEventListener('click', declineIncomingOffer);
+document.getElementById('btn-incoming-offer-counter').addEventListener('click', sendIncomingOfferCounter);
+document.getElementById('btn-incoming-offer-accept').addEventListener('click', () => acceptIncomingOffer(currentIncomingOffer.offerPrice));
+document.getElementById('btn-open-transfers').addEventListener('click', () => { renderTransferLog(); showScreen('screen-transfers'); });
+document.getElementById('btn-back-to-draft-transfers').addEventListener('click', () => showScreen('screen-draft'));
+document.getElementById('btn-back-to-draft-roster').addEventListener('click', () => showScreen('screen-draft'));

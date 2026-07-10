@@ -1,10 +1,12 @@
 // Generiert einen zufälligen Bot-Gegner mit 3 Spielern — gleiche Stat-Achsen wie
 // TEST_PLAYERS, damit dieselbe Duell-/Schusslogik (match.js) auf beide anwendbar ist.
 
-const BOT_TEAM_NAMES = [
-  'Crimson Wolves', 'Static Frontier', 'Aurora Drift', 'Nightfall Circuit',
-  'Iron Comet', 'Velocity Union', 'Pale Horizon', 'Rogue Signal',
-];
+// Bot-Team-Namen kommen jetzt aus derselben ORGANIZATIONS-Liste (data/
+// organizations.js), aus der auch der Nutzer seine eigene Org wählt — echte
+// RLCS-Organisationen, verifiziert über Liquipedia. Reine Namens-Verwendung,
+// keine echten Team-Rosters/-Stärken abgebildet (siehe Disclaimer im
+// Hauptmenü/KONZEPT.md). Welche Org der Nutzer selbst gewählt hat, darf kein
+// Bot mehr tragen (siehe excludedOrgName in generateBotTeams()).
 
 const BOT_PLAYER_NAME_POOL = [
   'Kade', 'Rin', 'Bexley', 'Torin', 'Isla', 'Cassian', 'Merit', 'Sonne',
@@ -36,24 +38,43 @@ function generateBotPlayer(usedNames) {
   return { name, overall, ...stats };
 }
 
-function generateBotTeam() {
-  const usedNames = new Set();
-  return {
-    name: BOT_TEAM_NAMES[randomInt(0, BOT_TEAM_NAMES.length - 1)],
-    players: [generateBotPlayer(usedNames), generateBotPlayer(usedNames), generateBotPlayer(usedNames)],
-  };
-}
-
 // Erzeugt `count` Bot-Teams mit garantiert eindeutigen Namen (fürs Turnier) —
-// solange count <= Anzahl der Namen im Pool.
-function generateBotTeams(count) {
-  const shuffledNames = BOT_TEAM_NAMES.slice().sort(() => Math.random() - 0.5);
+// solange count <= Anzahl der verfügbaren Orga-Namen. `excludedOrgName` ist
+// die vom Nutzer selbst gewählte Org (siehe goToOrgSelection() in
+// renderer.js) — die darf kein Bot-Team tragen.
+//
+// Nur die ersten CORE_RIVAL_COUNT Bot-Teams ("Kern-Rivalen") bekommen 2 der 3
+// Rosterplätze mit ECHTEN Spielern aus TEST_PLAYERS besetzt (unter Vertrag bei
+// dieser Bot-Org — User-Wunsch: "Spieler die bei anderen Teams sind sollen
+// ausgegraut sein"). Grund für die Begrenzung: seit der vollen RLCS-Saison-
+// struktur (Doppel-K.O.-Open-Bracket, 32 statt 16 Teams) braucht das Turnier
+// deutlich mehr Bot-Teams als früher — würde JEDES davon 2 echte Spieler
+// bekommen, bräuchte man weit mehr als die 48 vorhandenen echten Spieler.
+// Die ursprünglichen 15 Kern-Rivalen behalten ihre 2 Vertragsspieler
+// UNVERÄNDERT (Kader-/Vertrags-Ökonomie bleibt exakt wie vorher: 30 unter
+// Vertrag, 18 frei) — alle zusätzlichen Bot-Teams (für das größere Open-
+// Bracket-Feld) bekommen bewusst KEINE echten Vertragsspieler, nur generische
+// Rollenspieler: sie sind im Wesentlichen "Kanonenfutter" der frühen Doppel-
+// K.O.-Runden und werden selten für Transfermarkt/Verhandlungen relevant.
+const REAL_PLAYERS_PER_BOT_TEAM = 2;
+const CORE_RIVAL_COUNT = 15;
+
+function generateBotTeams(count, excludedOrgName) {
+  const availableNames = ORGANIZATIONS.map((o) => o.name).filter((n) => n !== excludedOrgName);
+  const shuffledNames = availableNames.slice().sort(() => Math.random() - 0.5);
+  const shuffledRealPlayers = TEST_PLAYERS.slice().sort(() => Math.random() - 0.5);
   const teams = [];
   for (let i = 0; i < count; i++) {
     const usedNames = new Set();
+    const isCoreRival = i < CORE_RIVAL_COUNT;
+    const contractedReal = isCoreRival
+      ? shuffledRealPlayers.slice(i * REAL_PLAYERS_PER_BOT_TEAM, (i + 1) * REAL_PLAYERS_PER_BOT_TEAM).map((p) => ({ ...p }))
+      : [];
+    const fillers = [];
+    for (let f = contractedReal.length; f < 3; f++) fillers.push(generateBotPlayer(usedNames));
     teams.push({
       name: shuffledNames[i % shuffledNames.length],
-      players: [generateBotPlayer(usedNames), generateBotPlayer(usedNames), generateBotPlayer(usedNames)],
+      players: [...contractedReal, ...fillers],
     });
   }
   return teams;

@@ -15,11 +15,45 @@
       <div class="menu-buttons">
         <button id="btn-new-game" class="menu-btn menu-btn-primary">Neues Spiel</button>
         <button id="btn-continue" class="menu-btn" disabled title="Noch kein Spielstand vorhanden">Fortsetzen</button>
+        <button id="btn-settings" class="menu-btn">⚙ Einstellungen</button>
         <button id="btn-quit" class="menu-btn menu-btn-danger">Beenden</button>
       </div>
-      <p class="menu-version">v0.1 — Draft-Vorschau</p>
+      <p class="menu-version">v0.3.0</p>
       <button id="btn-check-update" class="update-check-btn">Nach Updates suchen</button>
       <p id="update-check-status" class="update-check-status"></p>
+      <p class="menu-disclaimer">Inoffizielles Fan-Projekt — keine Verbindung zu Psyonix, Epic Games oder
+        den genannten Spielern/Organisationen. Stats sind reine Spielwerte.</p>
+    </div>
+  </div>
+
+  <!-- ── Spielmodus-Auswahl (bei "Neues Spiel") ───────────────────────────── -->
+  <div id="screen-mode-select" class="screen hidden">
+    <button id="btn-back-to-menu-mode" class="back-btn">← Hauptmenü</button>
+    <div class="mode-select-wrap">
+      <h1 class="slots-title">Spielmodus wählen</h1>
+      <p class="mode-select-subtitle">Wie möchtest du spielen?</p>
+      <div class="mode-select-list">
+        <div id="mode-card-career" class="mode-card">
+          <div class="mode-card-icon">🏆</div>
+          <div class="mode-card-body">
+            <div class="mode-card-title-row">
+              <span class="mode-card-title">Karriere</span>
+              <span class="mode-card-badge mode-card-badge-live">Verfügbar</span>
+            </div>
+            <div class="mode-card-desc">Baue über mehrere Saisons ein Team auf — draften, verhandeln, Turniere spielen.</div>
+          </div>
+        </div>
+        <div id="mode-card-randomizer" class="mode-card mode-card-disabled">
+          <div class="mode-card-icon">🎲</div>
+          <div class="mode-card-body">
+            <div class="mode-card-title-row">
+              <span class="mode-card-title">Randomizer Challenge</span>
+              <span class="mode-card-badge mode-card-badge-soon">Kommt noch</span>
+            </div>
+            <div class="mode-card-desc">Ein neuer, zufallsbasierter Modus ist in Arbeit.</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -32,14 +66,55 @@
     </div>
   </div>
 
+  <!-- ── Charaktererstellung ───────────────────────────────────────────────── -->
+  <div id="screen-character" class="screen hidden">
+    <button id="btn-back-to-menu-character" class="back-btn">← Hauptmenü</button>
+    <div class="character-wrap">
+      <h1 class="intro-title">Erstelle deinen Charakter</h1>
+      <p class="character-subtitle">Wer bist du, bevor du deine erste Organisation übernimmst?</p>
+
+      <div class="character-field">
+        <label for="char-name-input">Name</label>
+        <input id="char-name-input" type="text" maxlength="24" placeholder="Dein Name" />
+      </div>
+
+      <div class="character-field-row">
+        <div class="character-field">
+          <label for="char-birthdate-input">Geburtsdatum</label>
+          <input id="char-birthdate-input" type="date" />
+        </div>
+        <div class="character-field">
+          <label for="char-region-select">Herkunft</label>
+          <select id="char-region-select">
+            <option value="EU">Europa</option>
+            <option value="NA">Nordamerika</option>
+            <option value="MENA">Naher Osten &amp; Nordafrika</option>
+            <option value="SAM">Südamerika</option>
+            <option value="OCE">Ozeanien</option>
+            <option value="APAC">Asien-Pazifik</option>
+            <option value="SSA">Subsahara-Afrika</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="character-field">
+        <label>Dein Weg</label>
+        <div id="character-path-list" class="character-path-list"></div>
+      </div>
+
+      <p id="character-error" class="character-error hidden"></p>
+      <button id="btn-character-continue" class="menu-btn menu-btn-primary" disabled>Weiter</button>
+    </div>
+  </div>
+
   <!-- ── Org-Zuweisung: Intro + Spielautomat ──────────────────────────────── -->
   <div id="screen-org-intro" class="screen hidden">
     <button id="btn-back-to-menu-intro" class="back-btn">← Hauptmenü</button>
     <div class="intro-wrap">
-      <h1 class="intro-title">Willkommen, Manager</h1>
+      <h1 id="intro-welcome-heading" class="intro-title">Willkommen, Manager</h1>
 
       <div id="intro-text-block">
-        <p class="intro-text">
+        <p id="intro-text-main" class="intro-text">
           Du startest jetzt als neuer Manager für eine <strong>zufällig zugeordnete
           Organisation</strong>. Du suchst dir die Organisation nicht aus — so wie im
           echten Esport wird dir ein Verein zugeteilt, mit dem du arbeiten musst.
@@ -66,15 +141,26 @@
     </div>
   </div>
 
+  <!-- ── Org-Auswahlmenü (ersetzt den Zufalls-Automat in der Karriere) ────── -->
+  <div id="screen-org-select" class="screen hidden">
+    <button id="btn-back-to-menu-orgselect" class="back-btn">← Hauptmenü</button>
+    <div class="org-select-wrap">
+      <h1 id="org-select-heading" class="intro-title">Willkommen, Manager</h1>
+      <p class="org-select-subtitle">Wähle die Organisation, die du übernehmen willst — jede bringt eigene Vor- und Nachteile.</p>
+      <div id="org-select-grid" class="org-select-grid"></div>
+    </div>
+  </div>
+
   <!-- ── Draft-Screen ──────────────────────────────────────────────────── -->
   <div id="screen-draft" class="screen hidden">
     <header class="app-header">
       <button id="btn-back-to-menu-draft" class="back-btn">← Hauptmenü</button>
       <h1>RLCS Legends</h1>
-      <p class="subtitle">Draft — 3 Starter, 1 Sub, 1 Coach</p>
+      <p class="subtitle">Draft — 3 Starter, 1 Sub, 2 Reserve, 1 Coach</p>
       <div id="career-info" class="career-info hidden"></div>
       <div id="org-panel"></div>
       <div id="budget-bar"></div>
+      <button id="btn-open-transfers" class="update-check-btn">📋 Transfer-Historie</button>
     </header>
 
     <main>
@@ -91,10 +177,59 @@
     </main>
   </div>
 
+  <!-- ── Kader-Aufstellung (Drag&Drop: Main/Sub/Reserve/Coach) ────────────── -->
+  <div id="screen-roster" class="screen hidden">
+    <header class="app-header">
+      <button id="btn-back-to-draft-roster" class="back-btn">← Zurück</button>
+      <h1>Kader-Aufstellung</h1>
+      <p class="subtitle">Spieler per Drag &amp; Drop zwischen Main, Sub, Reserve und Coach verschieben — Reserve spielt nie mit</p>
+    </header>
+    <main>
+      <div class="roster-board">
+        <div class="roster-board-group">
+          <h3 class="roster-board-heading">Main <span class="roster-board-hint">(spielt)</span></h3>
+          <div id="roster-board-main" class="roster-board-slots"></div>
+        </div>
+        <div class="roster-board-group">
+          <h3 class="roster-board-heading">Sub <span class="roster-board-hint">(spielt bei Disconnect)</span></h3>
+          <div id="roster-board-sub" class="roster-board-slots"></div>
+        </div>
+        <div class="roster-board-group">
+          <h3 class="roster-board-heading">Reserve <span class="roster-board-hint">(spielt nicht)</span></h3>
+          <div id="roster-board-reserve" class="roster-board-slots"></div>
+        </div>
+        <div class="roster-board-group">
+          <h3 class="roster-board-heading">Coach</h3>
+          <div id="roster-board-coach" class="roster-board-slots"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ── Transfer-Historie-Screen ─────────────────────────────────────────── -->
+  <div id="screen-transfers" class="screen hidden">
+    <header class="app-header">
+      <button id="btn-back-to-draft-transfers" class="back-btn">← Zurück</button>
+      <h1>Transfer-Historie</h1>
+      <p class="subtitle">Alle Wechsel — deine eigenen und die der Bot-Orgas untereinander</p>
+    </header>
+    <main>
+      <section id="transfer-log-list" class="transfer-log-list"></section>
+    </main>
+  </div>
+
   <!-- ── Turnier-Screen ────────────────────────────────────────────────── -->
   <div id="screen-tournament" class="screen hidden">
     <button id="btn-back-to-menu-tournament" class="back-btn">← Hauptmenü</button>
     <div class="tournament-wrap">
+      <div class="season-context-row">
+        <div id="season-context" class="season-context"></div>
+        <div class="season-context-buttons">
+          <button id="btn-standings" class="season-guide-btn" title="Punktestand & Platzierungen aller Teams">📊 Tabelle</button>
+          <button id="btn-season-guide" class="season-guide-btn" title="Wie läuft eine Saison ab?">❓ Saison-Ablauf</button>
+        </div>
+      </div>
+      <div id="points-standing" class="points-standing"></div>
       <h1 id="tournament-title" class="tournament-title">Swiss-Stage — Runde 1 von 3</h1>
       <div id="rivalry-note" class="rivalry-note hidden"></div>
 
@@ -115,6 +250,7 @@
     <button id="btn-back-to-menu-match" class="back-btn hidden">← Turnier</button>
     <div class="match-wrap match-wrap-wide">
       <div id="match-series-info" class="match-series-info"></div>
+      <div id="match-series-dots" class="series-dots"></div>
       <div class="match-scoreboard">
         <span id="match-name-a" class="match-team-name"></span>
         <span id="match-score" class="match-score">0 : 0</span>
@@ -127,6 +263,8 @@
           <button id="btn-speed-2" class="speed-btn" data-speed="2">×2</button>
           <button id="btn-speed-4" class="speed-btn" data-speed="4">×4</button>
           <button id="btn-speed-8" class="speed-btn" data-speed="8">×8</button>
+          <button id="btn-speed-16" class="speed-btn" data-speed="16">×16</button>
+          <button id="btn-speed-32" class="speed-btn" data-speed="32">×32</button>
         </div>
         <button id="btn-instant-sim" class="instant-sim-btn">⏩ Sofort simulieren</button>
       </div>
@@ -165,13 +303,117 @@
     </div>
   </div>
 
+  <!-- ── Generisches Bestätigungs-Popup (ersetzt window.confirm) ─────────── -->
+  <div id="confirm-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div id="confirm-modal-title" class="modal-org-title"></div>
+      <div id="confirm-modal-body" class="update-modal-body"></div>
+      <div id="confirm-modal-buttons" class="update-modal-buttons"></div>
+    </div>
+  </div>
+
+  <!-- ── Einstellungen (Hauptmenü) ─────────────────────────────────────────── -->
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="modal-box settings-box">
+      <div class="modal-org-title">⚙ Einstellungen</div>
+
+      <div class="settings-row">
+        <label class="settings-label">Standard-Match-Geschwindigkeit</label>
+        <div id="settings-speed-options" class="settings-speed-options"></div>
+      </div>
+
+      <div class="settings-row">
+        <label class="settings-label">Tempo beim "Turnier sofort simulieren"</label>
+        <div id="settings-pace-options" class="settings-speed-options"></div>
+      </div>
+
+      <div class="settings-row settings-row-toggle">
+        <label class="settings-label" for="settings-auto-update">Beim Start automatisch nach Updates suchen</label>
+        <input id="settings-auto-update" type="checkbox" class="settings-checkbox" />
+      </div>
+
+      <div class="settings-buttons">
+        <button id="btn-settings-reset" class="menu-btn">Standardwerte</button>
+        <button id="btn-settings-close" class="menu-btn menu-btn-primary">Fertig</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Punktestand-Tabelle (alle Teams, farbcodiert nach Qualifikationsstatus) ── -->
+  <div id="standings-modal" class="modal-overlay hidden">
+    <div class="modal-box standings-box">
+      <div class="modal-org-title">Punktestand — <span id="standings-context"></span></div>
+      <div class="standings-legend">
+        <span class="standings-legend-item"><span class="standings-dot standings-green"></span> qualifiziert</span>
+        <span class="standings-legend-item"><span class="standings-dot standings-neutral"></span> offen</span>
+        <span class="standings-legend-item"><span class="standings-dot standings-red"></span> ausgeschieden</span>
+      </div>
+      <div id="standings-list" class="standings-list"></div>
+      <button id="btn-standings-close" class="menu-btn menu-btn-primary">Schließen</button>
+    </div>
+  </div>
+
+  <!-- ── Saison-Ablauf-Erklärung (einmalig beim allerersten Turnier-Start,
+       danach jederzeit über "❓ Saison-Ablauf" auf dem Turnier-Screen) ──── -->
+  <div id="season-guide-modal" class="modal-overlay hidden">
+    <div class="modal-box season-guide-box">
+      <div class="modal-org-title">So läuft eine RLCS-Saison ab</div>
+      <div id="season-guide-steps" class="season-guide-steps"></div>
+      <button id="btn-season-guide-close" class="menu-btn menu-btn-primary">Verstanden, los geht's!</button>
+    </div>
+  </div>
+
+  <!-- ── Verhandlungs-Popup (Vertragsspieler von Bot-Orgas abwerben) ──────── -->
+  <div id="negotiation-modal" class="modal-overlay hidden">
+    <div class="modal-box negotiation-box">
+      <div id="negotiation-title" class="modal-org-title"></div>
+      <div id="negotiation-subtitle" class="negotiation-subtitle"></div>
+      <div class="negotiation-frustration-row">
+        <span class="negotiation-label" style="margin:0;">Frust-Level der Org</span>
+        <span id="negotiation-attempts-label" class="negotiation-attempts-label"></span>
+      </div>
+      <div class="negotiation-frustration-track">
+        <div id="negotiation-frustration-fill" class="negotiation-frustration-fill"></div>
+      </div>
+      <div id="negotiation-log" class="negotiation-log"></div>
+      <label class="negotiation-label">Angebot (Cr)</label>
+      <input id="negotiation-offer" type="number" class="negotiation-offer-input" min="0" step="5" />
+      <label class="negotiation-label">Deine Nachricht an Orga &amp; Spieler</label>
+      <textarea id="negotiation-message" class="negotiation-message-input" rows="2" placeholder="Verhandlungsargument schreiben..."></textarea>
+      <div class="negotiation-buttons">
+        <button id="btn-negotiation-cancel" class="menu-btn">Verhandlung beenden</button>
+        <button id="btn-negotiation-send" class="menu-btn menu-btn-primary">Angebot senden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Eingehendes Angebot-Popup (Bot-Orgas fragen NACH deinen Spielern) ── -->
+  <div id="incoming-offer-modal" class="modal-overlay hidden">
+    <div class="modal-box negotiation-box">
+      <div id="incoming-offer-title" class="modal-org-title"></div>
+      <div id="incoming-offer-subtitle" class="negotiation-subtitle"></div>
+      <div id="incoming-offer-log" class="negotiation-log"></div>
+      <label class="negotiation-label">Deine Forderung (Cr) für ein Gegenangebot</label>
+      <input id="incoming-offer-counter" type="number" class="negotiation-offer-input" min="0" step="5" />
+      <label class="negotiation-label">Deine Nachricht</label>
+      <textarea id="incoming-offer-message" class="negotiation-message-input" rows="2" placeholder="Antwort an die Org schreiben..."></textarea>
+      <div class="negotiation-buttons">
+        <button id="btn-incoming-offer-decline" class="menu-btn menu-btn-danger">Ablehnen</button>
+        <button id="btn-incoming-offer-counter" class="menu-btn">Gegenangebot senden</button>
+        <button id="btn-incoming-offer-accept" class="menu-btn menu-btn-primary">Annehmen</button>
+      </div>
+    </div>
+  </div>
+
   <script src="data/test-players.js"></script>
   <script src="data/test-coaches.js"></script>
   <script src="data/organizations.js"></script>
   <script src="data/bot-teams.js"></script>
   <script src="data/pricing.js"></script>
+  <script src="data/character-paths.js"></script>
   <script src="match.js"></script>
   <script src="tournament.js"></script>
+  <script src="season.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
