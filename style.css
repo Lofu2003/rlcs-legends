@@ -5265,6 +5265,10 @@ main {
   color: #b3bede;
 }
 
+.dashboard-finance-alloc-value.is-deficit {
+  color: #ff6b6b;
+}
+
 .dashboard-finance-alloc-slider {
   width: 100%;
   accent-color: #3fbdd6;
@@ -9044,4 +9048,24 @@ main {
 
 .dashboard-roster-reserve-action-btn:hover {
   background: rgba(255, 255, 255, 0.14);
+}
+
+/* Bug-Fix: Verkaufen-Button (fehlte bisher komplett, siehe sellRosterPlayer()) */
+.dashboard-roster-card-sell-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(224, 96, 122, 0.35);
+  background: rgba(224, 96, 122, 0.1);
+  color: #e0607a;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dashboard-roster-card-sell-btn:hover {
+  background: rgba(224, 96, 122, 0.22);
 }

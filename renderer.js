@@ -2054,13 +2054,19 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
   // 9 Mitarbeiterrollen) -- prozeduraler Fantasiename in mittlerer Stärke
   // (2,5 Sterne), da eine frisch gegründete Org noch kein Prestige hat, an
   // dem sich eine höhere/niedrigere Stufe festmachen ließe.
+  // Bug-Fix (User-Meldung): bei "Schwer" (10K, KEIN "+N Personal"-Bonus,
+  // staffCount === 0) bekam die Org bisher TROTZDEM immer einen Coach --
+  // die restlichen 9 Stab-Rollen skalieren korrekt mit der Schwierigkeit
+  // (siehe staffCount oben), der Coach war die einzige vergessene Ausnahme.
+  // Jetzt an dieselbe Bedingung gekoppelt: kein Personal-Bonus == auch kein
+  // Coach beim Start (muss wie jede andere Rolle erst über Scouting verpflichtet werden).
   const coachFirstNames = rng() < 0.5 ? ROSTER_STAFF_FIRST_NAMES_M : ROSTER_STAFF_FIRST_NAMES_F;
-  const coach = {
+  const coach = staffCount > 0 ? {
     name: coachFirstNames[Math.floor(rng() * coachFirstNames.length)] + ' ' + ROSTER_STAFF_LAST_NAMES[Math.floor(rng() * ROSTER_STAFF_LAST_NAMES.length)],
     country: pickNation(),
     avatarId: pickAvatarId(),
     overall: starsToOverall(2.5),
-  };
+  } : null;
 
   const roster = { starters, sub: null, coach, staff, reserve: [] };
   const strength = computeOrgStrengthFromRoster(roster);
@@ -2760,6 +2766,98 @@ function reserveSlotsOccupied() {
   return (assignedOrg.roster.reserve || []).length + pendingPlayerArrivals.length;
 }
 
+// Bug-Fix (User-Meldung: "Vertragsdauer geht nicht -- Spieler dessen Vertrag
+// z.B. bis 2028 lief ist auch 2030 noch da"): contractStart/contractEnd
+// (data/org-rosters.js rollContractDates()) wurden bisher NIRGENDS im
+// gesamten Projekt mit careerDate verglichen -- ein abgelaufener Vertrag
+// hatte buchstäblich keine Wirkung. Läuft täglich für die eigene Org UND alle
+// 454 Bot-Orgs (dieselben absoluten Vertragsdaten betreffen alle
+// gleichermaßen, siehe rollContractDates()).
+//
+// WICHTIGE Design-Entscheidung, per Live-Test gefunden: ein echter Ersatz
+// über den Free-Agent-Pool (freeAgentPlayerPool(), nur 90 Spieler) für die
+// EIGENE Org verpflichten ist unproblematisch (max. 14 Positionen über eine
+// ganze Karriere) -- würde man das aber für ALLE 454 Bot-Orgs gleichermaßen
+// tun, ist der Pool sofort leer (die initialen Verträge aller Orgs laufen
+// alle innerhalb eines ähnlichen ~4-Jahres-Fensters ab 2026 aus), und
+// sobald der Pool erschöpft ist, bleiben WEITERE abgelaufene Verträge
+// erneut wirkungslos hängen -- derselbe Bug käme durch die Hintertür zurück.
+// Fix: NUR die eigene Org bekommt einen echten Ersatz aus dem Free-Agent-Pool
+// (replaceExpiredPlayer()). Bot-Orgs verlängern ihren bestehenden Spieler
+// stattdessen einfach automatisch (renewExpiredBotPlayer()) -- kein
+// Identitätswechsel, kein Pool-Verbrauch, aber der Vertrag ist trotzdem nicht
+// mehr für immer abgelaufen (behebt exakt das gemeldete "Spieler ist noch da,
+// obwohl Vertrag längst vorbei"-Symptom auch für fremde Orgas).
+function replaceExpiredPlayer(org, slotType, index) {
+  const person = slotType === 'starters' ? org.roster.starters[index]
+    : slotType === 'sub' ? org.roster.sub
+    : org.roster.reserve[index];
+  if (!person) return;
+  const pool = freeAgentPlayerPool().filter((p) => !signedFreeAgentPlayers.has(p.name) && p.name !== person.name);
+  const chosen = bestAffordableFreeAgent(pool, orgRemainingBudget(org));
+  if (!chosen) return; // Pool erschöpft -- Slot bleibt bestehen (praktisch nie bei der eigenen Org)
+  const replacement = signFreeAgentPlayer(chosen, careerDate);
+  if (slotType === 'starters') org.roster.starters[index] = replacement;
+  else if (slotType === 'sub') org.roster.sub = replacement;
+  else org.roster.reserve[index] = replacement;
+  signedFreeAgentPlayers.add(chosen.name);
+  org.strength = computeOrgStrengthFromRoster(org.roster);
+  logTransfer(org.name, 'Free Agent', person.name, 0);
+  logTransfer('Free Agent', org.name, replacement.name, 0);
+}
+
+function replaceExpiredStaff(org, role) {
+  const isCoach = role === 'Coach';
+  const person = isCoach ? org.roster.coach : org.roster.staff.find((s) => s.role === role);
+  if (!person) return;
+  const replacement = rollReplacementPerson(npcStarRating(person.overall), role, careerDate);
+  const replacementEntry = isCoach ? replacement : { role, ...replacement };
+  if (isCoach) org.roster.coach = replacementEntry;
+  else {
+    const idx = org.roster.staff.findIndex((s) => s.role === role);
+    if (idx !== -1) org.roster.staff[idx] = replacementEntry;
+  }
+  org.strength = computeOrgStrengthFromRoster(org.roster);
+  logTransfer(org.name, 'Free Agent', person.name, 0);
+  logTransfer('Free Agent', org.name, replacementEntry.name, 0);
+}
+
+// Bot-Org-Gegenstück, OHNE den geteilten Free-Agent-Pool zu verbrauchen und
+// OHNE zusätzliches Persistenz-Tracking nötig zu machen: derselbe Mensch
+// bleibt einfach in seiner Position, bekommt aber einen frischen Vertrag ab
+// careerDate (12-36 Monate, dieselbe Spanne wie rollContractDates()). Da der
+// Vergleich rein datumsbasiert ist, "heilt" das sogar über einen App-Neustart
+// hinweg von selbst (ORGANIZATIONS wird neu aus den Rohdaten mit dem
+// UR-Vertragsende gebaut -- der nächste Tagfortschritt verlängert erneut,
+// ganz ohne eigene Tracking-Map).
+function renewContractInPlace(person) {
+  person.contractStart = careerDate;
+  person.contractEnd = addMonthsToDateStr(careerDate, Math.round(12 + Math.random() * 24));
+}
+
+function checkOrgContractExpirations(org) {
+  if (!org || !org.roster) return;
+  const isOwn = org === assignedOrg;
+  const handlePlayer = (slotType, index, person) => {
+    if (isOwn) replaceExpiredPlayer(org, slotType, index);
+    else renewContractInPlace(person);
+  };
+  const handleStaff = (role, person) => {
+    if (isOwn) replaceExpiredStaff(org, role);
+    else renewContractInPlace(person);
+  };
+  org.roster.starters.forEach((p, i) => { if (p && p.contractEnd && careerDate >= p.contractEnd) handlePlayer('starters', i, p); });
+  if (org.roster.sub && org.roster.sub.contractEnd && careerDate >= org.roster.sub.contractEnd) handlePlayer('sub', null, org.roster.sub);
+  (org.roster.reserve || []).forEach((p, i) => { if (p && p.contractEnd && careerDate >= p.contractEnd) handlePlayer('reserve', i, p); });
+  if (org.roster.coach && org.roster.coach.contractEnd && careerDate >= org.roster.coach.contractEnd) handleStaff('Coach', org.roster.coach);
+  (org.roster.staff || []).forEach((s) => { if (s && s.contractEnd && careerDate >= s.contractEnd) handleStaff(s.role, s); });
+}
+
+function checkContractExpirations() {
+  checkOrgContractExpirations(assignedOrg);
+  ORGANIZATIONS.forEach(checkOrgContractExpirations);
+}
+
 // Summe der Monatsgehälter EINER Org -- Starter+Sub+Reserve (Runde 122: auch
 // Reserve-Spieler stehen unter Vertrag und kosten Gehalt, auch wenn sie nie
 // spielen -- realistisch, wie eine echte Kaderbank) PLUS alle noch
@@ -2780,27 +2878,39 @@ function totalMonthlySalaryCommitment(org) {
 
 // "Realistisch": skaliert mit dem AKTUELLEN Kaderwert (nicht mit dem sich
 // selbst aufblähenden assignedOrg.budget, sonst würde die Summe unbegrenzt
-// weiterwachsen) -- 2 % des Kaderwerts pro Monat, dasselbe Rundungsschema
-// wie computeOrgBudget() (nächste 10.000 €). Fließt wie jedes andere neue
+// weiterwachsen) -- 2 % des Kaderwerts pro Monat. Fließt wie jedes andere neue
 // Einkommen in "nicht eingeteiltes Geld" (financeUnallocated()), NICHT
 // automatisch anteilig in eine der 4 Kategorien (Runde-108-Grundsatz).
+// Bug-Fix: Rundung war bisher auf die nächsten 10.000 € (dasselbe Schema wie
+// computeOrgBudget()) -- bei einem schwachen/frischen Kader (Kaderwert unter
+// 250.000 €) rundete das JEDEN Monat auf exakt 0, "Vorstandsbudget" tat dann
+// buchstäblich nichts. Auf 100 € verfeinert, damit auch kleine Kader ein
+// echtes, sichtbares monatliches Budget bekommen.
 const MONTHLY_BOARD_BUDGET_PCT = 0.02;
 function monthlyBoardBudgetAmount(org) {
-  return Math.round(orgRosterMarketValue(org.roster) * MONTHLY_BOARD_BUDGET_PCT / 10000) * 10000;
+  return Math.round(orgRosterMarketValue(org.roster) * MONTHLY_BOARD_BUDGET_PCT / 100) * 100;
 }
 
 // Läuft einmal pro echtem Kalender-Monatswechsel (siehe advanceOneCalendarDay()).
 // Gehalt wird sowohl vom Gesamtbudget ALS AUCH vom "Gehälter"-Regler
 // abgezogen (exakt dasselbe Zwei-Konten-Muster wie bei einem Transfer-Kauf,
-// siehe executePlayerSigning()) -- reicht der Gehälter-Topf nicht (z.B. nach
-// nachträglichem Umverteilen der Regler), wird er auf 0 gekappt statt negativ
-// zu werden (kein Bankrott-/Verschuldungssystem in diesem Spiel, dieselbe
-// Kappung wie überall sonst in diesem Projekt).
+// siehe executePlayerSigning()).
+// Bug-Fix (User-Meldung: "Geld verschwindet beim Regler-Verringern, kein
+// Vorstandsbudget kommt an"): reichte der Gehälter-Topf nicht, wurde er
+// bisher bei 0 GEKAPPT, während gleichzeitig der VOLLE Betrag vom echten
+// Budget abgezogen wurde -- diese Asymmetrie brach die Kerninvariante
+// `financeUnallocated() = budget - Summe(4 Kategorien)` und erzeugte einen
+// unsichtbaren Fehlbetrag (finanzUnallocated() klemmt bei 0, verschluckt
+// seitdem JEDES weitere Geld, egal ob durch Regler-Verringern oder
+// Vorstandsbudget-Einnahmen). Fix: der Abzug ist jetzt IMMER symmetrisch --
+// die Kategorie darf mit ins Minus gehen (zeigt sich als roter Warn-Wert auf
+// der Finanzen-Seite, siehe renderFinanceAllocSliders()), damit die Summe
+// der 4 Kategorien IMMER exakt mit dem tatsächlichen Budgetabzug übereinstimmt.
 function applyMonthlyClubFinances() {
   const salaryTotal = totalMonthlySalaryCommitment(assignedOrg);
   if (salaryTotal > 0) {
     assignedOrg.budget -= salaryTotal;
-    financeAllocation.salaries = Math.max(0, (financeAllocation.salaries || 0) - salaryTotal);
+    financeAllocation.salaries = (financeAllocation.salaries || 0) - salaryTotal;
     const playerCount = [...assignedOrg.roster.starters, assignedOrg.roster.sub].filter(Boolean).length;
     addFinanceMonthlyExpense(salaryTotal, 'Gehälter', 'Monatliche Spielergehälter (' + playerCount + ' Spieler)');
   }
@@ -2828,38 +2938,49 @@ function applyMonthlyClubFinances() {
 // resolveEventIfDue()), "Rivalen" = Siege innerhalb der eigenen Region
 // (Open/LCQ, dort wiederholt dieselben Gegner -- Major/Worlds sind global,
 // dort gibt es kein wiederkehrendes "Rivalen"-Konzept).
-function sponsorCareerWinCount() {
-  return matchHistory.filter((m) => m.winner === assignedOrg.name).length;
+// Bug-Fix (User-Meldung: "wenn man mitten in der Season Sponsoring bekommt,
+// wird Ziel abgeschlossen, obwohl man es zu dem Zeitpunkt noch nicht hatte"):
+// diese drei Funktionen zählten bisher UNGEFILTERT die komplette
+// matchHistory (bzw. nur nach Saison, nicht nach Datum) -- ein Sieg, der
+// VOR Vertragsbeginn dieses Sponsors erzielt wurde, zählte trotzdem sofort
+// mit, sobald der Sponsor aktiv wurde. `sinceDate` (optional, = st.activatedDate
+// des jeweiligen Sponsors) grenzt die Zählung jetzt auf Matches AB
+// Vertragsbeginn ein. Fehlt sinceDate (alte Spielstände ohne dieses neue
+// Feld), wird wie bisher die komplette Historie gezählt (rückwärtskompatibel).
+function sponsorCareerWinCount(sinceDate) {
+  return matchHistory.filter((m) => m.winner === assignedOrg.name && (!sinceDate || m.date >= sinceDate)).length;
 }
-function sponsorSeasonWinCount() {
-  return matchHistory.filter((m) => m.winner === assignedOrg.name && m.season === careerState.seasonNumber).length;
+function sponsorSeasonWinCount(sinceDate) {
+  return matchHistory.filter((m) => m.winner === assignedOrg.name && m.season === careerState.seasonNumber && (!sinceDate || m.date >= sinceDate)).length;
 }
-function sponsorRivalWinCount() {
+function sponsorRivalWinCount(sinceDate) {
   const region = orgRegion(assignedOrg.country);
-  return matchHistory.filter((m) => m.winner === assignedOrg.name && m.region === region).length;
+  return matchHistory.filter((m) => m.winner === assignedOrg.name && m.region === region && (!sinceDate || m.date >= sinceDate)).length;
 }
 
 const SPONSOR_GOAL_CHECKERS = {
-  seasonWins: (t) => sponsorSeasonWinCount() >= t,
-  careerWins: (t) => sponsorCareerWinCount() >= t,
+  seasonWins: (t, st) => sponsorSeasonWinCount(st.activatedDate) >= t,
+  careerWins: (t, st) => sponsorCareerWinCount(st.activatedDate) >= t,
   titles: (t) => careerState.titlesWon >= t,
   seasons: (t) => careerState.seasonNumber > t,
-  rivalWins: (t) => sponsorRivalWinCount() >= t,
+  rivalWins: (t, st) => sponsorRivalWinCount(st.activatedDate) >= t,
 };
 
 // Liefert den aktuellen Fortschrittswert (nicht nur ob-fertig) pro Ziel-Typ,
 // für die Fortschrittsbalken/Bruch-Anzeige ("0/33") im Detailpanel -- an
-// dieselben echten Karrierewerte wie SPONSOR_GOAL_CHECKERS gekoppelt.
+// dieselben echten Karrierewerte wie SPONSOR_GOAL_CHECKERS gekoppelt (inkl.
+// desselben activatedDate-Filters, damit Balken und tatsächlicher Abschluss
+// nie auseinanderlaufen).
 const SPONSOR_GOAL_PROGRESS = {
-  seasonWins: () => sponsorSeasonWinCount(),
-  careerWins: () => sponsorCareerWinCount(),
+  seasonWins: (st) => sponsorSeasonWinCount(st.activatedDate),
+  careerWins: (st) => sponsorCareerWinCount(st.activatedDate),
   titles: () => careerState.titlesWon,
   seasons: () => Math.max(0, careerState.seasonNumber - 1),
-  rivalWins: () => sponsorRivalWinCount(),
+  rivalWins: (st) => sponsorRivalWinCount(st.activatedDate),
 };
-function sponsorGoalProgress(goal) {
+function sponsorGoalProgress(goal, st) {
   const getter = SPONSOR_GOAL_PROGRESS[goal.type];
-  const current = getter ? getter() : 0;
+  const current = getter ? getter(st || {}) : 0;
   return { current: Math.min(current, goal.threshold), threshold: goal.threshold };
 }
 
@@ -2914,6 +3035,10 @@ function resolveSponsorResponses() {
     if (sponsor && sponsorWillBeAccepted(sponsor)) {
       if (activeSponsorCount() < MAX_ACTIVE_SPONSORS) {
         st.active = true;
+        // Bug-Fix (siehe SPONSOR_GOAL_CHECKERS-Kommentar): merkt sich, AB WANN
+        // dieser Sponsor zählt -- Ziele dürfen nur Ereignisse ab diesem Datum
+        // mitzählen, nicht rückwirkend die komplette bisherige Karriere.
+        st.activatedDate = careerDate;
         st.completedGoals = sponsor.goals.map(() => false);
         st.collectedGoals = sponsor.goals.map(() => false);
         st.rejectionCount = 0;
@@ -2975,7 +3100,7 @@ function checkSponsorGoals() {
     sponsor.goals.forEach((g, i) => {
       if (st.completedGoals[i]) return;
       const checker = SPONSOR_GOAL_CHECKERS[g.type];
-      if (checker && checker(g.threshold)) {
+      if (checker && checker(g.threshold, st)) {
         st.completedGoals[i] = true;
         changed = true;
       }
@@ -3539,9 +3664,15 @@ function renderFinanceAllocSliders(skipKey) {
     if (key !== skipKey) {
       slider.max = totalBudget;
       slider.step = 1;
-      slider.value = amount;
+      slider.value = Math.max(0, amount);
     }
-    document.getElementById('dashboard-finance-' + key + '-value').textContent = formatMoneyShort(amount);
+    // Kann jetzt negativ sein (Gehälter-Deficit, siehe applyMonthlyClubFinances())
+    // -- echten Wert weiterhin anzeigen (nicht auf 0 verstecken), aber als
+    // Warnung rot einfärben, damit sichtbar ist, dass dort ein Fehlbetrag
+    // offen ist statt dass Geld scheinbar spurlos verschwindet.
+    const valueEl = document.getElementById('dashboard-finance-' + key + '-value');
+    valueEl.textContent = formatMoneyShort(amount);
+    valueEl.classList.toggle('is-deficit', amount < 0);
   });
   document.getElementById('dashboard-finance-unallocated-value').textContent = formatMoneyShort(financeUnallocated());
   renderFinancePie();
@@ -3774,7 +3905,7 @@ function sponsorGoalRowHtml(g, i, st, name) {
   // tatsächlich erledigt wurde. Ohne aktiven Vertrag zeigt der Balken jetzt
   // immer 0 -- die Zielbeschreibung/Schwelle bleibt als Vorschau sichtbar,
   // aber ohne so zu wirken, als würde bereits daran gearbeitet.
-  const progress = (st && st.active) ? sponsorGoalProgress(g) : { current: 0, threshold: g.threshold };
+  const progress = (st && st.active) ? sponsorGoalProgress(g, st) : { current: 0, threshold: g.threshold };
   const pct = progress.threshold > 0 ? Math.min(100, Math.round((progress.current / progress.threshold) * 100)) : 0;
   let footRight = '';
   if (readyToCollect) {
@@ -7039,7 +7170,13 @@ function teamInfoMatchRowHtml(match, orgName) {
 }
 
 function renderTeamInfoPanel() {
-  const org = findOrgByName(teamInfoOrgName);
+  // Bug-Fix: findOrgByName() findet eine selbst erstellte Org NIE (steht nie
+  // in ORGANIZATIONS, siehe resolveOrgByNameOrOwn()-Kommentar) -- ohne
+  // Fallback brach diese Funktion bei der EIGENEN Team-Info-Seite sofort ab,
+  // das Panel behielt dadurch die zuletzt angezeigten Werte einer vorher
+  // besuchten Bot-Org (Coach-Name/-Land/-Avatar blieben "stehen" -- User-
+  // Meldung: "Bot-Team steht bei Coach").
+  const org = resolveOrgByNameOrOwn(teamInfoOrgName);
   if (!org) return;
 
   renderTeamInfoJersey(org);
@@ -8191,7 +8328,12 @@ function openRegistrationStatus(event) {
     if (!seasonTournamentResults['open0']) return 'seasonLocked'; // Open Qualifier noch nicht aufgelöst
     const region = orgRegion(assignedOrg.country);
     const qualified = region && (seasonQualifiedTeams[region] || []).includes(assignedOrg.name);
-    return qualified ? 'autoRegistered' : 'notQualified';
+    if (qualified) return 'autoRegistered';
+    // Bug-Fix (dieselbe Ursache wie isPlayerDisqualifiedForSeason()): "nicht
+    // qualifiziert" erst melden, wenn open0 auch WIRKLICH fertig enthüllt ist
+    // (sonst zeigt Open 1 schon "Nicht qualifiziert", während der Spieler den
+    // Open Qualifier laut Bildschirm gerade erst im Lower Bracket sieht).
+    return isOpen0FullyRevealed() ? 'notQualified' : 'seasonLocked';
   }
   return 'seasonLocked';
 }
@@ -10785,11 +10927,33 @@ function shiftTournamentCalendarMonth(delta) {
 // nicht von der restlichen Saison (Open 1-6 laufen automatisch weiter, siehe
 // resolveOpenEvent()). Nur das Verpassen des Open-Qualifier-Felds sperrt
 // wirklich JEDES weitere Turnier dieser Saison.
+// Bug-Fix (User-Meldung: "wenn man ins Lower Bracket kommt, kommt Meldung
+// dass man disqualifiziert ist"): seasonQualifiedTeams[region] wird von
+// resolveOpenQualifierEvent() SOFORT atomar für das komplette Bracket gesetzt
+// (Instant-Philosophie) -- das Endergebnis (inkl. Lower-Bracket-Ausgang)
+// steht damit fest, bevor der Spieler sein erstes Match überhaupt gesehen
+// hat. isPlayerDisqualifiedForSeason() UND openRegistrationStatus() prüften
+// bisher beide nur "ist open0 aufgelöst? nicht qualifiziert?", ohne den
+// sichtbaren Enthüllungsfortschritt zu kennen -- sobald der Spieler seine
+// erste (Oberes-Bracket-)Niederlage sieht und damit sichtbar ins Lower
+// Bracket einzieht, verrieten beide schon das (ggf. erst 1-2 Tage später
+// sichtbare) finale Schicksal. Fix: gemeinsamer Helfer, analog zum
+// bestehenden visualRevealStepCount()-Gating in tournamentResultSummaryHtml()
+// -- eine echte Disqualifikation wird erst gemeldet, wenn open0 vollständig
+// enthüllt ist (die tatsächliche zweite Niederlage sichtbar wurde).
+function isOpen0FullyRevealed() {
+  const open0Event = currentSeasonTournamentSchedule().find((e) => e.key === 'open0');
+  if (!open0Event) return true;
+  const totalSteps = totalRevealStepsForEvent(open0Event, tournamentFormatInfo(open0Event));
+  return visualRevealStepCount(open0Event, totalSteps) >= totalSteps;
+}
+
 function isPlayerDisqualifiedForSeason() {
   if (!seasonTournamentResults['open0']) return false;
   const region = orgRegion(assignedOrg.country);
   const qualified = region && (seasonQualifiedTeams[region] || []).includes(assignedOrg.name);
-  return !qualified;
+  if (qualified) return false;
+  return isOpen0FullyRevealed();
 }
 
 function renderDashboardTournamentsPanel() {
@@ -10883,6 +11047,9 @@ function advanceOneCalendarDay() {
   // Runde 122: verbucht fällige (7 Tage alte) Spieler-Neuzugänge, siehe
   // queuePlayerArrival()/processDuePlayerArrivals().
   processDuePlayerArrivals();
+  // Bug-Fix (User-Meldung: "Vertragsdauer geht nicht"): contractEnd wurde
+  // bisher NIRGENDS mit careerDate verglichen, siehe checkContractExpirations().
+  checkContractExpirations();
   // Bug-Fix: MUSS nach checkTournamentResolutions() laufen, sonst sieht die
   // Sponsoring-Zielprüfung an genau dem Tag, an dem ein Turnier aufgelöst
   // wird, noch den alten matchHistory-Stand (ein Sieg würde sonst immer
@@ -11148,7 +11315,7 @@ function confirmOrgAndProceed() {
     sub: padToSize(roster.sub ? [roster.sub.name] : [], SUB_SIZE),
     reserve: emptySlotArray(RESERVE_SIZE),
   };
-  draftedCoachName = roster.coach.name;
+  draftedCoachName = roster.coach ? roster.coach.name : null;
 
   negotiatedPremiumPlayers = {};
   negotiationBlocklist = {};
@@ -12421,11 +12588,14 @@ function calculateSeasonIncome(playerTeam, wasChampion) {
 // zwei Saisons in Folge mit mehr Niederlagen als Siegen (performanceFactor < 0.5)
 // beenden die Karriere. Bewusst einfache, transparente Regel statt komplexer
 // Vorstands-/Zufriedenheits-Simulation, die es hier nicht gibt.
-const CEO_FIRE_AFTER_POOR_SEASONS = 2;
+// User-Auftrag ("wichtige Hotfixes"): 3 Saisons in Folge ohne Open-1-6-
+// Qualifikation führen zur Entlassung (vorher 2, an das altes, nie
+// erreichte win/loss-Kriterium gekoppelt -- siehe checkCeoDismissalForEndingSeason()).
+const CEO_FIRE_AFTER_POOR_SEASONS = 3;
 
 function renderGameOverScreen() {
   document.getElementById('gameover-reason').textContent =
-    'Zwei Saisons in Folge mehr Niederlagen als Siege — der Vorstand von ' + assignedOrg.name + ' hat dich als Geschäftsführer abgesetzt.';
+    CEO_FIRE_AFTER_POOR_SEASONS + ' Saisons in Folge nicht für Open 1-6 qualifiziert — der Vorstand von ' + assignedOrg.name + ' hat dich als Geschäftsführer abgesetzt.';
   document.getElementById('gameover-summary').textContent =
     'Überstandene Saisons: ' + careerState.seasonNumber + ' — Titel gewonnen: ' + careerState.titlesWon;
   showScreen('screen-gameover');
@@ -12436,6 +12606,31 @@ function triggerCeoFired() {
   stopPlaytimeTracking();
   saveGameState();
   renderGameOverScreen();
+}
+
+// Bug-Fix / User-Auftrag: der bestehende "CEO kann entlassen werden"-
+// Vertragshaken (opt-ceo-fireable, siehe goToOrgContract()) sowie
+// ceoFireable/consecutivePoorSeasons/CEO_FIRE_AFTER_POOR_SEASONS/
+// triggerCeoFired() existierten bereits -- waren aber AUSSCHLIESSLICH in
+// startNextSeason() verdrahtet, dem Trigger des alten, im aktuellen
+// kalendergetriebenen Spielfluss NIE erreichten tournament.js/season.js-
+// Systems (dieselbe Bug-Klasse wie schon bei den Sponsoring-Zielen/der
+// automatischen Saisonzählung selbst, siehe jeweilige Kommentare) -- die
+// Entlassung konnte dadurch faktisch nie auftreten, obwohl der Vertrags-Haken
+// dafür existiert. Kriterium exakt nach User-Vorgabe: eine Saison zählt als
+// "schlecht", wenn die eigene Org NICHT für Open 1-6 qualifiziert war (Open
+// Qualifier verpasst ODER gar nicht erst angemeldet -- beides bedeutet
+// denselben Ausschluss von der kompletten restlichen Saison, siehe
+// isPlayerDisqualifiedForSeason()). 3 SOLCHE Saisons IN FOLGE führen zur
+// Entlassung, eine dazwischenliegende erfolgreiche Saison setzt den Zähler
+// zurück. MUSS vor resetSeasonScopedDashboardState() laufen, da diese
+// Funktion seasonQualifiedTeams für die neue Saison bereits leert.
+function checkCeoDismissalForEndingSeason() {
+  if (!ceoFireable) return;
+  const region = orgRegion(assignedOrg.country);
+  const qualified = region && (seasonQualifiedTeams[region] || []).includes(assignedOrg.name);
+  consecutivePoorSeasons = qualified ? 0 : consecutivePoorSeasons + 1;
+  if (consecutivePoorSeasons >= CEO_FIRE_AFTER_POOR_SEASONS) triggerCeoFired();
 }
 
 // Runde 102, Refactor: die rein saisongebundene Buchhaltung des NEUEN,
@@ -12486,6 +12681,8 @@ function checkSeasonRolloverIfDue() {
   const nextSeasonSchedule = buildSeasonTournamentSchedule(careerState.seasonNumber + 1);
   const nextSeasonOpen0Start = nextSeasonSchedule[0].phaseDates.registration.start;
   if (careerDate < nextSeasonOpen0Start) return;
+  checkCeoDismissalForEndingSeason();
+  if (careerEnded) return; // Entlassung ausgelöst -- keine neue Saison mehr starten
   resetSeasonScopedDashboardState();
 }
 
@@ -14095,6 +14292,10 @@ function kaderCardHtml(person, isStarter, starterIndex) {
   const moveBtn = isStarter
     ? '<button type="button" class="dashboard-roster-card-move-btn is-down" data-kader-swap="' + starterIndex + '" title="Auf die Ersatzbank setzen">↓</button>'
     : '<button type="button" class="dashboard-roster-card-move-btn is-up" data-kader-swap="0" title="In den Hauptkader aufstellen">↑</button>';
+  // Bug-Fix (User-Meldung: "man kann keine Spieler verkaufen bei Kader"):
+  // neuer Verkaufs-Button, siehe sellRosterPlayer().
+  const sellSlot = isStarter ? 'starters::' + starterIndex : 'sub::0';
+  const sellBtn = '<button type="button" class="dashboard-roster-card-sell-btn" data-kader-sell="' + sellSlot + '" title="Verkaufen">✕ Verkaufen</button>';
   return (
     '<div class="dashboard-roster-card">' +
       '<button type="button" class="dashboard-roster-card-info-btn" data-kader-info="' + person.name + '" data-kader-role="' + (isStarter ? 'Starter' : 'Sub') + '" title="Profil ansehen">?</button>' +
@@ -14106,6 +14307,7 @@ function kaderCardHtml(person, isStarter, starterIndex) {
         '<span class="dashboard-roster-card-pill ' + (isHappy ? 'is-happy' : 'is-unhappy') + '">' + (isHappy ? 'Glücklich' : 'Unzufrieden') + '</span>' +
       '</div>' +
       moveBtn +
+      sellBtn +
     '</div>'
   );
 }
@@ -14135,6 +14337,7 @@ function kaderReserveCardHtml(person, index) {
         '<button type="button" class="dashboard-roster-reserve-action-btn" data-kader-promote="' + index + '" data-kader-promote-target="sub" title="Tauscht mit dem aktuellen Ersatzspieler (Sub)">→ Sub</button>' +
         '<button type="button" class="dashboard-roster-reserve-action-btn" data-kader-promote="' + index + '" data-kader-promote-target="starter" title="Tauscht mit dem aktuell schwächsten Starter">→ Kader</button>' +
       '</div>' +
+      '<button type="button" class="dashboard-roster-card-sell-btn" data-kader-sell="reserve::' + index + '" title="Verkaufen">✕ Verkaufen</button>' +
     '</div>'
   );
 }
@@ -14204,6 +14407,12 @@ function renderDashboardKaderPanel() {
   document.querySelectorAll('[data-kader-promote]').forEach((btn) => {
     btn.addEventListener('click', () => promoteReservePlayer(Number(btn.dataset.kaderPromote), btn.dataset.kaderPromoteTarget));
   });
+  document.querySelectorAll('[data-kader-sell]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const [slotType, idxStr] = btn.dataset.kaderSell.split('::');
+      sellRosterPlayer(slotType, Number(idxStr));
+    });
+  });
 }
 
 // Ein einziger, symmetrischer Tausch-Mechanismus für BEIDE Pfeile: der rote
@@ -14260,6 +14469,58 @@ function promoteReservePlayer(reserveIndex, targetType) {
   assignedOrg.strength = computeOrgStrengthFromRoster(roster);
   saveGameState();
   renderDashboardKaderPanel();
+}
+
+// Bug-Fix (User-Meldung: "Man kann keine Spieler verkaufen bei Kader und/oder
+// Transfer -- Option Verkauf hinzufügen, Geld soll bei Finanzen beim nicht
+// eingeteilten Geld durch Verkauf landen"): es gab bisher überhaupt keinen
+// erreichbaren Verkaufs-Mechanismus (nur Kaufen war gebaut, siehe
+// executePlayerSigning()). Verkaufserlös = calculatePrice(overall) --
+// derselbe Marktwert wie beim Kauf, spiegelbildlich. Da financeAllocation
+// seit Runde 108 feste €-Beträge sind (nicht mehr automatisch anteilig
+// verteilte Prozente), landet der Erlös automatisch VOLLSTÄNDIG bei "nicht
+// eingeteiltes Geld" (financeUnallocated() = budget - Summe der 4 festen
+// Kategorien) -- genau wie vom User verlangt, ohne dass eine der 4
+// Kategorien mit erhöht werden muss.
+function findKaderSlotPerson(slotType, index) {
+  const roster = assignedOrg.roster;
+  if (slotType === 'starters') return roster.starters[index];
+  if (slotType === 'sub') return roster.sub;
+  if (slotType === 'reserve') return roster.reserve[index];
+  return null;
+}
+
+function sellRosterPlayer(slotType, index) {
+  const person = findKaderSlotPerson(slotType, index);
+  if (!person) return;
+  if (!isTransferWindowOpen(careerDate)) {
+    showConfirmModal('Transferfenster geschlossen', 'Verkäufe sind nur vom 1. Dezember bis 15. Januar möglich.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
+    return;
+  }
+  const price = calculatePrice(person.overall);
+  showConfirmModal(
+    person.name + ' verkaufen?',
+    'Du erhältst ' + formatMoney(price) + ' (Marktwert). ' + person.name + ' verlässt deinen Kader sofort und steht keinem anderen Team zur Verfügung.',
+    () => executeSellRosterPlayer(slotType, index),
+    { confirmLabel: 'Verkaufen' }
+  );
+}
+
+function executeSellRosterPlayer(slotType, index) {
+  const roster = assignedOrg.roster;
+  const person = findKaderSlotPerson(slotType, index);
+  if (!person) return;
+  const price = calculatePrice(person.overall);
+  if (slotType === 'starters') roster.starters.splice(index, 1);
+  else if (slotType === 'sub') roster.sub = null;
+  else roster.reserve.splice(index, 1);
+  assignedOrg.budget += price;
+  logTransfer(assignedOrg.name, 'Free Agent', person.name, price);
+  addFinanceMonthlyIncome(price, 'Transfers', person.name + ' verkauft');
+  assignedOrg.strength = computeOrgStrengthFromRoster(roster);
+  saveGameState();
+  renderDashboardKaderPanel();
+  renderDashboardTopbar();
 }
 
 document.getElementById('btn-dashboard-roster-details').addEventListener('click', () => {
