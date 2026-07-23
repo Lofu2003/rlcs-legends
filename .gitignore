@@ -1,3 +1,9 @@
 node_modules/
 dist/
 *.log
+
+# Enthält den echten Discord-Feedback-Webhook -- darf NIE ins öffentliche
+# Repo, da jeder mit dieser URL Nachrichten in den Discord-Kanal posten
+# könnte. Wird zur Laufzeit von main.js gelesen, ist aber lokal/pro-Build
+# gehalten statt versioniert.
+discord-webhook.local.json

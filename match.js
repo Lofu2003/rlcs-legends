@@ -10,21 +10,52 @@ function gaussianRandom(mean, stdDev) {
   return mean + stdDev * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
+// Runde 99, User-Meldung ("Simulation optimieren, ein schwächeres Team soll
+// gegen ein stärkeres auch verlieren können, aber realistische Gewinnchancen
+// behalten -- Bsp. Spieler-EGS 60/80/75 gegen 80/90/75"): mit den alten Werten
+// (Rauschen ±15% des Rohwerts, volle 45-95-Statspanne unkomprimiert) verlor
+// die schwächere Seite genau dieses Beispiels eine Bo5-Serie in >94% der
+// Fälle, ab ~20 Punkten Rückstand praktisch IMMER (Node-Sandbox-Verifikation,
+// siehe Session-Historie/Projekt-Memory Runde 99). Ursache: derselbe
+// Statvorteil wirkt DREIMAL hintereinander pro Ballbesitz (Duell gewinnen ->
+// Torschusschance -> Torchance) -- über ~13 Ballbesitze pro Spiel und bis zu
+// 5 Spiele pro Serie potenziert sich das schnell zu einer Beinahe-Sicherheit
+// für die stärkere Seite. compressStat() staucht den Abstand jedes Stat-Werts
+// zur Skalenmitte (75, siehe starsToOverall() in data/org-rosters.js) auf 45%
+// seiner Rohgröße, BEVOR er in eine der drei Chance-Funktionen einfließt --
+// die Rangfolge (stärker bleibt stärker) bleibt erhalten, nur die Wucht der
+// Wiederholung wird gedämpft. Zusätzlich Rauschen pro Duell von 15% auf 18%
+// angehoben. Ergebnis (Grid-Suche, 3000 Serien/Szenario): 10-Punkte-Rückstand
+// jetzt ~33% Einzelspiel-/~21% Bo5-Gewinnchance für die schwächere Seite,
+// 20 Punkte ~18%/~4%, 30 Punkte ~9%/~0,4%, exakt gleichstarke Teams
+// weiterhin ~50/50 -- die stärkere Seite bleibt klarer Favorit, ein Sieg des
+// Außenseiters bleibt aber immer real möglich statt praktisch ausgeschlossen.
+const MATCH_SIM_STAT_BASELINE = 75;
+const MATCH_SIM_STAT_COMPRESSION = 0.45;
+function compressStat(val) {
+  return MATCH_SIM_STAT_BASELINE + (val - MATCH_SIM_STAT_BASELINE) * MATCH_SIM_STAT_COMPRESSION;
+}
+
 function duelStat(p) {
   return p.mechanics * 0.5 + p.speed * 0.3 + p.gameSense * 0.2;
 }
 
-function resolveDuel(attVal, defVal) {
-  const att = gaussianRandom(attVal, Math.max(1, attVal * 0.15));
-  const def = gaussianRandom(defVal, Math.max(1, defVal * 0.15));
+function resolveDuel(attValRaw, defValRaw) {
+  const attVal = compressStat(attValRaw);
+  const defVal = compressStat(defValRaw);
+  const att = gaussianRandom(attVal, Math.max(1, Math.abs(attVal) * 0.18));
+  const def = gaussianRandom(defVal, Math.max(1, Math.abs(defVal) * 0.18));
   return att > def;
 }
 
-function shotOnGoalChance(shooting) {
+function shotOnGoalChance(shootingRaw) {
+  const shooting = compressStat(shootingRaw);
   return Math.min(0.60, Math.max(0.12, 0.35 + (shooting - 75) / 100 * 0.5));
 }
 
-function goalChance(shooting, bestDefending) {
+function goalChance(shootingRaw, bestDefendingRaw) {
+  const shooting = compressStat(shootingRaw);
+  const bestDefending = compressStat(bestDefendingRaw);
   const base = 0.15 + (shooting / 100) * 0.55;
   const defensePenalty = (bestDefending / 100) * 0.25;
   return Math.min(0.75, Math.max(0.10, base - defensePenalty));
@@ -100,10 +131,10 @@ const DISCONNECT_CHANCE_PER_EVENT = 0.03;
  * Gibt ein Ereignis-Objekt zurück (ohne time/stepSeconds — die setzt der Aufrufer).
  * isLateGame steuert dramatischere Tor-Formulierungen in der Schlussphase.
  */
-function simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, isLateGame) {
+function simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, teamBBonusPct, isLateGame) {
   const playerA = pickRandom(activeTeamA);
   const playerB = pickRandom(teamB);
-  const aWins = resolveDuel(duelStat(playerA) * (1 + teamABonusPct), duelStat(playerB));
+  const aWins = resolveDuel(duelStat(playerA) * (1 + teamABonusPct), duelStat(playerB) * (1 + teamBBonusPct));
   const winner = aWins ? playerA : playerB;
   const winnerLabel = aWins ? nameA : nameB;
   const winnerTeamTag = aWins ? 'A' : 'B';
@@ -159,17 +190,25 @@ function simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, isL
  *   - type:        'duel' | 'goal' | 'miss' | 'save' | 'sub' | 'overtime-start' | 'final'
  *   - player:      Name des hervorzuhebenden Spielers
  *
- * myOptions (optional, nur für Team A — das eigene, gedraftete Team):
- *   - coach:            Coach-Objekt oder null — Team-Bonus/-Malus auf alle Duelle
- *   - sub:              Sub-Spieler-Objekt oder null — Wechsel zur Spielhälfte
- *   - orgMatchBonusPct: Bonus/Malus (Prozentpunkte, z.B. +4.4 oder -7.2) aus der
- *                       zugewiesenen Organisation — kombiniert sich mit dem Coach-Bonus
+ * myOptions:
+ *   - coach:             Coach-Objekt oder null — Team-A-Bonus/-Malus auf alle Duelle
+ *   - sub:               Sub-Spieler-Objekt oder null — Wechsel zur Spielhälfte (nur Team A)
+ *   - orgMatchBonusPct:  Bonus/Malus (Prozentpunkte, z.B. +4.4 oder -7.2) aus der
+ *                        zugewiesenen Organisation für Team A — kombiniert sich mit dem Coach-Bonus
+ *   - coachB/orgMatchBonusPctB: dasselbe, aber für Team B (Runde 119, Team-Chemie
+ *                        -- die eigene, gedraftete Org kann in simulateBotSeries()
+ *                        positionell sowohl Team A als auch Team B sein, siehe
+ *                        ownIsA dort). Beide defaulten auf 0 -- bestehende
+ *                        Aufrufe ohne diese Felder verhalten sich exakt wie zuvor.
  */
 function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
   myOptions = myOptions || {};
   const coachBonusFraction = myOptions.coach ? ((myOptions.coach.overall - 75) / 100) * 0.18 : 0;
   const orgBonusFraction = (myOptions.orgMatchBonusPct || 0) / 100;
   const teamABonusPct = coachBonusFraction + orgBonusFraction;
+  const coachBonusFractionB = myOptions.coachB ? ((myOptions.coachB.overall - 75) / 100) * 0.18 : 0;
+  const orgBonusFractionB = (myOptions.orgMatchBonusPctB || 0) / 100;
+  const teamBBonusPct = coachBonusFractionB + orgBonusFractionB;
 
   let clock = 300; // 5 Minuten Spielzeit
   let scoreA = 0, scoreB = 0;
@@ -203,7 +242,7 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
     }
 
     const isLateGame = clock <= LATE_GAME_THRESHOLD_SECONDS;
-    const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, isLateGame);
+    const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, teamBBonusPct, isLateGame);
     if (result.scoringTeam === 'A') scoreA++;
     else if (result.scoringTeam === 'B') scoreB++;
     if (result.scoringTeam) result.msg += '  (' + scoreA + ':' + scoreB + ')';
@@ -225,7 +264,7 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
       otSeconds += step;
       const timeStr = '+' + formatClock(otSeconds);
 
-      const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, true);
+      const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, teamBBonusPct, true);
       if (result.scoringTeam === 'A') { scoreA++; decided = true; }
       else if (result.scoringTeam === 'B') { scoreB++; decided = true; }
       if (result.scoringTeam) result.msg += '  (' + scoreA + ':' + scoreB + ')';
@@ -239,5 +278,5 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
     msg: 'SPIELENDE — Endstand ' + scoreA + ':' + scoreB,
   });
 
-  return { events, scoreA, scoreB, teamABonusPct: teamABonusPct * 100 };
+  return { events, scoreA, scoreB, teamABonusPct: teamABonusPct * 100, teamBBonusPct: teamBBonusPct * 100 };
 }

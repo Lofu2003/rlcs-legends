@@ -3,27 +3,93 @@
 <head>
   <meta charset="UTF-8">
   <title>RLCS Legends</title>
+  <link rel="icon" href="build/icon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ── Hauptmenü ─────────────────────────────────────────────────────── -->
-  <div id="screen-menu" class="screen">
-    <div class="menu-wrap">
-      <div class="menu-logo">RLCS<span>LEGENDS</span></div>
-      <p class="menu-tagline">Baue dein Team. Übertriff die Erwartungen.</p>
-      <div class="menu-buttons">
-        <button id="btn-new-game" class="menu-btn menu-btn-primary">Neues Spiel</button>
-        <button id="btn-continue" class="menu-btn" disabled title="Noch kein Spielstand vorhanden">Fortsetzen</button>
-        <button id="btn-settings" class="menu-btn">⚙ Einstellungen</button>
-        <button id="btn-quit" class="menu-btn menu-btn-danger">Beenden</button>
-      </div>
-      <p class="menu-version">v0.3.0</p>
-      <button id="btn-check-update" class="update-check-btn">Nach Updates suchen</button>
-      <p id="update-check-status" class="update-check-status"></p>
-      <p class="menu-disclaimer">Inoffizielles Fan-Projekt — keine Verbindung zu Psyonix, Epic Games oder
-        den genannten Spielern/Organisationen. Stats sind reine Spielwerte.</p>
+  <!-- ── Intro-Video (spielt bei jedem Start einmal ab, bevor das Hauptmenü kommt) ── -->
+  <div id="screen-intro" class="screen intro-screen">
+    <video id="intro-video" class="intro-video" src="Game_Intro.mp4" autoplay></video>
+  </div>
+
+  <!-- ── Rechtlicher Hinweis (nach dem Intro, vor dem Hauptmenü) ─────────── -->
+  <div id="screen-legal" class="screen legal-screen hidden">
+    <div class="legal-content">
+      <h1 class="legal-title">Rechtlicher Hinweis</h1>
+      <p class="legal-text">RLCS Legends ist ein <strong>inoffizielles, nicht-kommerzielles Fan-Projekt</strong>
+        und steht in keinerlei Verbindung zu Psyonix, Epic Games oder der offiziellen
+        Rocket League Championship Series (RLCS).</p>
+      <p class="legal-text">Alle im Spiel genannten Organisationen, Spieler und Coaches tragen reale Namen aus
+        dem Rocket-League-Esport, werden hier aber ausschließlich zu Unterhaltungszwecken verwendet.
+        Es besteht keine Verbindung, Zusammenarbeit oder Zustimmung seitens dieser Personen oder Organisationen.</p>
+      <p class="legal-text">Sämtliche Statistiken, Wertungen und Spielwerte sind frei erfunden und stellen
+        keine reale Leistungsbeurteilung dar.</p>
+      <p class="legal-copyright">© 2026 RLCS Legends — Inoffizielles Fan-Projekt. Alle Marken-, Namens- und
+        Bildrechte der genannten Personen, Teams und der Rocket League Championship Series liegen bei
+        ihren jeweiligen Inhabern.</p>
     </div>
+  </div>
+
+  <!-- ── Gemeinsame Atmosphäre (Logo-Wand + Trophäe) für Hauptmenü + Slot-
+       Auswahl ───────────────────────────────────────────────────────────
+       User-Wunsch: der Hintergrund darf beim Öffnen/Schließen der Slot-
+       Sidebar NICHT neu geladen/verändert werden und muss seine Loop-
+       Animation ununterbrochen weiterlaufen lassen. Deshalb EIN einziges,
+       dauerhaft im DOM lebendes Element statt je einer eigenen Kopie pro
+       Screen -- showScreen() (renderer.js) blendet es nur ein/aus, wenn
+       zwischen screen-menu/screen-slots und einem GANZ ANDEREN Screen wie
+       Charaktererstellung gewechselt wird, NICHT beim Wechsel zwischen
+       Menü und Slot-Sidebar selbst. -->
+  <div id="app-atmosphere" class="app-atmosphere hidden">
+    <div id="shared-logowall" class="mainmenu-logowall"></div>
+    <div class="mainmenu-vignette"></div>
+    <div class="mainmenu-beam"></div>
+
+    <div class="mainmenu-trophy-wrap">
+      <img class="mainmenu-trophy" src="assets/Menu_Pokal_trimmed.png" alt="">
+    </div>
+  </div>
+
+  <!-- ── Hauptmenü ─────────────────────────────────────────────────────── -->
+  <div id="screen-menu" class="screen hidden">
+    <div class="mainmenu-left">
+      <img src="rlcs-legends-logo.png" alt="RLCS Legends" class="mainmenu-logo-img">
+
+      <button id="btn-continue" class="mainmenu-continue hidden">
+        <span id="mainmenu-continue-logo" class="mainmenu-continue-logo"></span>
+        <span class="mainmenu-continue-text">
+          <span class="mainmenu-continue-title">Fortsetzen</span>
+          <span id="mainmenu-continue-sub" class="mainmenu-continue-sub">als Manager</span>
+        </span>
+      </button>
+
+      <nav class="mainmenu-nav">
+        <button id="btn-new-game" class="mainmenu-nav-item mainmenu-nav-primary">Neues Spiel</button>
+        <button id="btn-load-game" class="mainmenu-nav-item">Spielstand laden</button>
+        <button id="btn-tutorial" class="mainmenu-nav-item" disabled title="Kommt später">Tutorial<span class="mainmenu-nav-soon">Kommt später</span></button>
+        <button id="btn-database" class="mainmenu-nav-item" disabled title="Kommt später">Datenbank<span class="mainmenu-nav-soon">Kommt später</span></button>
+        <button id="btn-settings" class="mainmenu-nav-item">Einstellungen</button>
+        <button id="btn-quit" class="mainmenu-nav-item mainmenu-nav-danger">Beenden</button>
+      </nav>
+
+      <div class="mainmenu-footer">
+        <button id="btn-check-update" class="update-check-btn">Nach Updates suchen</button>
+        <p id="update-check-status" class="update-check-status"></p>
+        <div class="mainmenu-social-row">
+          <button id="btn-discord" class="mainmenu-social-btn" disabled title="Discord-Server kommt noch">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20.317 4.369A19.79 19.79 0 0 0 15.885 3c-.211.375-.457.879-.626 1.278a18.27 18.27 0 0 0-5.518 0C9.572 3.879 9.326 3.375 9.114 3a19.736 19.736 0 0 0-4.435 1.372C1.676 8.59.914 12.701 1.295 16.756a19.93 19.93 0 0 0 5.993 3.03c.483-.66.914-1.36 1.285-2.096a12.94 12.94 0 0 1-2.024-.973c.17-.124.336-.253.497-.386 3.902 1.803 8.13 1.803 11.984 0 .162.133.328.262.497.386-.646.386-1.324.71-2.028.974.372.735.802 1.436 1.285 2.095a19.876 19.876 0 0 0 5.997-3.03c.447-4.695-.762-8.766-3.464-12.386ZM8.68 14.279c-1.146 0-2.084-1.06-2.084-2.36 0-1.302.917-2.362 2.084-2.362 1.176 0 2.104 1.07 2.084 2.362 0 1.3-.917 2.36-2.084 2.36Zm6.64 0c-1.145 0-2.083-1.06-2.083-2.36 0-1.302.917-2.362 2.083-2.362 1.177 0 2.105 1.07 2.084 2.362 0 1.3-.907 2.36-2.084 2.36Z"/></svg>
+          </button>
+          <button id="btn-feedback" class="mainmenu-social-btn" disabled title="Wird geprüft...">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2Zm-2 9h-5v5h-2v-5H6V9h5V4h2v5h5v2Z"/></svg>
+          </button>
+        </div>
+        <p class="menu-disclaimer">Inoffizielles Fan-Projekt — keine Verbindung zu Psyonix, Epic Games oder
+          den genannten Spielern/Organisationen. Stats sind reine Spielwerte.</p>
+      </div>
+    </div>
+
+    <p class="mainmenu-version">v0.5.0</p>
   </div>
 
   <!-- ── Spielmodus-Auswahl (bei "Neues Spiel") ───────────────────────────── -->
@@ -57,53 +123,307 @@
     </div>
   </div>
 
-  <!-- ── Speicherstand-Auswahl (Slots) ────────────────────────────────────── -->
+  <!-- ── Speicherstand-Auswahl (Slots) ─────────────────────────────────────
+       Teilt sich die Atmosphäre (#app-atmosphere oben) mit dem Hauptmenü --
+       hier steht nur noch die Sidebar selbst, siehe openSlotPicker()/
+       closeSlotPicker() in renderer.js für die Slide-in/-out-Animation. -->
   <div id="screen-slots" class="screen hidden">
-    <button id="btn-back-to-menu-slots" class="back-btn">← Hauptmenü</button>
-    <div class="slots-wrap">
-      <h1 id="slots-title" class="slots-title">Speicherstand wählen</h1>
+    <div id="slots-sidebar" class="slots-sidebar">
+      <h1 id="slots-title" class="slots-title">Speicherplatz wählen</h1>
+      <button id="btn-create-slot" class="slot-create-btn">+ Neuen Slot erstellen</button>
       <div id="slots-list" class="slots-list"></div>
+      <button id="btn-back-to-menu-slots" class="slots-back-btn">← Zurück</button>
     </div>
   </div>
 
-  <!-- ── Charaktererstellung ───────────────────────────────────────────────── -->
+  <!-- ── Charaktererstellung (Manager erstellen) ────────────────────────────
+       Kein eigener Hintergrund mehr: teilt sich #app-atmosphere mit dem
+       Hauptmenü und legt sich als bildschirmfüllendes Frosted-Glass-Overlay
+       (starker Blur, Hauptmenü-Atmosphäre schimmert unscharf durch) mit einer
+       Slide-in-Animation von links darüber — siehe goToCharacterCreation()/
+       closeCharacterOverlay() in renderer.js. -->
   <div id="screen-character" class="screen hidden">
-    <button id="btn-back-to-menu-character" class="back-btn">← Hauptmenü</button>
-    <div class="character-wrap">
-      <h1 class="intro-title">Erstelle deinen Charakter</h1>
-      <p class="character-subtitle">Wer bist du, bevor du deine erste Organisation übernimmst?</p>
+    <div id="character-overlay" class="character-overlay">
+      <!-- Eigener Wrapper um den kompletten Inhalt (statt direkt auf
+           #character-overlay zu verschieben) -- #character-overlay trägt
+           bereits seine eigene Slide-in/-out-Animation (siehe oben), ein
+           zusätzliches transform hier würde damit kollidieren. Wird beim
+           Öffnen der Portrait-Auswahl-Sidebar (siehe unten) nach links
+           verschoben, damit nichts dahinter verschwindet. -->
+      <div id="character-content" class="character-content">
+      <h1 class="character-title">Manager erstellen</h1>
 
-      <div class="character-field">
-        <label for="char-name-input">Name</label>
-        <input id="char-name-input" type="text" maxlength="24" placeholder="Dein Name" />
-      </div>
-
-      <div class="character-field-row">
-        <div class="character-field">
-          <label for="char-birthdate-input">Geburtsdatum</label>
-          <input id="char-birthdate-input" type="date" />
+      <div class="character-panels">
+        <!-- Linkes Panel: Eigenschafts-Regler (Punkte-Pool-System) -->
+        <div class="character-panel character-traits-panel">
+          <div id="character-trait-list" class="character-trait-list"></div>
+          <div class="character-panel-footer">
+            <button id="btn-character-randomize-traits" type="button" class="char-icon-btn">Zufällig 🎲</button>
+            <div class="character-points-remaining">
+              <span>Verbleibende<br>Punkte:</span>
+              <span id="character-points-value">24</span>
+            </div>
+          </div>
         </div>
-        <div class="character-field">
-          <label for="char-region-select">Herkunft</label>
-          <select id="char-region-select">
-            <option value="EU">Europa</option>
-            <option value="NA">Nordamerika</option>
-            <option value="MENA">Naher Osten &amp; Nordafrika</option>
-            <option value="SAM">Südamerika</option>
-            <option value="OCE">Ozeanien</option>
-            <option value="APAC">Asien-Pazifik</option>
-            <option value="SSA">Subsahara-Afrika</option>
-          </select>
-        </div>
-      </div>
 
-      <div class="character-field">
-        <label>Dein Weg</label>
-        <div id="character-path-list" class="character-path-list"></div>
+        <!-- Rechtes Panel: Identität + Portrait -->
+        <div class="character-panel character-identity-panel">
+          <div class="character-identity-fields">
+            <div class="character-field-row">
+              <div class="character-field">
+                <label for="char-nick-input">Nick *</label>
+                <input id="char-nick-input" type="text" maxlength="20" placeholder="Dein Gamertag" />
+              </div>
+              <div class="character-field">
+                <label for="char-firstname-input">Vorname *</label>
+                <input id="char-firstname-input" type="text" maxlength="20" placeholder="Vorname" />
+              </div>
+            </div>
+
+            <div class="character-field">
+              <label for="char-lastname-input">Nachname *</label>
+              <input id="char-lastname-input" type="text" maxlength="24" placeholder="Nachname" />
+            </div>
+
+            <div class="character-field">
+              <label>Geschlecht *</label>
+              <div class="character-gender-toggle">
+                <button type="button" class="character-gender-btn is-active" data-gender="M"><span class="character-gender-box"></span>M</button>
+                <button type="button" class="character-gender-btn" data-gender="F"><span class="character-gender-box"></span>F</button>
+              </div>
+            </div>
+
+            <div class="character-field">
+              <label>Nation *</label>
+              <div class="char-dropdown" id="char-nation-dropdown">
+                <button type="button" class="char-dropdown-trigger" id="char-nation-trigger"></button>
+                <div class="char-dropdown-menu hidden" id="char-nation-menu"></div>
+              </div>
+            </div>
+
+            <div class="character-field">
+              <label>Geburtsdatum *</label>
+              <div class="character-birthdate-row">
+                <select id="char-birthday-day"></select>
+                <select id="char-birthday-month"></select>
+                <select id="char-birthday-year"></select>
+                <button id="btn-character-random-birthdate" type="button" class="char-icon-btn char-icon-btn-square" title="Zufälliges Geburtsdatum">🎲</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Portrait-Platzhalter — Hochladen öffnet den nativen Datei-Dialog
+               (siehe main.js: select-portrait-image), Auswählen öffnet die
+               Vorlagen-Sidebar rechts (siehe #portrait-picker-sidebar unten). -->
+          <div class="character-portrait-block">
+            <div class="character-portrait-actions">
+              <button id="btn-character-portrait-upload" type="button" class="char-icon-btn" title="Eigenes Bild hochladen (JPG/PNG)">Hochladen 📁</button>
+              <button id="btn-character-portrait-select" type="button" class="char-icon-btn" title="Aus Portrait-Vorlagen wählen">Auswählen →</button>
+            </div>
+            <div id="character-portrait-frame" class="character-portrait-frame">
+              <span class="character-portrait-placeholder">👤</span>
+              <span class="character-portrait-note">Portrait kommt später</span>
+            </div>
+            <button id="btn-character-randomize-identity" type="button" class="char-icon-btn character-identity-random">Zufällig 🎲</button>
+          </div>
+        </div>
       </div>
 
       <p id="character-error" class="character-error hidden"></p>
-      <button id="btn-character-continue" class="menu-btn menu-btn-primary" disabled>Weiter</button>
+
+      <div class="character-bottom-center-row">
+        <button id="btn-character-randomize-all" type="button" class="char-icon-btn">Alles zufällig 🎲</button>
+        <button id="btn-character-quickstart" type="button" class="char-icon-btn">Manager auswählen →</button>
+      </div>
+      </div>
+
+      <!-- Zurück/Weiter sitzen bewusst AUSSERHALB von #character-content --
+           sie dürfen beim Öffnen einer der beiden Sidebars unten NICHT mit
+           verschoben werden (Zurück würde sonst links aus dem Fenster
+           laufen). Weiter bekommt stattdessen einen eigenen, kleineren
+           Shift nach links (siehe .character-overlay.side-panel-open in
+           style.css), damit es neben statt hinter der Sidebar sichtbar
+           bleibt; Zurück bleibt komplett unverändert stehen. -->
+      <button id="btn-back-to-menu-character" class="char-corner-btn char-corner-btn-back">← Zurück</button>
+      <button id="btn-character-continue" class="char-corner-btn char-corner-btn-next" disabled>Weiter →</button>
+
+      <!-- Portrait-Vorlagen-Sidebar: slidet von rechts rein (siehe
+           openPortraitPicker()/closePortraitPicker() in renderer.js), drückt
+           #character-content dabei nach links (siehe .character-content.
+           side-panel-open in style.css) statt es zu verdecken. Liest die
+           Liste per IPC aus assets/Manager_Portrai/ (list-portrait-presets in
+           main.js), gefiltert nach dem gewählten Geschlecht (Dateiname-
+           Präfix frau_/mann_) -- bis Vorlagenbilder für BEIDE Geschlechter
+           vorhanden sind, zeigt sie bei Bedarf einen Leer-Hinweis. -->
+      <div id="portrait-picker-sidebar" class="char-side-sidebar hidden">
+        <div class="char-side-sidebar-header">
+          <h2 class="slots-title">Portrait auswählen</h2>
+          <button id="btn-portrait-picker-close" class="char-side-sidebar-close-btn" title="Schließen">✕</button>
+        </div>
+        <div id="portrait-picker-grid" class="portrait-picker-grid"></div>
+      </div>
+
+      <!-- Manager-Vorlagen-Sidebar (Button "Manager auswählen"): zeigt alle
+           je bei der Charaktererstellung fertig angelegten Manager (dauerhaft
+           über alle Karrieren hinweg, siehe manager-templates.json in
+           main.js), mit Portrait, Name und Lösch-Button pro Eintrag. Klick
+           auf eine Karte übernimmt sie 1:1 und geht direkt weiter zur
+           Orga-Auswahl (wie früher der Zufalls-"Manager auswählen"-Klick),
+           OHNE erneut als neue Vorlage gespeichert zu werden -- nur eine
+           frische Erstellung über das Formular landet in der Bibliothek. -->
+      <div id="manager-picker-sidebar" class="char-side-sidebar hidden">
+        <div class="char-side-sidebar-header">
+          <h2 class="slots-title">Manager auswählen</h2>
+          <button id="btn-manager-picker-close" class="char-side-sidebar-close-btn" title="Schließen">✕</button>
+        </div>
+        <div id="manager-picker-list" class="slots-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Organisations-Modus: bestehende Org übernehmen oder eigene erstellen ──
+       Teilt sich #app-atmosphere mit Hauptmenü/Charaktererstellung (starker
+       Blur, Hauptmenü-Atmosphäre schimmert durch) statt eines eigenen
+       Glow-Hintergrunds -- siehe SHARED_ATMOSPHERE_SCREENS in renderer.js.
+       Klick auf eine Karte markiert sie nur (grün ausgefüllt, bleibt so
+       stehen), navigiert aber erst bei Klick auf "Weiter" -- siehe
+       selectOrgMode()/goToOrgModeSelect() in renderer.js. -->
+  <div id="screen-org-mode-select" class="screen hidden">
+    <div class="org-mode-overlay">
+      <div class="org-mode-wrap">
+        <div class="org-mode-cards">
+          <div id="org-mode-existing" class="org-mode-card">
+            <div class="org-mode-icon">🏆</div>
+            <h2 class="org-mode-title">Eine bestehende<br>Organisation auswählen</h2>
+            <p class="org-mode-desc">Wähle eine der bestehenden Organisationen und übernimm die Führung. Manage das Team und führe es zu Siegen.</p>
+          </div>
+          <div id="org-mode-create" class="org-mode-card">
+            <div class="org-mode-icon">🎮</div>
+            <h2 class="org-mode-title">Organisation<br>erstellen</h2>
+            <p class="org-mode-desc">Erstelle deine eigene Organisation mit einzigartigem Namen und Managementstil. Entwickle sie von Grund auf und führe sie zum Erfolg.</p>
+          </div>
+        </div>
+      </div>
+      <button id="btn-org-mode-back" class="char-corner-btn char-corner-btn-back">← Zurück</button>
+      <button id="btn-org-mode-continue" class="char-corner-btn char-corner-btn-next" disabled>Weiter →</button>
+    </div>
+  </div>
+
+  <!-- ── Eigene Organisation erstellen ─────────────────────────────────────
+       Teilt sich #app-atmosphere (Blur-Hintergrund) wie die anderen Org-
+       Screens. NUR die Seite/UI ist hier fertig -- der "Erstellen"-Button
+       bleibt bewusst inert (kein Klick-Handler), die eigentliche Erstellungs-
+       Logik (echte Org anlegen, ins Spiel einbinden) folgt in einer
+       Folgerunde (User-Wunsch: "Logik machen wir dann nachher"). Teamlogo-
+       Hochladen/Auswählen/Zufällig ist dagegen bereits voll funktionsfähig --
+       reines Formular-Eingabewidget, keine Spiellogik, spiegelt 1:1 den
+       Portrait-Mechanismus aus der Charaktererstellung. -->
+  <div id="screen-org-create" class="screen hidden">
+    <div class="org-create-overlay">
+      <div id="org-create-content" class="org-create-content">
+        <h1 class="character-title">Organisation erstellen</h1>
+
+        <div class="org-create-panel">
+          <div class="org-create-row">
+            <div class="org-create-fields">
+              <div class="character-field-row">
+                <div class="character-field">
+                  <label>Nation *</label>
+                  <div class="char-dropdown" id="org-create-nation-dropdown">
+                    <button type="button" class="char-dropdown-trigger" id="org-create-nation-trigger"></button>
+                    <div class="char-dropdown-menu hidden" id="org-create-nation-menu"></div>
+                  </div>
+                </div>
+                <div class="character-field">
+                  <label>Teamfarbe *</label>
+                  <div class="char-dropdown" id="org-create-color-dropdown">
+                    <button type="button" class="char-dropdown-trigger" id="org-create-color-trigger"></button>
+                    <div class="char-dropdown-menu hidden" id="org-create-color-menu"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="character-field-row">
+                <div class="character-field">
+                  <label for="org-create-shortname-input">Kurzname *</label>
+                  <input id="org-create-shortname-input" type="text" maxlength="8" placeholder="z.B. NAVI" />
+                </div>
+                <div class="character-field">
+                  <label for="org-create-fullname-input">Vollständiger Name *</label>
+                  <input id="org-create-fullname-input" type="text" maxlength="40" placeholder="Vollständiger Teamname" />
+                </div>
+              </div>
+
+              <div class="character-field">
+                <label for="org-create-desc-input">Beschreibung *</label>
+                <textarea id="org-create-desc-input" maxlength="220" placeholder="Gib hier eine kurze Beschreibung ein"></textarea>
+              </div>
+
+              <div class="character-field">
+                <label>Startinvestition (Schwierigkeit) *</label>
+                <div id="org-create-difficulty-options" class="org-create-option-list">
+                  <button type="button" class="org-create-option" data-value="hard">
+                    <span class="org-create-option-box"></span>
+                    <span class="org-create-option-label">Schwer ($10K)</span>
+                  </button>
+                  <button type="button" class="org-create-option is-active" data-value="normal">
+                    <span class="org-create-option-box"></span>
+                    <span class="org-create-option-label">Normal ($100K) <span class="org-create-option-extra">+ 👤 2 (Personal)</span></span>
+                  </button>
+                  <button type="button" class="org-create-option" data-value="easy">
+                    <span class="org-create-option-box"></span>
+                    <span class="org-create-option-label">Einfach ($1Mil) <span class="org-create-option-extra">+ 👤 4 (Personal)</span></span>
+                  </button>
+                  <button type="button" class="org-create-option" data-value="casual">
+                    <span class="org-create-option-box"></span>
+                    <span class="org-create-option-label">Casual ($10Mil) <span class="org-create-option-extra">+ 👤 6 (Personal)</span></span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="character-field">
+                <label>Mit Free Agents auffüllen *</label>
+                <div class="org-create-option-list">
+                  <button type="button" id="btn-org-create-fill-agents" class="org-create-option is-active">
+                    <span class="org-create-option-box"></span>
+                    <span class="org-create-option-label">Starten mit <span class="org-create-option-extra">👥 3 (Spielern)</span></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="org-create-logo-block">
+              <label class="character-field-standalone-label">Teamlogo *</label>
+              <div id="org-create-logo-frame" class="org-create-logo-frame">
+                <span class="character-portrait-placeholder">🛡️</span>
+              </div>
+              <div class="org-create-logo-actions">
+                <button id="btn-org-create-logo-random" type="button" class="char-icon-btn">Zufällig 🎲</button>
+                <button id="btn-org-create-logo-upload" type="button" class="char-icon-btn">Hochladen 📁</button>
+                <button id="btn-org-create-logo-select" type="button" class="char-icon-btn">Auswählen →</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="org-create-footer">
+            <p id="org-create-error" class="character-error hidden"></p>
+            <button id="btn-org-create-submit" type="button" class="char-icon-btn org-create-submit-btn">Erstellen →</button>
+          </div>
+        </div>
+      </div>
+
+      <button id="btn-back-to-menu-orgcreate" class="char-corner-btn char-corner-btn-back">← Zurück</button>
+
+      <!-- Team-Logo-Vorlagen-Sidebar, spiegelt #portrait-picker-sidebar 1:1 --
+           liest aus assets/wappen-eigener_verein/ (list-team-logo-presets in
+           main.js). -->
+      <div id="org-logo-picker-sidebar" class="char-side-sidebar hidden">
+        <div class="char-side-sidebar-header">
+          <h2 class="slots-title">Logo auswählen</h2>
+          <button id="btn-org-logo-picker-close" class="char-side-sidebar-close-btn" title="Schließen">✕</button>
+        </div>
+        <div id="org-logo-picker-grid" class="portrait-picker-grid"></div>
+      </div>
     </div>
   </div>
 
@@ -141,13 +461,1118 @@
     </div>
   </div>
 
-  <!-- ── Org-Auswahlmenü (ersetzt den Zufalls-Automat in der Karriere) ────── -->
+  <!-- ── Org-Auswahlmenü (ersetzt den Zufalls-Automat in der Karriere) ──────
+       Teilt sich #app-atmosphere mit den anderen Screens (starker Blur,
+       Hauptmenü-Atmosphäre schimmert durch) statt eines eigenen Glow-
+       Hintergrunds -- siehe SHARED_ATMOSPHERE_SCREENS in renderer.js. Linke
+       Spalte ist jetzt eine echte, linksbündige Sidebar (wie .slots-sidebar/
+       .char-side-sidebar) statt eines mittig geflext-en Panels; die rechte
+       Seite zeigt im Leerzustand NUR den verschwommenen Hintergrund
+       (#org-preview-panel:empty blendet die Box komplett aus, siehe
+       style.css). -->
   <div id="screen-org-select" class="screen hidden">
-    <button id="btn-back-to-menu-orgselect" class="back-btn">← Hauptmenü</button>
-    <div class="org-select-wrap">
-      <h1 id="org-select-heading" class="intro-title">Willkommen, Manager</h1>
-      <p class="org-select-subtitle">Wähle die Organisation, die du übernehmen willst — jede bringt eigene Vor- und Nachteile.</p>
-      <div id="org-select-grid" class="org-select-grid"></div>
+    <div class="org-select-panel">
+      <h1 id="org-select-heading" class="org-select-panel-title">Willkommen, Manager</h1>
+      <div class="org-select-toolbar">
+        <div class="org-select-search">
+          <span class="org-select-search-icon">🔍</span>
+          <input id="org-select-search-input" type="text" placeholder="Organisation suchen...">
+        </div>
+        <div class="char-dropdown org-select-region-dropdown" id="org-select-region-dropdown">
+          <button type="button" class="org-select-region-trigger" id="org-select-region-trigger">🌍</button>
+          <div class="char-dropdown-menu hidden" id="org-select-region-menu"></div>
+        </div>
+      </div>
+      <div id="org-select-list" class="org-select-list"></div>
+      <div class="org-select-pagination">
+        <button id="org-select-prev" class="org-select-page-btn" type="button">‹</button>
+        <span id="org-select-page-label" class="org-select-page-label">1</span>
+        <button id="org-select-next" class="org-select-page-btn" type="button">›</button>
+        <span id="org-select-count-label" class="org-select-count-label"></span>
+      </div>
+    </div>
+    <div id="org-preview-panel" class="org-preview-panel"></div>
+    <button id="btn-back-to-menu-orgselect" class="char-corner-btn char-corner-btn-back">← Zurück</button>
+  </div>
+
+  <!-- ── Vertrags-Screen (Gründungsvereinbarung) ─────────────────────────────
+       Zwischenstopp nach "Team unterschreiben" im Org-Vorschau-Panel, bevor
+       confirmOrgAndProceed() wirklich feuert (siehe goToOrgContract() in
+       renderer.js). Eigener animierter Hintergrund statt #app-atmosphere
+       (bewusst NICHT in SHARED_ATMOSPHERE_SCREENS) -- Logo/Platzhalter der
+       gewählten Org in der Ecke, Datum live vom Systemdatum, echte
+       Maus-Unterschrift per <canvas>. -->
+  <div id="screen-org-contract" class="screen hidden">
+    <div class="org-contract-overlay">
+      <div id="org-contract-bg-pattern" class="org-contract-bg-pattern"></div>
+      <div class="org-contract-paper">
+        <div id="org-contract-logo" class="org-contract-logo"></div>
+        <div class="org-contract-header">
+          <h1>Gründungsvereinbarung der E-Sport-Organisation</h1>
+          <p>Allgemeine Geschäftsbedingungen für die Errichtung und Verwaltung der Organisation</p>
+        </div>
+        <div class="org-contract-body">
+          <p>Zwischen <strong id="org-contract-founder-name"></strong>, im Folgenden als „Gründer" bezeichnet, und der zu gründenden E-Sport-Organisation, im Folgenden als „Organisation" bezeichnet, wird diese Gründungsvereinbarung zu den folgenden Bedingungen geschlossen:</p>
+
+          <p><strong>Name der Organisation:</strong><br>
+          Die E-Sport-Organisation wird unter dem Namen <strong id="org-contract-org-name"></strong> registriert.</p>
+
+          <p><strong>Zweck:</strong><br>
+          Die Organisation bezweckt die Teilnahme an E-Sport-Wettbewerben, die Förderung von E-Sport-Veranstaltungen und den Aufbau professioneller Teams.</p>
+
+          <p><strong>Verantwortlichkeiten des Gründers:</strong><br>
+          Der Gründer erklärt sich bereit:<br>
+          - Die Organisation zu errichten und zu verwalten.<br>
+          - Spieler und Personal einzustellen.<br>
+          - Die Einhaltung der Wettbewerbsregeln und Organisationsrichtlinien sicherzustellen.<br>
+          - Finanzierung und Sponsoring zu sichern.</p>
+
+          <p><strong>Eigentum und Rechte:</strong><br>
+          Der Gründer behält das volle Eigentum an der Organisation und allem damit verbundenen geistigen Eigentum. Der Gründer hat das Recht, alle strategischen und operativen Entscheidungen zu treffen.</p>
+
+          <p><strong>Finanzielle Angelegenheiten:</strong><br>
+          Alle von der Organisation erwirtschafteten Gewinne gehören dem Gründer, sofern nicht anders mit Investoren oder Partnern vereinbart.<br>
+          Der Gründer ist für alle Ausgaben, Gehälter und Zahlungen im Zusammenhang mit der Organisation verantwortlich.</p>
+
+          <p><strong>Vertraulichkeit:</strong><br>
+          Der Gründer verpflichtet sich, die Vertraulichkeit aller sensiblen Informationen in Bezug auf Sponsoren, Spieler und Partner zu wahren.</p>
+
+          <p><strong>Auflösung:</strong><br>
+          Der Gründer kann die Organisation jederzeit auflösen. Verpflichtungen gegenüber Dritten müssen vor der Auflösung erfüllt werden.</p>
+
+          <p>Die Parteien bestätigen, dass sie mit den Bedingungen dieser Vereinbarung vertraut sind und verpflichten sich, diese einzuhalten.</p>
+        </div>
+
+        <div class="org-contract-options">
+          <div class="org-contract-options-title">Zusätzliche Karriereoptionen</div>
+          <button type="button" id="opt-ceo-fireable" class="org-contract-option is-active">
+            <span class="org-contract-option-box"></span>
+            <span>CEO kann entlassen werden, Erfolge aktiviert</span>
+          </button>
+
+          <div class="org-contract-options-title">Transfers für KI-Teams sperren</div>
+          <button type="button" class="org-contract-option org-contract-lock-option is-active" data-value="1">
+            <span class="org-contract-option-box"></span>
+            <span>Für 1 Monat</span>
+          </button>
+          <button type="button" class="org-contract-option org-contract-lock-option" data-value="6">
+            <span class="org-contract-option-box"></span>
+            <span>Für 6 Monate</span>
+          </button>
+        </div>
+
+        <button type="button" id="btn-org-contract-clear-signature" class="org-contract-clear-btn">Leeren</button>
+
+        <div class="org-contract-footer">
+          <div class="org-contract-date-block">
+            <span class="org-contract-date-label">Datum:</span><br>
+            <span id="org-contract-date"></span>
+          </div>
+          <div class="org-contract-signature-block">
+            <canvas id="org-contract-signature-canvas" width="440" height="120"></canvas>
+            <span class="org-contract-signature-label">Hier unterschreiben</span>
+            <p id="org-contract-signature-error" class="org-contract-signature-error hidden">Bitte zuerst unterschreiben.</p>
+          </div>
+        </div>
+      </div>
+
+      <button id="btn-org-contract-back" class="char-corner-btn char-corner-btn-back">← Zurück</button>
+      <button id="btn-org-contract-continue" class="char-corner-btn char-corner-btn-next">Fortfahren →</button>
+    </div>
+  </div>
+
+  <!-- ── Dashboard (neuer Haupt-Hub nach Vertragsunterschrift) ─────────────────
+       User-Wunsch: Sidebar+Top-Nav-Layout wie im Referenz-Screenshot. Diese
+       Runde bewusst NUR die Navigations-Hülle (Sidebar links + Top-Leiste) --
+       Seiteninhalt (Mitte/rechts) folgt in einer späteren Runde ("Alles
+       andere an Inhalt erstmals ignorieren"). Sidebar-Klicks wechseln aktuell
+       nur aktiven Zustand + Seitentitel, führen noch zu keiner echten
+       Unterseite -- siehe selectDashboardPage() in renderer.js. -->
+  <div id="screen-dashboard" class="screen hidden">
+    <div class="dashboard-shell">
+      <header class="dashboard-topbar">
+        <div class="dashboard-identity">
+          <div id="dashboard-org-logo" class="dashboard-org-logo"></div>
+          <div class="dashboard-identity-text">
+            <span id="dashboard-manager-name" class="dashboard-manager-name"></span>
+            <span id="dashboard-org-name" class="dashboard-org-name"></span>
+          </div>
+        </div>
+        <div class="dashboard-history-nav">
+          <button type="button" class="dashboard-history-btn" disabled>‹</button>
+          <button type="button" class="dashboard-history-btn" disabled>›</button>
+        </div>
+        <div class="dashboard-title-block">
+          <div id="dashboard-region-badge" class="dashboard-region-badge">🌍 REGION: <span id="dashboard-region-value">–</span></div>
+          <h1 id="dashboard-page-title" class="dashboard-page-title">Startseite</h1>
+        </div>
+        <div class="dashboard-date-block">
+          <div class="dashboard-date-text">
+            <span id="dashboard-date-weekday" class="dashboard-date-weekday"></span>
+            <span id="dashboard-date-line" class="dashboard-date-line"></span>
+          </div>
+          <button id="btn-dashboard-advance-day" type="button" class="dashboard-weiter-btn">WEITER »</button>
+          <button id="btn-dashboard-fast-forward" type="button" class="dashboard-fast-forward-btn" title="Schnellvorlauf: springt bis zum nächsten Anmeldetag/Transferfenster">⏩</button>
+        </div>
+      </header>
+
+      <div class="dashboard-body">
+        <nav id="dashboard-sidebar" class="dashboard-sidebar">
+          <button type="button" class="dashboard-sidebar-item is-active" data-page="home">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h5v-5h2v5h5v-9"/></svg>
+            <span>Startseite</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item is-locked" data-page="post">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>
+            <span>Post</span>
+            <span class="dashboard-sidebar-lock-badge">🔒</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item is-locked" data-page="messages">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4V5Z"/></svg>
+            <span>Nachrichten</span>
+            <span class="dashboard-sidebar-lock-badge">🔒</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item" data-page="roster">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M4 20c0-3 2.5-5 5-5s5 2 5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 20c.2-2.3 1.7-4 3.6-4.4"/></svg>
+            <span>Kader</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item is-locked" data-page="staff">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>
+            <span>Personal</span>
+            <span class="dashboard-sidebar-lock-badge">🔒</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item is-locked" data-page="training">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4M21 10v4M6 8v8M18 8v8M6 12h12"/></svg>
+            <span>Training</span>
+            <span class="dashboard-sidebar-lock-badge">🔒</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item is-locked" data-page="tactics">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M8 11h8M8 15h5"/></svg>
+            <span>Strategien</span>
+            <span class="dashboard-sidebar-lock-badge">🔒</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item" data-page="scouting">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+            <span>Scouting</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item" data-page="transfers">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>
+            <span>Transfers</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item" data-page="tournaments">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M5 6H3v2a4 4 0 0 0 4 4M19 6h2v2a4 4 0 0 1-4 4"/><path d="M12 13v4M9 21h6M9.5 21c0-2 1-3 2.5-4 1.5 1 2.5 2 2.5 4"/></svg>
+            <span>Turniere</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item" data-page="stats">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>
+            <span>Statistiken</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item is-locked" data-page="basecamp">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 12 5l8 15Z"/><path d="M9 20l3-6 3 6"/></svg>
+            <span>Basecamp</span>
+            <span class="dashboard-sidebar-lock-badge">🔒</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item is-locked" data-page="shop">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2l2.4 11.2A2 2 0 0 0 9.4 17h7.2a2 2 0 0 0 2-1.6L20 7H6"/></svg>
+            <span>Shop</span>
+            <span class="dashboard-sidebar-lock-badge">🔒</span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item" data-page="sponsors">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"/><path d="M9 13.5 7 21l5-3 5 3-2-7.5"/></svg>
+            <span>Sponsoren</span>
+            <span id="dashboard-sidebar-badge-sponsors" class="dashboard-sidebar-badge hidden"></span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item" data-page="finance">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1.4"/></svg>
+            <span>Finanzen</span>
+            <span id="dashboard-sidebar-badge-finance" class="dashboard-sidebar-badge hidden"></span>
+          </button>
+          <button type="button" class="dashboard-sidebar-item" data-page="settings">
+            <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+            <span>Einstellungen</span>
+          </button>
+        </nav>
+
+        <main class="dashboard-main">
+          <div id="dashboard-page-placeholder" class="dashboard-main-placeholder">
+            <p>🚧 Inhalt folgt in einer späteren Runde.</p>
+          </div>
+
+          <!-- Dashboard-Startseite (User-Vorgabe: UI wie im mitgeschickten
+               Referenz-Screenshot "Esports Manager 2026"). Reine Kurzübersicht
+               aus bereits bestehenden, echten Datenquellen (Kader-Zustand,
+               Turnierkalender, Match-Historie, Saison-Rangliste) -- kein neues
+               Datenmodell. Zwei bewusste Abweichungen vom Referenz-Screenshot:
+               (1) kein Kartentraining-System im Spiel vorhanden (siehe
+               "Training", gesperrte Seite) -- das Status-Banner zeigt
+               stattdessen echte Kader-Mindestgröße-/Reserve-Warnungen. (2)
+               "Globale ERS-Rangliste" (ein erfundenes, regionsübergreifendes
+               Elo-/Liga-Stufen-System) gibt es hier nicht -- Saison-Punkte
+               sind seit Runde 90 bewusst REGIONAL gebunden, daher zeigt diese
+               Karte die echte Saison-Rangliste der eigenen Region (dieselbe
+               Datenquelle/Hervorhebung wie Statistiken, Runde 110/112). -->
+          <div id="dashboard-page-home" class="dashboard-home-panel hidden">
+            <div id="dashboard-home-status-banner" class="dashboard-home-status-banner">
+              <span id="dashboard-home-status-icon" class="dashboard-home-status-icon"></span>
+              <div class="dashboard-home-status-text">
+                <span id="dashboard-home-status-title" class="dashboard-home-status-title"></span>
+                <span id="dashboard-home-status-sub" class="dashboard-home-status-sub"></span>
+              </div>
+            </div>
+
+            <div class="dashboard-home-grid">
+              <div class="dashboard-home-col">
+                <div class="dashboard-home-card">
+                  <div class="dashboard-home-card-title">» Organisation</div>
+                  <div class="dashboard-home-org-label">KADER</div>
+                  <div id="dashboard-home-org-avatars" class="dashboard-home-org-avatars"></div>
+                  <div id="dashboard-home-org-condition" class="dashboard-home-org-condition"></div>
+                </div>
+                <div class="dashboard-home-card">
+                  <div class="dashboard-home-card-title">» Wichtige Ereignisse</div>
+                  <div class="dashboard-home-event-row">
+                    <span class="dashboard-home-event-icon">💻</span>
+                    <div class="dashboard-home-event-text">
+                      <span class="dashboard-home-event-title">Willkommen!</span>
+                      <span class="dashboard-home-event-sub">Willkommen bei RLCS Legends!</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="dashboard-home-col">
+                <div class="dashboard-home-card">
+                  <div class="dashboard-home-card-title">» Anstehende Turniere</div>
+                  <div id="dashboard-home-upcoming" class="dashboard-home-upcoming"></div>
+                </div>
+                <div class="dashboard-home-card">
+                  <div class="dashboard-home-card-title">» Letzte Ergebnisse</div>
+                  <div id="dashboard-home-results" class="dashboard-home-results"></div>
+                </div>
+              </div>
+
+              <div class="dashboard-home-col dashboard-home-col-ranking">
+                <div class="dashboard-home-card dashboard-home-ranking-card">
+                  <div class="dashboard-home-card-title">» Saison-Rangliste <span id="dashboard-home-ranking-region" class="dashboard-home-ranking-region"></span></div>
+                  <div class="dashboard-stats-table-header dashboard-home-ranking-header">
+                    <span class="dashboard-stats-col-rank">PLATZ</span>
+                    <span class="dashboard-stats-col-team">TEAM</span>
+                    <span class="dashboard-stats-col-num">PKT.</span>
+                  </div>
+                  <div id="dashboard-home-ranking-body" class="dashboard-home-ranking-body"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Einzige Ausnahme zu "Inhalt folgt später" -- User wollte diese
+               Seite jetzt konkret gebaut haben. Wiederverwendet die ECHTEN
+               appSettings/window.electronAPI-Einstellungen (siehe
+               screen-settings weiter unten) statt eigener Fake-Regler --
+               "Musik"/"Stimme" aus dem Referenz-Screenshot gibt es im Spiel
+               nicht als eigene Audiospuren, deshalb hier ehrlich "Sound-
+               Effekte"/"Intro-Video" beschriftet (genau die zwei echten
+               Lautstärke-Werte, die es gibt). -->
+          <div id="dashboard-page-settings" class="dashboard-settings-panel hidden">
+            <div class="dashboard-settings-card">
+              <div class="dashboard-settings-section-title">Lautstärke</div>
+              <div class="settings-row">
+                <label class="settings-label" for="dashboard-settings-music-volume">Hintergrundmusik</label>
+                <div class="settings-volume-row">
+                  <input id="dashboard-settings-music-volume" type="range" min="0" max="100" step="1" class="settings-volume-slider" />
+                  <span id="dashboard-settings-music-volume-value" class="settings-volume-value">30%</span>
+                </div>
+              </div>
+              <div class="settings-row">
+                <label class="settings-label" for="dashboard-settings-sound-volume">Sound-Effekte</label>
+                <div class="settings-volume-row">
+                  <input id="dashboard-settings-sound-volume" type="range" min="0" max="100" step="1" class="settings-volume-slider" />
+                  <span id="dashboard-settings-sound-volume-value" class="settings-volume-value">50%</span>
+                </div>
+              </div>
+              <div class="settings-row">
+                <label class="settings-label" for="dashboard-settings-intro-volume">Intro-Video</label>
+                <div class="settings-volume-row">
+                  <input id="dashboard-settings-intro-volume" type="range" min="0" max="100" step="1" class="settings-volume-slider" />
+                  <span id="dashboard-settings-intro-volume-value" class="settings-volume-value">70%</span>
+                </div>
+              </div>
+
+              <div class="dashboard-settings-section-title">Anzeige</div>
+              <div class="dashboard-settings-dropdown-row">
+                <select id="dashboard-settings-window-size" class="settings-select">
+                  <option value="1280x800">1280 × 800</option>
+                  <option value="1366x768">1366 × 768</option>
+                  <option value="1600x900">1600 × 900</option>
+                  <option value="1920x1080">1920 × 1080</option>
+                  <option value="maximized">Maximiert</option>
+                </select>
+                <select id="dashboard-settings-ui-scale" class="settings-select">
+                  <option value="0.9">Klein</option>
+                  <option value="1">Normal</option>
+                  <option value="1.1">Groß</option>
+                  <option value="1.25">Sehr groß</option>
+                </select>
+              </div>
+              <button type="button" id="dashboard-settings-fullscreen" class="dashboard-settings-checkbox-btn">
+                <span class="dashboard-settings-checkbox-box"></span> Vollbild
+              </button>
+
+              <div class="dashboard-settings-section-title">Sprache</div>
+              <select class="settings-select" disabled title="Weitere Sprachen kommen später">
+                <option>Deutsch</option>
+              </select>
+
+              <button type="button" id="btn-dashboard-settings-exit" class="dashboard-settings-exit-btn">Beenden zum Menü</button>
+            </div>
+          </div>
+
+          <!-- Zweite Ausnahme zu "Inhalt folgt später" (nach "Einstellungen").
+               Echte Daten wo vorhanden: Gesamtsaldo (getRemaining()),
+               Gesamteinnahmen/-ausgaben + Transaktionsliste (aus transferLog),
+               Finanzvorstand (aus assignedOrg.roster.staff). Die Budget-
+               Verteilung (Regler+Kreisdiagramm) ist ein neues, eigenständiges
+               Planungs-Feature (persistiert, wirkt sich aber noch NICHT auf
+               andere Spielsysteme aus). Die 12-Monats-Cashflow-Grafik ist
+               bewusst nur strukturell (kein monatsgenaues Tracking im Spiel
+               vorhanden) -- siehe renderDashboardFinancePanel() in renderer.js. -->
+          <div id="dashboard-page-finance" class="dashboard-finance-panel hidden">
+            <div class="dashboard-finance-main">
+              <div class="dashboard-finance-card dashboard-finance-summary-card">
+                <div class="dashboard-finance-summary-item">
+                  <span class="dashboard-finance-summary-label">Gesamtsaldo</span>
+                  <span id="dashboard-finance-balance" class="dashboard-finance-summary-value dashboard-finance-balance"></span>
+                </div>
+                <div class="dashboard-finance-summary-item">
+                  <span class="dashboard-finance-summary-label">Gesamteinnahmen</span>
+                  <span id="dashboard-finance-income" class="dashboard-finance-summary-value dashboard-finance-value-income"></span>
+                </div>
+                <div class="dashboard-finance-summary-item">
+                  <span class="dashboard-finance-summary-label">Gesamtausgaben</span>
+                  <span id="dashboard-finance-expenses" class="dashboard-finance-summary-value dashboard-finance-value-expense"></span>
+                </div>
+                <div id="dashboard-finance-pending-prize-item" class="dashboard-finance-summary-item hidden">
+                  <span class="dashboard-finance-summary-label">Nicht zugeteiltes Budget (Preisgeld)</span>
+                  <span id="dashboard-finance-pending-prize" class="dashboard-finance-summary-value dashboard-finance-value-pending"></span>
+                </div>
+              </div>
+
+              <div class="dashboard-finance-card dashboard-finance-alloc-card">
+                <div class="dashboard-finance-pie-col">
+                  <div id="dashboard-finance-pie" class="dashboard-finance-pie"></div>
+                  <div class="dashboard-finance-unallocated">
+                    <div class="dashboard-finance-unallocated-label-row">
+                      <span class="dashboard-finance-alloc-swatch dashboard-finance-swatch-unallocated"></span>
+                      <span class="dashboard-finance-unallocated-label">Nicht eingeteiltes Geld</span>
+                    </div>
+                    <span id="dashboard-finance-unallocated-value" class="dashboard-finance-unallocated-value"></span>
+                  </div>
+                </div>
+                <div class="dashboard-finance-alloc-list">
+                  <div class="dashboard-finance-alloc-item">
+                    <div class="dashboard-finance-alloc-header">
+                      <span class="dashboard-finance-alloc-swatch dashboard-finance-swatch-transfers"></span>
+                      <span class="dashboard-finance-alloc-label">Transfers</span>
+                      <span id="dashboard-finance-transfers-value" class="dashboard-finance-alloc-value"></span>
+                    </div>
+                    <input id="dashboard-finance-transfers-slider" type="range" min="0" max="100000" step="100" class="dashboard-finance-alloc-slider" />
+                  </div>
+                  <div class="dashboard-finance-alloc-item">
+                    <div class="dashboard-finance-alloc-header">
+                      <span class="dashboard-finance-alloc-swatch dashboard-finance-swatch-salaries"></span>
+                      <span class="dashboard-finance-alloc-label">Gehälter</span>
+                      <span id="dashboard-finance-salaries-value" class="dashboard-finance-alloc-value"></span>
+                    </div>
+                    <input id="dashboard-finance-salaries-slider" type="range" min="0" max="100000" step="100" class="dashboard-finance-alloc-slider" />
+                  </div>
+                  <div class="dashboard-finance-alloc-item">
+                    <div class="dashboard-finance-alloc-header">
+                      <span class="dashboard-finance-alloc-swatch dashboard-finance-swatch-marketing"></span>
+                      <span class="dashboard-finance-alloc-label">Marketing</span>
+                      <span id="dashboard-finance-marketing-value" class="dashboard-finance-alloc-value"></span>
+                    </div>
+                    <input id="dashboard-finance-marketing-slider" type="range" min="0" max="100000" step="100" class="dashboard-finance-alloc-slider" />
+                  </div>
+                  <div class="dashboard-finance-alloc-item">
+                    <div class="dashboard-finance-alloc-header">
+                      <span class="dashboard-finance-alloc-swatch dashboard-finance-swatch-operations"></span>
+                      <span class="dashboard-finance-alloc-label">Betriebskosten</span>
+                      <span id="dashboard-finance-operations-value" class="dashboard-finance-alloc-value"></span>
+                    </div>
+                    <input id="dashboard-finance-operations-slider" type="range" min="0" max="100000" step="100" class="dashboard-finance-alloc-slider" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="dashboard-finance-card dashboard-finance-cashflow-card">
+                <div class="dashboard-finance-cashflow-header">
+                  <div class="dashboard-finance-cashflow-block">
+                    <span class="dashboard-finance-summary-label">Cashflow</span>
+                    <span class="dashboard-finance-cashflow-value">
+                      <span id="dashboard-finance-cashflow-income" class="dashboard-finance-value-income"></span>/<span id="dashboard-finance-cashflow-expense" class="dashboard-finance-value-expense"></span>
+                    </span>
+                  </div>
+                  <div id="dashboard-finance-cfo" class="dashboard-finance-cfo"></div>
+                  <button type="button" id="btn-dashboard-finance-report" class="dashboard-finance-report-btn" disabled title="Ausführlicher Bericht kommt in einer späteren Runde">Bericht</button>
+                </div>
+                <div id="dashboard-finance-chart" class="dashboard-finance-chart"></div>
+              </div>
+            </div>
+
+            <div class="dashboard-finance-transactions">
+              <div class="dashboard-finance-transactions-header">
+                <span>Datum</span><span>Budget</span><span>Typ</span><span>Betrag</span><span>Beschreibung</span>
+              </div>
+              <div id="dashboard-finance-transactions-list" class="dashboard-finance-transactions-list"></div>
+            </div>
+          </div>
+
+          <!-- Dritte Ausnahme zu "Inhalt folgt später" (nach "Einstellungen"/
+               "Finanzen"). 60 fiktive Sponsoren (data/sponsors.js, 5 Tiers x 12,
+               Sterne 1:1 an Tier gekoppelt, je 3-6 Ziele mit echten, im Spiel
+               tatsächlich getrackten Statistiken -- siehe Kommentar in
+               data/sponsors.js). Status/Bewerbungs-/Ziel-Logik siehe
+               renderDashboardSponsorsPanel() & Umgebung in renderer.js. -->
+          <div id="dashboard-page-sponsors" class="dashboard-sponsors-panel hidden">
+            <div class="dashboard-sponsors-main">
+              <div class="dashboard-sponsors-subtabs">
+                <button type="button" class="dashboard-sponsors-subtab is-active" data-subtab="overview">Übersicht</button>
+                <button type="button" class="dashboard-sponsors-subtab" data-subtab="mine">Meine Sponsoren</button>
+              </div>
+
+              <div id="dashboard-sponsors-overview" class="dashboard-sponsors-subpanel dashboard-sponsors-overview-row">
+                <div id="dashboard-sponsors-detail" class="dashboard-sponsor-detail hidden">
+                  <div class="dashboard-sponsor-detail-status">
+                    <span id="sponsor-detail-status-dot" class="dashboard-sponsor-detail-status-dot"></span>
+                    <span id="sponsor-detail-status-text" class="dashboard-sponsor-detail-status-text"></span>
+                  </div>
+                  <div class="dashboard-sponsor-detail-head">
+                    <div id="sponsor-detail-logo" class="dashboard-sponsor-detail-logo"></div>
+                    <div>
+                      <div id="sponsor-detail-name" class="dashboard-sponsor-detail-name"></div>
+                      <p id="sponsor-detail-description" class="dashboard-sponsor-detail-description"></p>
+                    </div>
+                  </div>
+                  <div id="sponsor-detail-actions" class="dashboard-sponsor-detail-actions"></div>
+                  <div id="sponsor-detail-goals" class="dashboard-sponsor-detail-goals"></div>
+                </div>
+
+                <div class="dashboard-sponsors-browse">
+                  <div id="dashboard-sponsors-tier-filter" class="dashboard-sponsors-tier-filter">
+                    <button type="button" class="dashboard-sponsors-tier-btn is-active" data-tier="all">All</button>
+                    <button type="button" class="dashboard-sponsors-tier-btn" data-tier="S">Tier S</button>
+                    <button type="button" class="dashboard-sponsors-tier-btn" data-tier="A">Tier A</button>
+                    <button type="button" class="dashboard-sponsors-tier-btn" data-tier="B">Tier B</button>
+                    <button type="button" class="dashboard-sponsors-tier-btn" data-tier="C">Tier C</button>
+                    <button type="button" class="dashboard-sponsors-tier-btn" data-tier="D">Tier D</button>
+                  </div>
+
+                  <div id="dashboard-sponsors-grid" class="dashboard-sponsors-grid"></div>
+                  <div id="dashboard-sponsors-pagination" class="dashboard-sponsors-pagination"></div>
+                </div>
+              </div>
+
+              <div id="dashboard-sponsors-mine" class="dashboard-sponsors-subpanel dashboard-sponsors-overview-row hidden">
+                <div id="dashboard-sponsors-mine-detail" class="dashboard-sponsor-detail hidden">
+                  <div class="dashboard-sponsor-detail-status">
+                    <span id="mine-sponsor-detail-status-dot" class="dashboard-sponsor-detail-status-dot"></span>
+                    <span id="mine-sponsor-detail-status-text" class="dashboard-sponsor-detail-status-text"></span>
+                  </div>
+                  <div class="dashboard-sponsor-detail-head">
+                    <div id="mine-sponsor-detail-logo" class="dashboard-sponsor-detail-logo"></div>
+                    <div>
+                      <div id="mine-sponsor-detail-name" class="dashboard-sponsor-detail-name"></div>
+                      <p id="mine-sponsor-detail-description" class="dashboard-sponsor-detail-description"></p>
+                    </div>
+                  </div>
+                  <div id="mine-sponsor-detail-actions" class="dashboard-sponsor-detail-actions"></div>
+                  <div id="mine-sponsor-detail-goals" class="dashboard-sponsor-detail-goals"></div>
+                </div>
+
+                <div class="dashboard-sponsors-browse">
+                  <div id="dashboard-sponsors-mine-grid" class="dashboard-sponsors-grid"></div>
+                  <div id="dashboard-sponsors-mine-empty" class="dashboard-sponsors-mine-empty hidden">Noch keine Sponsoren unter Vertrag.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="dashboard-sponsors-jersey-col">
+              <div class="dashboard-sponsors-jersey-frame">
+                <svg id="dashboard-sponsors-jersey-svg" viewBox="0 0 128 154" class="dashboard-sponsors-jersey-svg" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M96 4 C96 4 84 14 64 14 C44 14 32 4 32 4 L2 34 L22 62 L32 54 L32 138 C32 145 38 150 45 150 L83 150 C90 150 96 145 96 138 L96 54 L106 62 L126 34 Z" />
+                </svg>
+                <div id="dashboard-sponsors-jersey-logo" class="dashboard-sponsors-jersey-logo"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- "Turniere" (Runde 43) -- bildet die bestehende Saisonstruktur
+               (3x Open Qualifier -> Major -> Last Chance Qualifier ->
+               Weltmeisterschaft, siehe data/tournament-calendar.js) auf einen
+               Kalender ab. Rendering/Logik siehe renderDashboardTournamentsPanel()
+               in renderer.js. "Details" öffnet bei JEDER Turnierart die echte
+               Detailseite (#dashboard-page-tournament-detail, Runde 44,
+               erweitert auf alle Turnierarten in Runde 81). -->
+          <div id="dashboard-page-tournaments" class="dashboard-tournaments-panel hidden">
+            <div id="dashboard-season-skip-banner" class="dashboard-season-skip-banner hidden">
+              <span>❌ Du bist für den Rest der Saison ausgeschieden.</span>
+              <button type="button" id="btn-season-skip" class="dashboard-season-skip-btn">Rest der Saison überspringen »»</button>
+            </div>
+            <div class="dashboard-tournaments-calendar-col">
+              <div class="dashboard-tournaments-breadcrumb">» Turnierkalender</div>
+              <div id="dashboard-transfer-window-status" class="dashboard-transfer-window-status"></div>
+              <div class="dashboard-tournament-cal-card">
+                <div class="dashboard-tournament-cal-header">
+                  <button type="button" id="btn-tournament-cal-prev" class="dashboard-tournament-cal-nav-btn">‹</button>
+                  <div id="dashboard-tournament-cal-title" class="dashboard-tournament-cal-title">JANUAR, 2026</div>
+                  <button type="button" id="btn-tournament-cal-next" class="dashboard-tournament-cal-nav-btn">›</button>
+                </div>
+                <div class="dashboard-tournament-cal-weekdays">
+                  <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span>
+                </div>
+                <div id="dashboard-tournament-cal-grid" class="dashboard-tournament-cal-grid"></div>
+              </div>
+            </div>
+
+            <div class="dashboard-tournaments-list-col">
+              <div class="dashboard-tournaments-breadcrumb">» BEVORSTEHEND</div>
+              <div id="dashboard-tournaments-list" class="dashboard-tournaments-list"></div>
+            </div>
+          </div>
+
+          <!-- Turnier-Detailseite (Runde 44, seit Runde 81 für ALLE
+               Turnierarten -- Open/Major/LCQ/Weltmeisterschaft -- über
+               "DETAILS" auf der Turniere-Seite erreichbar
+               (openTournamentDetail() in renderer.js). Bleibt Teil der
+               Dashboard-Hülle (Sidebar/Topbar/WEITER-Button unverändert
+               sichtbar). Anmeldung ist seit Runde 81 nur beim Open Qualifier
+               (open0, Januar) möglich, siehe openRegistrationStatus() --
+               alle anderen Turniere zeigen einen Sperr-Hinweis, bis die
+               Saison-Gate-Qualifikation echt geprüft wird. -->
+          <div id="dashboard-page-tournament-detail" class="dashboard-tournament-detail-panel hidden">
+            <button type="button" id="btn-tournament-detail-back" class="dashboard-tournaments-breadcrumb dashboard-tournament-detail-back">‹ Zurück zum Turnierkalender</button>
+
+            <div class="dashboard-tournament-detail-header">
+              <div id="dashboard-tournament-detail-logo" class="dashboard-tournament-detail-logo"></div>
+              <div class="dashboard-tournament-detail-header-text">
+                <div id="dashboard-tournament-detail-dates" class="dashboard-tournament-detail-dates"></div>
+                <h2 id="dashboard-tournament-detail-name" class="dashboard-tournament-detail-name"></h2>
+                <div class="dashboard-tournament-detail-meta">
+                  <span id="dashboard-tournament-detail-stars" class="dashboard-tournament-stars"></span>
+                  <span id="dashboard-tournament-detail-tier" class="dashboard-tournament-tier-badge"></span>
+                  <span id="dashboard-tournament-detail-region" class="dashboard-tournament-detail-region"></span>
+                </div>
+              </div>
+              <div class="dashboard-tournament-detail-header-right">
+                <div id="dashboard-tournament-detail-prize" class="dashboard-tournament-card-prize"></div>
+                <div id="dashboard-tournament-detail-points" class="dashboard-tournament-card-points"></div>
+              </div>
+            </div>
+
+            <!-- Runde 50: Tab-Leiste ist jetzt dynamisch -- jede echte
+                 RLCS-Turnierphase (Swiss/Play-In/Gruppenphase/Playoffs, je
+                 nach Turnierart unterschiedlich viele) bekommt ihren EIGENEN
+                 Tab in chronologischer Reihenfolge, statt zwei fest
+                 zusammengefasste Swiss/Playoff-Tabs. Nur "Übersicht" ist
+                 statisch, der Rest wird per renderTournamentFormatTabs() in
+                 renderer.js erzeugt/geleert. -->
+            <div class="dashboard-tournament-detail-tabs" id="dashboard-tournament-detail-tabs">
+              <button type="button" class="dashboard-tournament-detail-tab is-active" data-detail-tab="overview">Übersicht</button>
+            </div>
+
+            <div id="dashboard-tournament-detail-tab-overview" class="dashboard-tournament-detail-tab-content">
+              <div class="dashboard-tournaments-breadcrumb">» Anmeldung</div>
+              <div id="dashboard-tournament-detail-registration" class="dashboard-tournament-detail-registration"></div>
+
+              <div class="dashboard-tournaments-breadcrumb">» Teilnehmer</div>
+              <div id="dashboard-tournament-detail-slots" class="dashboard-tournament-detail-slots"></div>
+            </div>
+            <div id="dashboard-tournament-detail-dynamic-content"></div>
+          </div>
+
+          <!-- "Statistiken" (Runde 110) -- Teams-Tabelle + Detailpanel, siehe
+               renderDashboardStatsPanel() in renderer.js. "Spieler"-Tab
+               (Runde 113) nutzt die neue playerDevelopment-Nachverfolgung
+               (siehe Kopfkommentar in renderer.js) -- nicht mehr gesperrt. -->
+          <div id="dashboard-page-stats" class="dashboard-stats-panel hidden">
+            <div class="dashboard-stats-main">
+              <div class="dashboard-stats-top">
+                <div class="dashboard-stats-tabs">
+                  <button type="button" class="dashboard-stats-tab is-active" data-stats-tab="teams">Teams</button>
+                  <button type="button" class="dashboard-stats-tab" data-stats-tab="players">Spieler</button>
+                </div>
+                <div class="dashboard-stats-search-row">
+                  <span id="dashboard-stats-team-count" class="dashboard-stats-team-count"></span>
+                  <div class="dashboard-stats-search-box">
+                    <input type="text" id="dashboard-stats-search" class="dashboard-stats-search-input" placeholder="Team suchen…" />
+                    <button type="button" id="btn-dashboard-stats-search-clear" class="dashboard-stats-search-clear">×</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- "Teams"-Ansicht (Runde 110) -->
+              <div id="dashboard-stats-teams-view" class="dashboard-stats-tab-view">
+                <div class="dashboard-stats-region-filter" id="dashboard-stats-region-filter">
+                  <button type="button" class="dashboard-stats-region-btn" data-stats-region="EU">Europa</button>
+                  <button type="button" class="dashboard-stats-region-btn" data-stats-region="NA">Nordamerika</button>
+                  <button type="button" class="dashboard-stats-region-btn" data-stats-region="SAM">Südamerika</button>
+                  <button type="button" class="dashboard-stats-region-btn" data-stats-region="MENA">MENA</button>
+                  <button type="button" class="dashboard-stats-region-btn" data-stats-region="OCE">Ozeanien</button>
+                  <button type="button" class="dashboard-stats-region-btn" data-stats-region="APAC">APAC</button>
+                  <button type="button" class="dashboard-stats-region-btn" data-stats-region="SSA">Subsahara-Afrika</button>
+                </div>
+
+                <div class="dashboard-stats-table-wrap">
+                  <div class="dashboard-stats-table-header">
+                    <span class="dashboard-stats-col-rank">PLATZ</span>
+                    <span class="dashboard-stats-col-team">TEAM</span>
+                    <span class="dashboard-stats-col-num">SIEGQUOTE</span>
+                    <span class="dashboard-stats-col-num">MAJORS</span>
+                    <span class="dashboard-stats-col-num">WORLDS</span>
+                    <span class="dashboard-stats-col-num">PUNKTE</span>
+                    <span class="dashboard-stats-col-num">PLAYOFFS</span>
+                  </div>
+                  <div id="dashboard-stats-table-body" class="dashboard-stats-table-body"></div>
+                </div>
+                <div id="dashboard-stats-pagination" class="dashboard-stats-pagination"></div>
+              </div>
+
+              <!-- "Spieler"-Ansicht (Runde 113) -- Spalten bewusst NICHT die
+                   CS2-Begriffe aus dem Referenz-Screenshot (K/D, ADR, HS%, MVP,
+                   IR), sondern echte Rocket-League-/Spiel-Werte, siehe
+                   renderer.js Kopfkommentar an der Spieler-Entwicklung. -->
+              <div id="dashboard-stats-players-view" class="dashboard-stats-tab-view hidden">
+                <div class="dashboard-stats-table-wrap">
+                  <div class="dashboard-stats-player-table-header">
+                    <span class="dashboard-stats-col-rank">PLATZ</span>
+                    <span class="dashboard-stats-col-team">SPIELER</span>
+                    <span class="dashboard-stats-col-num">SPIELE</span>
+                    <span class="dashboard-stats-col-num">SIEGQUOTE</span>
+                    <span class="dashboard-stats-col-num">TORE</span>
+                    <span class="dashboard-stats-col-num">OVERALL</span>
+                    <span class="dashboard-stats-col-num">STERNE</span>
+                    <span class="dashboard-stats-col-num">ENTW.</span>
+                  </div>
+                  <div id="dashboard-stats-player-table-body" class="dashboard-stats-table-body"></div>
+                </div>
+                <div id="dashboard-stats-player-pagination" class="dashboard-stats-pagination"></div>
+              </div>
+            </div>
+
+            <div id="dashboard-stats-teams-detail-col" class="dashboard-stats-detail-col">
+              <div class="dashboard-stats-detail-card">
+                <div class="dashboard-stats-detail-head">
+                  <div id="dashboard-stats-detail-logo" class="dashboard-stats-detail-logo"></div>
+                  <div class="dashboard-stats-detail-head-text">
+                    <div id="dashboard-stats-detail-name" class="dashboard-stats-detail-name"></div>
+                    <p id="dashboard-stats-detail-description" class="dashboard-stats-detail-description"></p>
+                  </div>
+                </div>
+                <button type="button" id="btn-dashboard-stats-more-info" class="dashboard-stats-more-info-btn">MEHR INFO</button>
+              </div>
+
+              <div class="dashboard-stats-detail-card">
+                <div class="dashboard-stats-detail-section-title">FORM-VERLAUF</div>
+                <div id="dashboard-stats-form-chart" class="dashboard-stats-form-chart"></div>
+              </div>
+
+              <div class="dashboard-stats-detail-card">
+                <div class="dashboard-stats-detail-section-title">NEUESTE ERFOLGE</div>
+                <div id="dashboard-stats-recent-results" class="dashboard-stats-recent-results"></div>
+              </div>
+            </div>
+
+            <div id="dashboard-stats-players-detail-col" class="dashboard-stats-detail-col hidden">
+              <div class="dashboard-stats-detail-card">
+                <div class="dashboard-stats-detail-head">
+                  <div id="dashboard-stats-player-detail-avatar" class="dashboard-stats-detail-logo"></div>
+                  <div class="dashboard-stats-detail-head-text">
+                    <div id="dashboard-stats-player-detail-name" class="dashboard-stats-detail-name"></div>
+                    <div class="dashboard-stats-player-detail-team-row">
+                      <div id="dashboard-stats-player-detail-team-logo" class="dashboard-stats-player-team-logo"></div>
+                      <span id="dashboard-stats-player-detail-team-name" class="dashboard-stats-player-team-name"></span>
+                    </div>
+                    <p id="dashboard-stats-player-detail-description" class="dashboard-stats-detail-description"></p>
+                  </div>
+                </div>
+                <button type="button" id="btn-dashboard-stats-player-more-info" class="dashboard-stats-more-info-btn">MEHR INFO</button>
+              </div>
+
+              <div class="dashboard-stats-detail-card">
+                <div class="dashboard-stats-detail-section-title">ENTWICKLUNGS-VERLAUF</div>
+                <div id="dashboard-stats-player-form-chart" class="dashboard-stats-form-chart"></div>
+              </div>
+
+              <div class="dashboard-stats-detail-card">
+                <div class="dashboard-stats-detail-section-title">AKTUELLE ERGEBNISSE</div>
+                <div id="dashboard-stats-player-recent-results" class="dashboard-stats-recent-results"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Team-Info-Seite (Runde 111) -- von "Statistiken" über den
+               "MEHR INFO"-Button jedes Teams erreichbar, siehe openTeamInfo()/
+               renderTeamInfoPanel() in renderer.js. "Kartenstatistiken" aus
+               dem Referenz-Screenshot bewusst NICHT übernommen (CS2-Maps,
+               für unser Rocket-League-Spiel ohne jede Bedeutung, UND es gibt
+               keine pro-Arena-Statistik-Erfassung im Spiel -- ein rein
+               dekoratives, mit Nullen gefülltes Feld hätte "keine Daten statt
+               erfundener Werte" widersprochen). "Letzte Ergebnisse" zeigt
+               stattdessen echte Einzelspiele aus matchHistory. "CEO" aus dem
+               Referenz-Screenshot gibt es als Konzept nicht -- zeigt
+               stattdessen den echten, namentlich generierten Cheftrainer der
+               Org (org.roster.coach). -->
+          <div id="dashboard-page-team-info" class="dashboard-team-info-panel hidden">
+            <button type="button" id="btn-team-info-back" class="dashboard-tournaments-breadcrumb dashboard-tournament-detail-back">‹ Zurück zu Statistiken</button>
+
+            <div class="dashboard-team-info-body">
+              <div class="dashboard-team-info-jersey-col">
+                <div class="dashboard-sponsors-jersey-frame">
+                  <svg id="dashboard-team-info-jersey-svg" viewBox="0 0 128 154" class="dashboard-sponsors-jersey-svg" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M96 4 C96 4 84 14 64 14 C44 14 32 4 32 4 L2 34 L22 62 L32 54 L32 138 C32 145 38 150 45 150 L83 150 C90 150 96 145 96 138 L96 54 L106 62 L126 34 Z" />
+                  </svg>
+                  <div id="dashboard-team-info-jersey-logo" class="dashboard-sponsors-jersey-logo"></div>
+                </div>
+              </div>
+
+              <div class="dashboard-team-info-main-card">
+                <div class="dashboard-team-info-title-row">
+                  <h2 id="dashboard-team-info-title" class="dashboard-team-info-title"></h2>
+                </div>
+                <div class="dashboard-team-info-meta-row">
+                  <img id="dashboard-team-info-flag" class="dashboard-team-info-flag" alt="">
+                  <span id="dashboard-team-info-country" class="dashboard-team-info-country"></span>
+                  <span id="dashboard-team-info-stars" class="dashboard-tournament-stars"></span>
+                </div>
+                <p id="dashboard-team-info-description" class="dashboard-team-info-description"></p>
+
+                <div class="dashboard-team-info-divider"></div>
+
+                <div class="dashboard-team-info-coach-row">
+                  <div id="dashboard-team-info-coach-avatar" class="dashboard-team-info-coach-avatar"></div>
+                  <div class="dashboard-team-info-coach-text">
+                    <span class="dashboard-team-info-coach-role">Cheftrainer</span>
+                    <div id="dashboard-team-info-coach-name" class="dashboard-team-info-coach-name"></div>
+                    <div class="dashboard-team-info-coach-country-row">
+                      <img id="dashboard-team-info-coach-flag" class="dashboard-team-info-flag-sm" alt="">
+                      <span id="dashboard-team-info-coach-country" class="dashboard-team-info-coach-country"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="dashboard-tournaments-breadcrumb">» Neueste Erfolge</div>
+                <div id="dashboard-team-info-recent-results" class="dashboard-team-info-results-box"></div>
+              </div>
+
+              <div class="dashboard-team-info-side-col">
+                <div class="dashboard-stats-detail-card">
+                  <div class="dashboard-stats-detail-section-title">FORM-VERLAUF</div>
+                  <div id="dashboard-team-info-form-chart" class="dashboard-stats-form-chart"></div>
+                </div>
+
+                <div class="dashboard-stats-detail-card">
+                  <div class="dashboard-stats-detail-section-title">LETZTE SPIELE</div>
+                  <div id="dashboard-team-info-recent-matches" class="dashboard-team-info-results-box"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- "Person-Info"-Seite (Runde 118) -- von Statistiken "MEHR INFO"
+               (Spieler-Tab) UND von Scouting (Spieler- und Personal-Tab,
+               Namens-Zelle) erreichbar, siehe openPersonInfo()/
+               renderPersonInfoPanel() in renderer.js. Eine gemeinsame Seite
+               für Spieler UND Mitarbeiter -- Statachsen-/Entwicklungs-
+               Verlauf-/Ergebnis-Bereiche werden nur angezeigt, wenn dafür
+               echte Daten existieren (Mitarbeiter außer Coach haben z.B.
+               keine 6 Statachsen und keine playerDevelopment-Historie). -->
+          <div id="dashboard-page-person-info" class="dashboard-team-info-panel hidden">
+            <button type="button" id="btn-person-info-back" class="dashboard-tournaments-breadcrumb dashboard-tournament-detail-back">‹ Zurück</button>
+
+            <div class="dashboard-team-info-body">
+              <div class="dashboard-team-info-jersey-col">
+                <div id="dashboard-person-info-avatar" class="dashboard-person-info-avatar"></div>
+              </div>
+
+              <div class="dashboard-team-info-main-card">
+                <div class="dashboard-team-info-title-row">
+                  <h2 id="dashboard-person-info-title" class="dashboard-team-info-title"></h2>
+                </div>
+                <div class="dashboard-team-info-meta-row">
+                  <img id="dashboard-person-info-flag" class="dashboard-team-info-flag" alt="">
+                  <span id="dashboard-person-info-country" class="dashboard-team-info-country"></span>
+                  <span id="dashboard-person-info-stars" class="dashboard-tournament-stars"></span>
+                </div>
+                <p id="dashboard-person-info-description" class="dashboard-team-info-description"></p>
+
+                <div class="dashboard-person-info-facts">
+                  <div class="dashboard-person-info-fact">
+                    <span class="dashboard-person-info-fact-label">Alter</span>
+                    <span id="dashboard-person-info-age" class="dashboard-person-info-fact-value"></span>
+                  </div>
+                  <div class="dashboard-person-info-fact">
+                    <span class="dashboard-person-info-fact-label">Vertrag</span>
+                    <span id="dashboard-person-info-contract" class="dashboard-person-info-fact-value"></span>
+                  </div>
+                  <div class="dashboard-person-info-fact">
+                    <span class="dashboard-person-info-fact-label">Potenzial</span>
+                    <span id="dashboard-person-info-potential" class="dashboard-person-info-fact-value"></span>
+                  </div>
+                  <div class="dashboard-person-info-fact">
+                    <span class="dashboard-person-info-fact-label">Marktwert</span>
+                    <span id="dashboard-person-info-value" class="dashboard-person-info-fact-value"></span>
+                  </div>
+                  <!-- Runde 121, nur für Spieler (Starter/Sub) sichtbar -- Personal/Coach
+                       haben in dieser Runde noch kein Gehaltssystem, siehe Kopfkommentar
+                       an playerMonthlySalary() in renderer.js. -->
+                  <div id="dashboard-person-info-salary-fact" class="dashboard-person-info-fact hidden">
+                    <span class="dashboard-person-info-fact-label">Gehalt</span>
+                    <span id="dashboard-person-info-salary" class="dashboard-person-info-fact-value"></span>
+                  </div>
+                </div>
+
+                <div class="dashboard-team-info-divider"></div>
+
+                <div class="dashboard-team-info-coach-row">
+                  <div id="dashboard-person-info-team-logo" class="dashboard-team-info-coach-avatar"></div>
+                  <div class="dashboard-team-info-coach-text">
+                    <span id="dashboard-person-info-role" class="dashboard-team-info-coach-role"></span>
+                    <div id="dashboard-person-info-team-name" class="dashboard-team-info-coach-name dashboard-person-info-team-link"></div>
+                  </div>
+                </div>
+
+                <div id="dashboard-person-info-stats-section" class="hidden">
+                  <div class="dashboard-tournaments-breadcrumb">» Statachsen</div>
+                  <div id="dashboard-person-info-stats" class="dashboard-person-info-stats"></div>
+                </div>
+              </div>
+
+              <div class="dashboard-team-info-side-col">
+                <div id="dashboard-person-info-chart-card" class="dashboard-stats-detail-card hidden">
+                  <div class="dashboard-stats-detail-section-title">ENTWICKLUNGS-VERLAUF</div>
+                  <div id="dashboard-person-info-chart" class="dashboard-stats-form-chart"></div>
+                </div>
+
+                <div id="dashboard-person-info-results-card" class="dashboard-stats-detail-card hidden">
+                  <div class="dashboard-stats-detail-section-title">LETZTE ERGEBNISSE</div>
+                  <div id="dashboard-person-info-recent-results" class="dashboard-team-info-results-box"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- "Transfers" (Runde 114) -- User-Vorgabe: NUR die Übersichts-/
+               Log-Seite (3 Tabs), das eigentliche Kaufen/Verkaufen wird
+               bewusst NICHT hier gebaut, sondern kommt in einer späteren
+               Runde auf die "Scouting"-Seite. "Meine Transfers"/"Weltweite
+               Transfers" lesen aus dem echten transferLog (aktuell noch
+               leer, da es noch keine Mechanik gibt, die ihn befüllt -- zeigt
+               deshalb ehrlich "KEINE ERGEBNISSE" statt erfundener Einträge,
+               siehe renderer.js). "Transferliste" ist ein reiner Lese-
+               Marktüberblick (alle Spieler ligaweit mit Marktwert, siehe
+               calculatePrice() in data/pricing.js) -- ebenfalls ohne
+               Aktions-Buttons. -->
+          <div id="dashboard-page-transfers" class="dashboard-stats-panel hidden">
+            <div class="dashboard-transfers-main">
+              <div class="dashboard-stats-tabs">
+                <button type="button" class="dashboard-stats-tab is-active" data-transfers-tab="mine">Meine Transfers</button>
+                <button type="button" class="dashboard-stats-tab" data-transfers-tab="world">Weltweite Transfers</button>
+                <button type="button" class="dashboard-stats-tab" data-transfers-tab="list">Transferliste</button>
+              </div>
+
+              <div id="dashboard-transfer-window-banner" class="dashboard-transfer-window-status"></div>
+
+              <div class="dashboard-stats-table-wrap">
+                <div class="dashboard-stats-table-header dashboard-transfers-log-header">
+                  <span>SPITZNAME</span>
+                  <span>ROLLE</span>
+                  <span>BEWERTUNG</span>
+                  <span>NATION</span>
+                  <span>VON</span>
+                  <span>AN</span>
+                  <span>TRANSFERDATUM</span>
+                  <span class="dashboard-stats-col-num">TRANSFERWERT</span>
+                </div>
+                <div id="dashboard-transfers-log-body" class="dashboard-stats-table-body"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- "Scouting" (Runde 116) -- User-Vorgabe: UI wie im CS2-Referenz-
+               Screenshot, an Rocket League angepasst. "Personal"-Tab hat im
+               Screenshot keine erkennbare Spalten-Struktur -- bewusst NICHT
+               spekulativ nachgebaut, bleibt vorerst Platzhalter (siehe
+               renderer.js). ROLLE = Starter/Sub (echte Kader-Unterscheidung,
+               keine erfundene Shooter-Rolle wie AWPer/Rifler). VERTRAGSENDE/
+               GEHALT aus dem Screenshot bewusst weggelassen -- es gibt weder
+               ein Vertragslaufzeit- noch ein Einzelgehalt-System im Spiel,
+               kein erfundener Wert wie schon bei "ALTER" auf der Transfers-
+               Seite. ALTER ist diesmal neu UND echt (siehe rollPlayer() in
+               data/org-rosters.js) -- POTENZIAL ist eine daraus abgeleitete,
+               transparente Projektion (scoutingPotentialStars()), keine
+               beliebige Zufallszahl. Kaufen/Verkaufen bewusst NICHT hier
+               gebaut (kommt in einer späteren Runde). -->
+          <div id="dashboard-page-scouting" class="dashboard-stats-panel hidden">
+            <div class="dashboard-transfers-main">
+              <div class="dashboard-scouting-top">
+                <div class="dashboard-stats-tabs">
+                  <button type="button" class="dashboard-stats-tab is-active" data-scouting-tab="players">Spieler</button>
+                  <button type="button" class="dashboard-stats-tab" data-scouting-tab="staff">Personal</button>
+                </div>
+                <div class="dashboard-scouting-info-row">
+                  <div class="dashboard-scouting-info-item">
+                    <span class="dashboard-scouting-info-label">Scouts:</span>
+                    <div id="dashboard-scouting-scout-avatar" class="dashboard-scouting-scout-avatar"></div>
+                  </div>
+                  <div class="dashboard-scouting-info-item">
+                    <span id="dashboard-scouting-count-label" class="dashboard-scouting-info-label">Spieler:</span>
+                    <span id="dashboard-scouting-player-count" class="dashboard-scouting-info-value"></span>
+                  </div>
+                  <div class="dashboard-scouting-info-item">
+                    <span class="dashboard-scouting-info-label">Transferbudget:</span>
+                    <span id="dashboard-scouting-budget" class="dashboard-scouting-info-value is-budget"></span>
+                  </div>
+                  <div class="dashboard-stats-search-box">
+                    <input type="text" id="dashboard-scouting-search" class="dashboard-stats-search-input" placeholder="Spieler suchen…" />
+                    <button type="button" id="btn-dashboard-scouting-search-clear" class="dashboard-stats-search-clear">×</button>
+                  </div>
+                  <button type="button" id="btn-dashboard-scouting-filter" class="dashboard-scouting-filter-btn">☰ Filter</button>
+                </div>
+              </div>
+
+              <div id="dashboard-scouting-filter-panel" class="dashboard-scouting-filter-panel hidden">
+                <label class="dashboard-scouting-filter-field">
+                  <span>Region</span>
+                  <select id="dashboard-scouting-filter-region">
+                    <option value="">Alle Regionen</option>
+                    <option value="EU">Europa</option>
+                    <option value="NA">Nordamerika</option>
+                    <option value="SAM">Südamerika</option>
+                    <option value="MENA">MENA</option>
+                    <option value="OCE">Ozeanien</option>
+                    <option value="APAC">APAC</option>
+                    <option value="SSA">Subsahara-Afrika</option>
+                  </select>
+                </label>
+                <label class="dashboard-scouting-filter-field">
+                  <span>Mindest-Bewertung</span>
+                  <select id="dashboard-scouting-filter-rating">
+                    <option value="0">Alle</option>
+                    <option value="3">★ 3+</option>
+                    <option value="3.5">★ 3,5+</option>
+                    <option value="4">★ 4+</option>
+                    <option value="4.5">★ 4,5+</option>
+                    <option value="5">★ 5</option>
+                  </select>
+                </label>
+              </div>
+
+              <div id="dashboard-scouting-players-view" class="dashboard-stats-tab-view">
+                <div class="dashboard-stats-table-wrap">
+                  <div class="dashboard-stats-table-header dashboard-scouting-table-header">
+                    <span>SPITZNAME</span>
+                    <span>ROLLE</span>
+                    <span class="dashboard-stats-col-num">ALTER</span>
+                    <span class="dashboard-stats-col-num">BEWERTUNG</span>
+                    <span>NATION</span>
+                    <span class="dashboard-stats-col-num">POTENZIAL</span>
+                    <span>VERTRAGSENDE</span>
+                    <span class="dashboard-stats-col-num">TRANSFERWERT</span>
+                    <span class="dashboard-stats-col-num">GEHALT</span>
+                    <span>TEAM</span>
+                    <span></span>
+                  </div>
+                  <div id="dashboard-scouting-players-body" class="dashboard-stats-table-body"></div>
+                </div>
+                <div id="dashboard-scouting-pagination" class="dashboard-stats-pagination"></div>
+              </div>
+
+              <!-- "Personal"-Tab (Runde 117: Verpflichten-Mechanik gebaut; Runde 121,
+                   User-Vorgabe: "Personal soll erstmal gesperrt sein" -- Gehaltssystem
+                   existiert bisher nur für Spieler, Personal-Käufe bleiben deshalb
+                   vorerst deaktiviert. Tabelle bleibt sichtbar (Übersicht/Scouting
+                   funktioniert weiter), nur der Verpflichten-Button ist gesperrt,
+                   siehe scoutingStaffRowHtml() in renderer.js. -->
+              <div id="dashboard-scouting-staff-view" class="dashboard-stats-tab-view hidden">
+                <div class="dashboard-scouting-locked-banner">🔒 Personal-Verpflichtungen kommen in einem späteren Update.</div>
+                <div class="dashboard-stats-table-wrap">
+                  <div class="dashboard-stats-table-header dashboard-scouting-staff-table-header">
+                    <span>SPITZNAME</span>
+                    <span>ROLLE</span>
+                    <span class="dashboard-stats-col-num">ALTER</span>
+                    <span class="dashboard-stats-col-num">BEWERTUNG</span>
+                    <span>NATION</span>
+                    <span class="dashboard-stats-col-num">POTENZIAL</span>
+                    <span>VERTRAGSENDE</span>
+                    <span class="dashboard-stats-col-num">TRANSFERWERT</span>
+                    <span>TEAM</span>
+                    <span></span>
+                  </div>
+                  <div id="dashboard-scouting-staff-body" class="dashboard-stats-table-body"></div>
+                </div>
+                <div id="dashboard-scouting-staff-pagination" class="dashboard-stats-pagination"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- "Kader"-Seite (Runde 119, User-Vorgabe: UI wie CS2-Referenz-
+               Screenshot "Teamkader" + Team-Chemie mit echtem Einfluss auf
+               Spieler/Spiele, siehe teamChemistryBonusPct()-Kommentar in
+               renderer.js). Angepasst von CS2 auf Rocket League: IGL-
+               Checkbox und die 5 CS2-Rollen (AWPer/Rifler/Lurker/IGL/
+               Support) haben keine RL-Entsprechung und wurden bewusst
+               weggelassen -- Starter/Sub ist die einzige reale Rollen-
+               Unterscheidung in diesem Projekt. -->
+          <div id="dashboard-page-roster" class="dashboard-stats-panel hidden">
+            <div class="dashboard-roster-main">
+              <div class="dashboard-roster-header">
+                <div id="dashboard-roster-header-logo" class="dashboard-roster-header-logo"></div>
+                <img id="dashboard-roster-header-flag" class="dashboard-team-info-flag" alt="">
+                <div class="dashboard-roster-header-text">
+                  <div id="dashboard-roster-header-name" class="dashboard-roster-header-name"></div>
+                  <div class="dashboard-roster-header-meta-row">
+                    <span id="dashboard-roster-header-rank" class="dashboard-roster-header-rank"></span>
+                    <span id="dashboard-roster-header-points"></span>
+                    <span id="dashboard-roster-header-stars" class="dashboard-tournament-stars"></span>
+                  </div>
+                </div>
+                <button type="button" id="btn-dashboard-roster-details" class="dashboard-scouting-filter-btn">DETAILS</button>
+              </div>
+
+              <div class="dashboard-roster-chem-row">
+                <div class="dashboard-roster-chem-item">
+                  <div class="dashboard-roster-chem-label"><span>Physischer Zustand</span><span id="dashboard-roster-chem-condition-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-roster-chem-condition-fill" class="dashboard-roster-chem-fill is-condition"></div></div>
+                </div>
+                <div class="dashboard-roster-chem-item">
+                  <div class="dashboard-roster-chem-label"><span>Moral</span><span id="dashboard-roster-chem-morale-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-roster-chem-morale-fill" class="dashboard-roster-chem-fill is-morale"></div></div>
+                </div>
+                <div class="dashboard-roster-chem-item">
+                  <div class="dashboard-roster-chem-label"><span>Sprachliche Verständigung</span><span id="dashboard-roster-chem-language-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-roster-chem-language-fill" class="dashboard-roster-chem-fill is-language"></div></div>
+                </div>
+              </div>
+
+              <div class="dashboard-roster-section-title">Hauptkader</div>
+              <div id="dashboard-roster-starters" class="dashboard-roster-cards"></div>
+
+              <div class="dashboard-roster-section-title">Ersatzbank</div>
+              <div id="dashboard-roster-bench" class="dashboard-roster-cards"></div>
+
+              <!-- Runde 122, User-Vorgabe: "füge reserve spieler kategorie hinzu, dort
+                   landen alle spieler die man kauft" -- bis zu KADER_RESERVE_SLOTS (6)
+                   gekaufte, noch nicht in Starter/Sub eingesetzte Spieler. Neuzugänge
+                   erscheinen hier erst nach der echten 7-Tage-Wartezeit (siehe
+                   pendingPlayerArrivals in renderer.js) -- bis dahin unten als
+                   "Unterwegs"-Karte mit echtem Ankunftsdatum sichtbar. -->
+              <div class="dashboard-roster-section-title">Reserve <span id="dashboard-roster-reserve-count" class="dashboard-roster-section-count"></span></div>
+              <div id="dashboard-roster-reserve" class="dashboard-roster-cards"></div>
+              <div id="dashboard-roster-pending" class="dashboard-roster-pending-list"></div>
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   </div>
 
@@ -161,6 +1586,7 @@
       <div id="org-panel"></div>
       <div id="budget-bar"></div>
       <button id="btn-open-transfers" class="update-check-btn">📋 Transfer-Historie</button>
+      <button id="btn-open-achievements" class="update-check-btn">🏆 Erfolge</button>
     </header>
 
     <main>
@@ -218,6 +1644,36 @@
     </main>
   </div>
 
+  <!-- ── Erfolge-Screen ────────────────────────────────────────────────────
+       Nur befüllt, wenn beim Vertrag "CEO kann entlassen werden, Erfolge
+       aktiviert" angehakt war (siehe achievementsEnabled in renderer.js) --
+       spiegelt screen-transfers strukturell 1:1. -->
+  <div id="screen-achievements" class="screen hidden">
+    <header class="app-header">
+      <button id="btn-back-to-draft-achievements" class="back-btn">← Zurück</button>
+      <h1>Erfolge</h1>
+      <p class="subtitle">Nur aktiv, wenn beim Vertrag „Erfolge aktiviert" angehakt wurde</p>
+    </header>
+    <main>
+      <section id="achievements-list" class="achievements-list"></section>
+    </main>
+  </div>
+
+  <!-- ── Game-Over-Screen (CEO entlassen) ─────────────────────────────────────
+       Nur erreichbar, wenn beim Vertrag "CEO kann entlassen werden" angehakt
+       war UND zwei Saisons in Folge mehr Niederlagen als Siege eingefahren
+       wurden (siehe triggerCeoFired()/startNextSeason() in renderer.js). -->
+  <div id="screen-gameover" class="screen hidden">
+    <div class="gameover-overlay">
+      <div class="gameover-card">
+        <h1>Du wurdest entlassen</h1>
+        <p id="gameover-reason" class="gameover-reason"></p>
+        <p id="gameover-summary" class="gameover-summary"></p>
+        <button id="btn-gameover-menu" class="gameover-btn">Zurück zum Hauptmenü →</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Turnier-Screen ────────────────────────────────────────────────── -->
   <div id="screen-tournament" class="screen hidden">
     <button id="btn-back-to-menu-tournament" class="back-btn">← Hauptmenü</button>
@@ -246,18 +1702,38 @@
   </div>
 
   <!-- ── Match-Screen ──────────────────────────────────────────────────── -->
+  <!-- Runde 101, User-Vorgabe ("UI komplett überarbeiten, Orientierung an
+       CS:GO-Esport-Overlay -- eine Seite Kader blau, andere orange umrahmt/
+       gefärbt, immer das Team, das in der Tabelle OBEN steht, ist blau, das
+       darunter liegende Team immer orange"): kompletter Neubau der bisher seit
+       v0.3.0 unveränderten Match-Ansicht. "Team A" (roster-a/match-name-a) ist
+       in playMatchTicker() IMMER die Seite, die an erster Stelle übergeben
+       wurde (bei eigenen Matches: ownIsA-Zuordnung in
+       playOwnMatchSeriesLive(), bei Bracket-/Gruppenkarten immer teamAName,
+       die "obere" Zeile) -- die Blau-/Orange-Färbung hier ist deshalb PUR
+       CSS (data-team="A"/"B", -a/-b-Suffixe), keine neue JS-Logik nötig, die
+       Farbe folgt automatisch derselben Konvention wie überall sonst im
+       Bracket. Ticker sitzt jetzt MITTIG zwischen den beiden Kader-Panels
+       (klassisches Esport-Overlay-Layout: Team | Feed | Team) statt darunter. -->
   <div id="screen-match" class="screen hidden">
     <button id="btn-back-to-menu-match" class="back-btn hidden">← Turnier</button>
-    <div class="match-wrap match-wrap-wide">
-      <div id="match-series-info" class="match-series-info"></div>
-      <div id="match-series-dots" class="series-dots"></div>
-      <div class="match-scoreboard">
-        <span id="match-name-a" class="match-team-name"></span>
-        <span id="match-score" class="match-score">0 : 0</span>
-        <span id="match-name-b" class="match-team-name"></span>
+    <div class="match-arena">
+      <div class="match-arena-header">
+        <div class="match-arena-team-name match-arena-team-blue">
+          <span id="match-name-a" class="match-team-name"></span>
+        </div>
+        <div class="match-arena-center">
+          <div id="match-series-info" class="match-series-info"></div>
+          <div id="match-series-dots" class="series-dots"></div>
+          <span id="match-score" class="match-score">0 : 0</span>
+          <div id="match-clock" class="match-clock">5:00</div>
+        </div>
+        <div class="match-arena-team-name match-arena-team-orange">
+          <span id="match-name-b" class="match-team-name"></span>
+        </div>
       </div>
-      <div class="match-clock-row">
-        <div id="match-clock" class="match-clock">5:00</div>
+
+      <div class="match-arena-controls">
         <div class="speed-controls">
           <button id="btn-speed-1" class="speed-btn is-active" data-speed="1">×1</button>
           <button id="btn-speed-2" class="speed-btn" data-speed="2">×2</button>
@@ -269,18 +1745,18 @@
         <button id="btn-instant-sim" class="instant-sim-btn">⏩ Sofort simulieren</button>
       </div>
 
-      <div class="match-rosters">
-        <div class="roster-column">
+      <div class="match-arena-body">
+        <div class="match-arena-side match-arena-side-blue">
           <div id="roster-meta-a" class="roster-meta"></div>
           <div id="roster-a" class="match-roster"></div>
         </div>
-        <div class="roster-column">
+        <div id="match-ticker" class="match-ticker"></div>
+        <div class="match-arena-side match-arena-side-orange">
           <div id="roster-meta-b" class="roster-meta"></div>
           <div id="roster-b" class="match-roster"></div>
         </div>
       </div>
 
-      <div id="match-ticker" class="match-ticker"></div>
       <button id="btn-match-continue" class="menu-btn menu-btn-primary hidden">Weiter zum Turnier</button>
     </div>
   </div>
@@ -303,6 +1779,42 @@
     </div>
   </div>
 
+  <!-- ── Feedback-Popup (sendet Sterne-Bewertung + Nachricht an Discord) ──── -->
+  <div id="feedback-modal" class="modal-overlay hidden">
+    <div class="modal-box negotiation-box">
+      <div class="modal-org-title">Feedback geben</div>
+      <p class="feedback-modal-subtitle">Was gefällt dir, was nicht? Dein Feedback geht direkt an die Entwicklung.</p>
+      <div id="feedback-stars" class="feedback-stars">
+        <button type="button" class="feedback-star" data-value="1">★</button>
+        <button type="button" class="feedback-star" data-value="2">★</button>
+        <button type="button" class="feedback-star" data-value="3">★</button>
+        <button type="button" class="feedback-star" data-value="4">★</button>
+        <button type="button" class="feedback-star" data-value="5">★</button>
+      </div>
+      <textarea id="feedback-message" class="negotiation-message-input" rows="4" maxlength="800" placeholder="Deine Nachricht (Bugs, Ideen, allgemeines Feedback)..."></textarea>
+      <p id="feedback-char-count" class="feedback-char-count">0 / 800</p>
+      <p id="feedback-status" class="update-check-status"></p>
+      <div class="negotiation-buttons">
+        <button id="btn-feedback-cancel" class="menu-btn">Abbrechen</button>
+        <button id="btn-feedback-send" class="menu-btn menu-btn-primary">Senden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sponsoring-Bewerbung bestätigen (Runde 39) ───────────────────────── -->
+  <div id="sponsor-request-modal" class="modal-overlay hidden">
+    <div class="modal-box dashboard-sponsor-request-box">
+      <button type="button" id="btn-sponsor-request-close" class="dashboard-sponsor-request-close">✕</button>
+      <div class="modal-org-title">Bewerbung bestätigen</div>
+      <p class="dashboard-sponsor-request-text">Bewerbung an "<span id="sponsor-request-name"></span>" senden?</p>
+      <p class="dashboard-sponsor-request-remaining">Verbleibende Bewerbungen: <strong id="sponsor-request-remaining"></strong></p>
+      <div class="negotiation-buttons">
+        <button id="btn-sponsor-request-cancel" class="menu-btn">Abbrechen</button>
+        <button id="btn-sponsor-request-confirm" class="menu-btn menu-btn-primary">Ja</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Generisches Bestätigungs-Popup (ersetzt window.confirm) ─────────── -->
   <div id="confirm-modal" class="modal-overlay hidden">
     <div class="modal-box">
@@ -313,28 +1825,113 @@
   </div>
 
   <!-- ── Einstellungen (Hauptmenü) ─────────────────────────────────────────── -->
-  <div id="settings-modal" class="modal-overlay hidden">
-    <div class="modal-box settings-box">
-      <div class="modal-org-title">⚙ Einstellungen</div>
+  <!-- ── Einstellungen ──────────────────────────────────────────────────────
+       Teilt sich die Atmosphäre (#app-atmosphere) mit Hauptmenü/Slot-Auswahl
+       -- gleiche Sidebar-Optik + Slide-in/out-Animation wie #screen-slots
+       (User-Wunsch: "im selben Sidebar wie bei Speicherstände"). Statt der
+       alten Tab-Navigation (Anzeige/Sound/Spielablauf/System) jetzt eine
+       einzige durchgehende, scrollbare Sektionsliste. -->
+  <div id="screen-settings" class="screen hidden">
+    <div id="settings-sidebar" class="settings-sidebar">
+      <h1 class="slots-title">Einstellungen</h1>
 
-      <div class="settings-row">
-        <label class="settings-label">Standard-Match-Geschwindigkeit</label>
-        <div id="settings-speed-options" class="settings-speed-options"></div>
+      <div id="settings-category-tabs" class="settings-category-tabs">
+        <button type="button" class="settings-category-btn is-active" data-settings-category="lautstaerke">Lautstärke</button>
+        <button type="button" class="settings-category-btn" data-settings-category="bildschirm">Bildschirm</button>
+        <button type="button" class="settings-category-btn" data-settings-category="sprache">Sprache</button>
+        <button type="button" class="settings-category-btn" data-settings-category="spielablauf">Spielablauf</button>
+        <button type="button" class="settings-category-btn" data-settings-category="system">System</button>
       </div>
 
-      <div class="settings-row">
-        <label class="settings-label">Tempo beim "Turnier sofort simulieren"</label>
-        <div id="settings-pace-options" class="settings-speed-options"></div>
+      <div class="settings-scroll">
+        <div class="settings-category-panel is-active" data-settings-panel="lautstaerke">
+          <div class="settings-row">
+            <label class="settings-label" for="settings-music-volume">Hintergrundmusik</label>
+            <div class="settings-volume-row">
+              <input id="settings-music-volume" type="range" min="0" max="100" step="1" class="settings-volume-slider" />
+              <span id="settings-music-volume-value" class="settings-volume-value">30%</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label" for="settings-sound-volume">Sound-Effekte</label>
+            <div class="settings-volume-row">
+              <input id="settings-sound-volume" type="range" min="0" max="100" step="1" class="settings-volume-slider" />
+              <span id="settings-sound-volume-value" class="settings-volume-value">50%</span>
+              <button id="btn-settings-sound-test" class="menu-btn settings-test-sound-btn">🔊 Test</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label" for="settings-intro-volume">Intro-Video</label>
+            <div class="settings-volume-row">
+              <input id="settings-intro-volume" type="range" min="0" max="100" step="1" class="settings-volume-slider" />
+              <span id="settings-intro-volume-value" class="settings-volume-value">70%</span>
+            </div>
+          </div>
+          <div class="settings-row settings-row-toggle">
+            <label class="settings-label" for="settings-sound-enabled">Button-Sounds (Hover &amp; Klick)</label>
+            <input id="settings-sound-enabled" type="checkbox" class="settings-checkbox" />
+          </div>
+        </div>
+
+        <div class="settings-category-panel" data-settings-panel="bildschirm">
+          <div class="settings-row">
+            <label class="settings-label">Anzeigemodus</label>
+            <div id="settings-display-mode-options" class="settings-speed-options"></div>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label" for="settings-window-size">Fenstergröße (im Fenstermodus)</label>
+            <select id="settings-window-size" class="settings-select">
+              <option value="1280x800">1280 × 800 (Standard)</option>
+              <option value="1366x768">1366 × 768</option>
+              <option value="1600x900">1600 × 900</option>
+              <option value="1920x1080">1920 × 1080</option>
+              <option value="maximized">Maximiert</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">UI-Größe</label>
+            <div id="settings-ui-scale-options" class="settings-speed-options"></div>
+          </div>
+          <div class="settings-row settings-row-toggle">
+            <label class="settings-label" for="settings-remember-bounds">Fenstergröße &amp; Position merken</label>
+            <input id="settings-remember-bounds" type="checkbox" class="settings-checkbox" />
+          </div>
+          <p class="settings-hint">Wird erst mit "Speichern" übernommen. Wechsel zu/von "Rahmenloser Vollbildmodus" lädt das Fenster dann kurz neu — dein Fortschritt ist durch den Auto-Save nicht in Gefahr.</p>
+        </div>
+
+        <div class="settings-category-panel" data-settings-panel="sprache">
+          <div class="settings-row">
+            <select class="settings-select" disabled title="Weitere Sprachen kommen später">
+              <option>Deutsch</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-category-panel" data-settings-panel="spielablauf">
+          <div class="settings-row">
+            <label class="settings-label">Standard-Match-Geschwindigkeit</label>
+            <div id="settings-speed-options" class="settings-speed-options"></div>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Tempo beim "Turnier sofort simulieren"</label>
+            <div id="settings-pace-options" class="settings-speed-options"></div>
+          </div>
+        </div>
+
+        <div class="settings-category-panel" data-settings-panel="system">
+          <div class="settings-row settings-row-toggle">
+            <label class="settings-label" for="settings-auto-update">Beim Start automatisch nach Updates suchen</label>
+            <input id="settings-auto-update" type="checkbox" class="settings-checkbox" />
+          </div>
+        </div>
       </div>
 
-      <div class="settings-row settings-row-toggle">
-        <label class="settings-label" for="settings-auto-update">Beim Start automatisch nach Updates suchen</label>
-        <input id="settings-auto-update" type="checkbox" class="settings-checkbox" />
-      </div>
-
-      <div class="settings-buttons">
-        <button id="btn-settings-reset" class="menu-btn">Standardwerte</button>
-        <button id="btn-settings-close" class="menu-btn menu-btn-primary">Fertig</button>
+      <div class="settings-sidebar-footer">
+        <div class="settings-buttons">
+          <button id="btn-settings-reset" class="menu-btn">Standardwerte</button>
+          <button id="btn-settings-save" class="menu-btn menu-btn-primary">Speichern</button>
+        </div>
+        <button id="btn-settings-cancel" class="slots-back-btn">← Zurück</button>
       </div>
     </div>
   </div>
@@ -376,8 +1973,8 @@
         <div id="negotiation-frustration-fill" class="negotiation-frustration-fill"></div>
       </div>
       <div id="negotiation-log" class="negotiation-log"></div>
-      <label class="negotiation-label">Angebot (Cr)</label>
-      <input id="negotiation-offer" type="number" class="negotiation-offer-input" min="0" step="5" />
+      <label class="negotiation-label">Angebot (€)</label>
+      <input id="negotiation-offer" type="number" class="negotiation-offer-input" min="0" step="1000" />
       <label class="negotiation-label">Deine Nachricht an Orga &amp; Spieler</label>
       <textarea id="negotiation-message" class="negotiation-message-input" rows="2" placeholder="Verhandlungsargument schreiben..."></textarea>
       <div class="negotiation-buttons">
@@ -393,8 +1990,8 @@
       <div id="incoming-offer-title" class="modal-org-title"></div>
       <div id="incoming-offer-subtitle" class="negotiation-subtitle"></div>
       <div id="incoming-offer-log" class="negotiation-log"></div>
-      <label class="negotiation-label">Deine Forderung (Cr) für ein Gegenangebot</label>
-      <input id="incoming-offer-counter" type="number" class="negotiation-offer-input" min="0" step="5" />
+      <label class="negotiation-label">Deine Forderung (€) für ein Gegenangebot</label>
+      <input id="incoming-offer-counter" type="number" class="negotiation-offer-input" min="0" step="1000" />
       <label class="negotiation-label">Deine Nachricht</label>
       <textarea id="incoming-offer-message" class="negotiation-message-input" rows="2" placeholder="Antwort an die Org schreiben..."></textarea>
       <div class="negotiation-buttons">
@@ -405,15 +2002,25 @@
     </div>
   </div>
 
+  <!-- Hintergrundmusik -- läuft app-weit durch (kein .screen-Kind, wird also
+       nie von showScreen()'s .hidden-Toggling betroffen), Lautstärke via
+       appSettings.musicVolume gesteuert (renderer.js). -->
+  <audio id="bg-music" src="assets/music/cold-fire-neozoic-main-version-37473-02-16.mp3" loop></audio>
+
   <script src="data/test-players.js"></script>
   <script src="data/test-coaches.js"></script>
+  <script src="data/free-agents.js"></script>
+  <script src="data/sponsors.js"></script>
+  <script src="data/tournament-calendar.js"></script>
+  <script src="data/pricing.js"></script>
+  <script src="data/character-traits.js"></script>
+  <script src="data/org-rosters.js"></script>
   <script src="data/organizations.js"></script>
   <script src="data/bot-teams.js"></script>
-  <script src="data/pricing.js"></script>
-  <script src="data/character-paths.js"></script>
   <script src="match.js"></script>
   <script src="tournament.js"></script>
   <script src="season.js"></script>
+  <script src="sound.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

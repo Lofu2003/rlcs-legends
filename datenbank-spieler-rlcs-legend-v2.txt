@@ -1,0 +1,1394 @@
+---------------- Rocket League Team Datenbank (RLCS Legend) ----------------------
+
+[Team Vitality]
+ - Spieler 1 = zen (5/5 Sterne)
+ - Spieler 2 = ExoTiiK (4,5/5 Sterne)
+ - Spieler 3 = stizzy (4,5/5 Sterne)
+ - Coach = Eversax (4,5/5 Sterne)
+ - Geschäftsführer = Nicolas Maurer (5/5 Sterne)
+ - Finanzvorstand = Sonia Manueco (4/5 Sterne)
+ - PR-Manager = Sarah Mittelette (4/5 Sterne)
+ - Psychologe = Edgar Chekera (4,5/5 Sterne)
+ - Scout = Marc-Antoine Dupont (ausgedachte Person, FR) (3/5 Sterne)
+ - Anwalt = Levine Keszler (4/5 Sterne)
+ - Event-Manager = Anne Banschbach (4,5/5 Sterne)
+ - Physiotherapeut = Ghais „Hyyperio“ Moulai (4/5 Sterne)
+
+--------------------------------------------------
+
+[Karmine Corp]
+ - Spieler 1 = vatira (5/5 Sterne)
+ - Spieler 2 = Atow (4,5/5 Sterne)
+ - Spieler 3 = Rise (4,5/5 Sterne)
+ - Coach = Ferra (5/5 Sterne)
+ - Geschäftsführer = Kameto (5/5 Sterne)
+ - Finanzvorstand = Amine M'Barek (ausgedachte Person, FR) (4/5 Sterne)
+ - PR-Manager = Sophie Lefebvre (ausgedachte Person, FR) (4/5 Sterne)
+ - Psychologe = Jean-Luc Dubois (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Scout = Thomas Petit (ausgedachte Person, FR) (4/5 Sterne)
+ - Anwalt = Cabinet Avocat Paris (ausgedachte Person, FR) (3/5 Sterne)
+ - Event-Manager = Lucas Bernard (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Physiotherapeut = Marie Curie (ausgedachte Person, FR) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[NRG]
+ - Spieler 1 = GarrettG (4/5 Sterne)
+ - Spieler 2 = Justin (4,5/5 Sterne)
+ - Spieler 3 = Mist (4/5 Sterne)
+ - Coach = Fireburner (4,5/5 Sterne)
+ - Geschäftsführer = Andy Miller (5/5 Sterne)
+ - Finanzvorstand = Sarah Jenkins (ausgedachte Person, USA) (4/5 Sterne)
+ - PR-Manager = Mike Peterson (ausgedachte Person, USA) (3,5/5 Sterne)
+ - Psychologe = Dr. David Brown (ausgedachte Person, USA) (4/5 Sterne)
+ - Scout = Jason Smith (ausgedachte Person, USA) (3/5 Sterne)
+ - Anwalt = Sterling & Co. (ausgedachte Person, USA) (4/5 Sterne)
+ - Event-Manager = Rachel Green (ausgedachte Person, USA) (4/5 Sterne)
+ - Physiotherapeut = Tom Williams (ausgedachte Person, USA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[Shopify Rebellion]
+ - Spieler 1 = 2Piece (4/5 Sterne)
+ - Spieler 2 = Paarth (4/5 Sterne)
+ - Spieler 3 = LJ (4,5/5 Sterne)
+ - Coach = Memory (4/5 Sterne)
+ - Geschäftsführer = Tobias Lütke (5/5 Sterne)
+ - Finanzvorstand = Jessica Wong (ausgedachte Person, CAN) (4,5/5 Sterne)
+ - PR-Manager = David Miller (ausgedachte Person, CAN) (3,5/5 Sterne)
+ - Psychologe = Elena Rossi (ausgedachte Person, CAN) (3/5 Sterne)
+ - Scout = Ryan O'Connor (ausgedachte Person, CAN) (3,5/5 Sterne)
+ - Anwalt = Legal Rebels (ausgedachte Person, CAN) (3,5/5 Sterne)
+ - Event-Manager = Sarah Jenkins (ausgedachte Person, CAN) (4/5 Sterne)
+ - Physiotherapeut = Mark Henderson (ausgedachte Person, CAN) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[Team Falcons]
+ - Spieler 1 = Trk511 (4,5/5 Sterne)
+ - Spieler 2 = Ahmad (4,5/5 Sterne)
+ - Spieler 3 = Rw9 (4,5/5 Sterne)
+ - Coach = Senzo (4/5 Sterne)
+ - Geschäftsführer = Ahmed Al-Meghames (4,5/5 Sterne)
+ - Finanzvorstand = Khalid Mansour (ausgedachte Person, KSA) (4/5 Sterne)
+ - PR-Manager = Fatima Al-Farsi (ausgedachte Person, KSA) (4/5 Sterne)
+ - Psychologe = Omar Hassan (ausgedachte Person, KSA) (3,5/5 Sterne)
+ - Scout = Ibrahim Zaid (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Anwalt = Riyadh Law Firm (ausgedachte Person, KSA) (3/5 Sterne)
+ - Event-Manager = Layla Nasser (ausgedachte Person, KSA) (4/5 Sterne)
+ - Physiotherapeut = Youssef Ali (ausgedachte Person, KSA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[Furia Esports]
+ - Spieler 1 = yanxnz (4,5/5 Sterne)
+ - Spieler 2 = Lostt (4/5 Sterne)
+ - Spieler 3 = Drufinho (4/5 Sterne)
+ - Coach = Kairos (4/5 Sterne)
+ - Geschäftsführer = Jaime Pádua (5/5 Sterne)
+ - Finanzvorstand = Roberto Silva (ausgedachte Person, BRA) (4/5 Sterne)
+ - PR-Manager = Camila Souza (ausgedachte Person, BRA) (4/5 Sterne)
+ - Psychologe = Dr. Fernando Costa (ausgedachte Person, BRA) (4/5 Sterne)
+ - Scout = Lucas Oliveira (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Anwalt = Santos & Partners (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Event-Manager = Beatriz Lima (ausgedachte Person, BRA) (4/5 Sterne)
+ - Physiotherapeut = Ricardo Mendes (ausgedachte Person, BRA) (4/5 Sterne)
+
+--------------------------------------------------
+
+[GEN.G MOBIL1 RACING]
+ - Spieler 1 = hockser (4/5 Sterne)
+ - Spieler 2 = BeastMode (4/5 Sterne)
+ - Spieler 3 = Firstkiller (3,5/5 Sterne)
+ - Coach = Ferra (4,5/5 Sterne)
+ - Geschäftsführer = Arthur Dupont (ausgedachte Person, UK) (5/5 Sterne)
+ - Finanzvorstand = Jordan Smith (ausgedachte Person, UK) (3/5 Sterne)
+ - PR-Manager = Ryan Jones (ausgedachte Person, UK) (3/5 Sterne)
+ - Psychologe = Arthur Brown (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Scout = Casey Lopez (ausgedachte Person, UK) (4/5 Sterne)
+ - Anwalt = Alex Williams (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Event-Manager = Robin Garcia (ausgedachte Person, UK) (3,5/5 Sterne)
+ - Physiotherapeut = Ryan Davis (ausgedachte Person, UK) (3/5 Sterne)
+
+--------------------------------------------------
+
+[MIBR]
+ - Spieler 1 = Arsenal (4,5/5 Sterne)
+ - Spieler 2 = Markydooda (3,5/5 Sterne)
+ - Spieler 3 = BeastMode (5/5 Sterne)
+ - Coach = Jahzo (4,5/5 Sterne)
+ - Geschäftsführer = Chris Martinez (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Finanzvorstand = Arthur Miller (ausgedachte Person, BRA) (4/5 Sterne)
+ - PR-Manager = Gabriel Brown (ausgedachte Person, BRA) (3/5 Sterne)
+ - Psychologe = Jordan Jones (ausgedachte Person, BRA) (4/5 Sterne)
+ - Scout = Sam Jones (ausgedachte Person, BRA) (3/5 Sterne)
+ - Anwalt = Dominik Garcia (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Event-Manager = Francis Williams (ausgedachte Person, BRA) (4/5 Sterne)
+ - Physiotherapeut = Francis Brown (ausgedachte Person, BRA) (4/5 Sterne)
+
+--------------------------------------------------
+
+[MANCHESTER CITY ESPORTS]
+ - Spieler 1 = Cheese (4/5 Sterne)
+ - Spieler 2 = Evoh (4/5 Sterne)
+ - Spieler 3 = Retals (5/5 Sterne)
+ - Coach = RawGregory (4/5 Sterne)
+ - Geschäftsführer = Skyler Anderson (ausgedachte Person, FR) (4/5 Sterne)
+ - Finanzvorstand = Robin Müller (ausgedachte Person, FR) (3,5/5 Sterne)
+ - PR-Manager = Jordan Davis (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Psychologe = Skyler Dupont (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Scout = Gabriel Davis (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Anwalt = David Martinez (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Event-Manager = Taylor Garcia (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Physiotherapeut = Casey Anderson (ausgedachte Person, FR) (4/5 Sterne)
+
+--------------------------------------------------
+
+[TSM]
+ - Spieler 1 = crr (4/5 Sterne)
+ - Spieler 2 = Satthew (4/5 Sterne)
+ - Spieler 3 = gReazymeister (5/5 Sterne)
+ - Coach = Sizz (3,5/5 Sterne)
+ - Geschäftsführer = Jordan Silva (ausgedachte Person, BRA) (4/5 Sterne)
+ - Finanzvorstand = Morgan Hernandez (ausgedachte Person, BRA) (3/5 Sterne)
+ - PR-Manager = Dominik Martinez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Psychologe = Marc Garcia (ausgedachte Person, BRA) (3/5 Sterne)
+ - Scout = Chris Anderson (ausgedachte Person, BRA) (4/5 Sterne)
+ - Anwalt = Robin Silva (ausgedachte Person, BRA) (4/5 Sterne)
+ - Event-Manager = Sven Williams (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Physiotherapeut = Alex Garcia (ausgedachte Person, BRA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[SPACESTATION GAMING]
+ - Spieler 1 = Sypical (4/5 Sterne)
+ - Spieler 2 = Daniel (4/5 Sterne)
+ - Spieler 3 = MajicBear (4,5/5 Sterne)
+ - Coach = Ferra (3,5/5 Sterne)
+ - Geschäftsführer = Arthur Wilson (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Finanzvorstand = Pierre Davis (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - PR-Manager = Alex Silva (ausgedachte Person, ESP) (4/5 Sterne)
+ - Psychologe = Jamie Jones (ausgedachte Person, ESP) (3/5 Sterne)
+ - Scout = Casey Thomas (ausgedachte Person, ESP) (3/5 Sterne)
+ - Anwalt = Sam Gonzalez (ausgedachte Person, ESP) (3/5 Sterne)
+ - Event-Manager = Arthur Johnson (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Physiotherapeut = David Anderson (ausgedachte Person, ESP) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[FUT ESPORTS]
+ - Spieler 1 = Superlachie (4/5 Sterne)
+ - Spieler 2 = Rizzo (4,5/5 Sterne)
+ - Spieler 3 = hockser (5/5 Sterne)
+ - Coach = Sizz (4,5/5 Sterne)
+ - Geschäftsführer = Francis Lopez (ausgedachte Person, UK) (5/5 Sterne)
+ - Finanzvorstand = Chris Jones (ausgedachte Person, UK) (3,5/5 Sterne)
+ - PR-Manager = Sam Davis (ausgedachte Person, UK) (3/5 Sterne)
+ - Psychologe = Gabriel Anderson (ausgedachte Person, UK) (3,5/5 Sterne)
+ - Scout = Gabriel Jones (ausgedachte Person, UK) (3/5 Sterne)
+ - Anwalt = Sam Müller (ausgedachte Person, UK) (3,5/5 Sterne)
+ - Event-Manager = Sam Müller (ausgedachte Person, UK) (4/5 Sterne)
+ - Physiotherapeut = Sam Wilson (ausgedachte Person, UK) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[R8 ESPORTS]
+ - Spieler 1 = Bananahead (4/5 Sterne)
+ - Spieler 2 = Evoh (5/5 Sterne)
+ - Spieler 3 = Sypical (4/5 Sterne)
+ - Coach = Eversax (4/5 Sterne)
+ - Geschäftsführer = Sven Brown (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Finanzvorstand = Chris Hernandez (ausgedachte Person, ESP) (4/5 Sterne)
+ - PR-Manager = Sven Hernandez (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Psychologe = Jordan Silva (ausgedachte Person, ESP) (3/5 Sterne)
+ - Scout = Dominik Davis (ausgedachte Person, ESP) (3/5 Sterne)
+ - Anwalt = Casey Brown (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Event-Manager = Arthur Lopez (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Physiotherapeut = Sven Williams (ausgedachte Person, ESP) (4/5 Sterne)
+
+--------------------------------------------------
+
+[TEAM SECRET]
+ - Spieler 1 = Maestro (3,5/5 Sterne)
+ - Spieler 2 = Amphis (3,5/5 Sterne)
+ - Spieler 3 = Comm (3,5/5 Sterne)
+ - Coach = Fireburner (3,5/5 Sterne)
+ - Geschäftsführer = Casey Williams (ausgedachte Person, ESP) (5/5 Sterne)
+ - Finanzvorstand = David Gonzalez (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - PR-Manager = Dominik Müller (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Psychologe = Dominik Smith (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Scout = Skyler Lopez (ausgedachte Person, ESP) (4/5 Sterne)
+ - Anwalt = Sven Anderson (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Event-Manager = Taylor Brown (ausgedachte Person, ESP) (4/5 Sterne)
+ - Physiotherapeut = Ryan Müller (ausgedachte Person, ESP) (3/5 Sterne)
+
+--------------------------------------------------
+
+[DIGNITAS]
+ - Spieler 1 = crr (4/5 Sterne)
+ - Spieler 2 = caleb (3,5/5 Sterne)
+ - Spieler 3 = noly (3,5/5 Sterne)
+ - Coach = Satthew (3,5/5 Sterne)
+ - Geschäftsführer = Sam Taylor (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Finanzvorstand = Casey Martinez (ausgedachte Person, AUS) (3/5 Sterne)
+ - PR-Manager = Gabriel Jones (ausgedachte Person, AUS) (3/5 Sterne)
+ - Psychologe = Pierre Dupont (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Scout = Gabriel Thomas (ausgedachte Person, AUS) (4/5 Sterne)
+ - Anwalt = Skyler Brown (ausgedachte Person, AUS) (4/5 Sterne)
+ - Event-Manager = Casey Garcia (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Physiotherapeut = Taylor Miller (ausgedachte Person, AUS) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[PWR]
+ - Spieler 1 = caleb (3,5/5 Sterne)
+ - Spieler 2 = Atow (3,5/5 Sterne)
+ - Spieler 3 = Comm (4/5 Sterne)
+ - Coach = Satthew (4,5/5 Sterne)
+ - Geschäftsführer = Skyler Johnson (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Finanzvorstand = Sam Jones (ausgedachte Person, AUS) (4/5 Sterne)
+ - PR-Manager = Jamie Williams (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Psychologe = Arthur Miller (ausgedachte Person, AUS) (3/5 Sterne)
+ - Scout = Arthur Miller (ausgedachte Person, AUS) (3/5 Sterne)
+ - Anwalt = Taylor Garcia (ausgedachte Person, AUS) (3/5 Sterne)
+ - Event-Manager = Chris Anderson (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Physiotherapeut = Skyler Miller (ausgedachte Person, AUS) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[WILDCARD]
+ - Spieler 1 = ayyjayy (5/5 Sterne)
+ - Spieler 2 = kamz (4,5/5 Sterne)
+ - Spieler 3 = Torsos (3,5/5 Sterne)
+ - Coach = Ferra (3,5/5 Sterne)
+ - Geschäftsführer = Sven Garcia (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Finanzvorstand = Alex Davis (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - PR-Manager = Skyler Williams (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Psychologe = Arthur Hernandez (ausgedachte Person, ESP) (3/5 Sterne)
+ - Scout = Chris Dupont (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Anwalt = Arthur Müller (ausgedachte Person, ESP) (4/5 Sterne)
+ - Event-Manager = Gabriel Anderson (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Physiotherapeut = Sven Johnson (ausgedachte Person, ESP) (3/5 Sterne)
+
+--------------------------------------------------
+
+[TWISTED MINDS]
+ - Spieler 1 = Hntr (4/5 Sterne)
+ - Spieler 2 = Kuxir97 (4/5 Sterne)
+ - Spieler 3 = Scream (3,5/5 Sterne)
+ - Coach = Satthew (4/5 Sterne)
+ - Geschäftsführer = Arthur Hernandez (ausgedachte Person, BRA) (4/5 Sterne)
+ - Finanzvorstand = Casey Williams (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - PR-Manager = Sven Smith (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Psychologe = Robin Hernandez (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Scout = Skyler Williams (ausgedachte Person, BRA) (3/5 Sterne)
+ - Anwalt = Dominik Müller (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Event-Manager = Casey Brown (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Physiotherapeut = Francis Miller (ausgedachte Person, BRA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[FIVE FEARS]
+ - Spieler 1 = Fever (4,5/5 Sterne)
+ - Spieler 2 = Firstkiller (4,5/5 Sterne)
+ - Spieler 3 = Cheese (3,5/5 Sterne)
+ - Coach = Eversax (4/5 Sterne)
+ - Geschäftsführer = Francis Wilson (ausgedachte Person, KSA) (5/5 Sterne)
+ - Finanzvorstand = Arthur Davis (ausgedachte Person, KSA) (3/5 Sterne)
+ - PR-Manager = Chris Garcia (ausgedachte Person, KSA) (3,5/5 Sterne)
+ - Psychologe = Gabriel Garcia (ausgedachte Person, KSA) (3/5 Sterne)
+ - Scout = Chris Taylor (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Anwalt = Francis Davis (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Event-Manager = Pierre Wilson (ausgedachte Person, KSA) (3/5 Sterne)
+ - Physiotherapeut = Dominik Thomas (ausgedachte Person, KSA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[GENTLE MATES]
+ - Spieler 1 = Superlachie (4/5 Sterne)
+ - Spieler 2 = AppJack (4,5/5 Sterne)
+ - Spieler 3 = crr (5/5 Sterne)
+ - Coach = Sizz (3,5/5 Sterne)
+ - Geschäftsführer = Robin Taylor (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Finanzvorstand = Chris Miller (ausgedachte Person, USA) (4/5 Sterne)
+ - PR-Manager = Sven Davis (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Psychologe = Jamie Anderson (ausgedachte Person, USA) (3,5/5 Sterne)
+ - Scout = Ryan Hernandez (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Anwalt = Morgan Taylor (ausgedachte Person, USA) (4/5 Sterne)
+ - Event-Manager = Dominik Anderson (ausgedachte Person, USA) (3/5 Sterne)
+ - Physiotherapeut = Jamie Miller (ausgedachte Person, USA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[VIRTUS.PRO]
+ - Spieler 1 = gReazymeister (5/5 Sterne)
+ - Spieler 2 = Fever (5/5 Sterne)
+ - Spieler 3 = Lj (4/5 Sterne)
+ - Coach = Jahzo (4,5/5 Sterne)
+ - Geschäftsführer = David Williams (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Finanzvorstand = Jamie Wilson (ausgedachte Person, AUS) (4/5 Sterne)
+ - PR-Manager = Sam Jones (ausgedachte Person, AUS) (4/5 Sterne)
+ - Psychologe = Casey Brown (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Scout = Alex Müller (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Anwalt = David Taylor (ausgedachte Person, AUS) (3/5 Sterne)
+ - Event-Manager = Lucas Hernandez (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Physiotherapeut = Dominik Gonzalez (ausgedachte Person, AUS) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[KINOTROPE GAMING]
+ - Spieler 1 = Amphis (5/5 Sterne)
+ - Spieler 2 = Archie (4/5 Sterne)
+ - Spieler 3 = Evoh (4/5 Sterne)
+ - Coach = Satthew (4,5/5 Sterne)
+ - Geschäftsführer = Marc Lopez (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Finanzvorstand = Arthur Jones (ausgedachte Person, DE) (3/5 Sterne)
+ - PR-Manager = Lucas Johnson (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Psychologe = Marc Anderson (ausgedachte Person, DE) (4/5 Sterne)
+ - Scout = Lucas Taylor (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Anwalt = Arthur Lopez (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Event-Manager = David Lopez (ausgedachte Person, DE) (4/5 Sterne)
+ - Physiotherapeut = Casey Garcia (ausgedachte Person, DE) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[PIONEERS]
+ - Spieler 1 = hockser (4,5/5 Sterne)
+ - Spieler 2 = Amphis (4/5 Sterne)
+ - Spieler 3 = kaka (4,5/5 Sterne)
+ - Coach = Fireburner (4/5 Sterne)
+ - Geschäftsführer = Robin Anderson (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Finanzvorstand = Taylor Johnson (ausgedachte Person, DE) (3,5/5 Sterne)
+ - PR-Manager = Dominik Johnson (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Psychologe = Sam Hernandez (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Scout = Robin Anderson (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Anwalt = Sven Müller (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Event-Manager = Sven Martinez (ausgedachte Person, DE) (3/5 Sterne)
+ - Physiotherapeut = Gabriel Martinez (ausgedachte Person, DE) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[NINJAS IN PYJAMAS]
+ - Spieler 1 = Chronic (4/5 Sterne)
+ - Spieler 2 = N1tro (5/5 Sterne)
+ - Spieler 3 = caleb (4/5 Sterne)
+ - Coach = Sizz (4/5 Sterne)
+ - Geschäftsführer = Sven Gonzalez (ausgedachte Person, KSA) (3,5/5 Sterne)
+ - Finanzvorstand = Dominik Davis (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - PR-Manager = Morgan Lopez (ausgedachte Person, KSA) (3,5/5 Sterne)
+ - Psychologe = Pierre Anderson (ausgedachte Person, KSA) (3/5 Sterne)
+ - Scout = Dominik Thomas (ausgedachte Person, KSA) (3/5 Sterne)
+ - Anwalt = Sam Hernandez (ausgedachte Person, KSA) (3,5/5 Sterne)
+ - Event-Manager = Lucas Williams (ausgedachte Person, KSA) (3/5 Sterne)
+ - Physiotherapeut = Skyler Martinez (ausgedachte Person, KSA) (4/5 Sterne)
+
+--------------------------------------------------
+
+[CLOUD9]
+ - Spieler 1 = Torsos (4,5/5 Sterne)
+ - Spieler 2 = Metsanauris (5/5 Sterne)
+ - Spieler 3 = kamz (4,5/5 Sterne)
+ - Coach = Jahzo (3,5/5 Sterne)
+ - Geschäftsführer = David Smith (ausgedachte Person, KSA) (3,5/5 Sterne)
+ - Finanzvorstand = Francis Jones (ausgedachte Person, KSA) (3/5 Sterne)
+ - PR-Manager = Jordan Smith (ausgedachte Person, KSA) (3,5/5 Sterne)
+ - Psychologe = Ryan Smith (ausgedachte Person, KSA) (3,5/5 Sterne)
+ - Scout = Casey Johnson (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Anwalt = Chris Thomas (ausgedachte Person, KSA) (3,5/5 Sterne)
+ - Event-Manager = Lucas Garcia (ausgedachte Person, KSA) (4/5 Sterne)
+ - Physiotherapeut = Morgan Taylor (ausgedachte Person, KSA) (3/5 Sterne)
+
+--------------------------------------------------
+
+[M80]
+ - Spieler 1 = Atow (3,5/5 Sterne)
+ - Spieler 2 = Dread (4,5/5 Sterne)
+ - Spieler 3 = Joyo (5/5 Sterne)
+ - Coach = Ferra (4/5 Sterne)
+ - Geschäftsführer = Ryan Dupont (ausgedachte Person, DE) (4/5 Sterne)
+ - Finanzvorstand = Chris Miller (ausgedachte Person, DE) (3/5 Sterne)
+ - PR-Manager = Gabriel Müller (ausgedachte Person, DE) (4/5 Sterne)
+ - Psychologe = Arthur Hernandez (ausgedachte Person, DE) (4/5 Sterne)
+ - Scout = Sam Wilson (ausgedachte Person, DE) (4/5 Sterne)
+ - Anwalt = Alex Hernandez (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Event-Manager = Chris Hernandez (ausgedachte Person, DE) (4/5 Sterne)
+ - Physiotherapeut = Lucas Johnson (ausgedachte Person, DE) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[TEAM VISION]
+ - Spieler 1 = Oaly (5/5 Sterne)
+ - Spieler 2 = crr (5/5 Sterne)
+ - Spieler 3 = Rizzo (5/5 Sterne)
+ - Coach = Ferra (4,5/5 Sterne)
+ - Geschäftsführer = Gabriel Garcia (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Finanzvorstand = Casey Dupont (ausgedachte Person, ESP) (4/5 Sterne)
+ - PR-Manager = Lucas Jones (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Psychologe = Gabriel Taylor (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Scout = Robin Smith (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Anwalt = Robin Williams (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Event-Manager = Ryan Rodriguez (ausgedachte Person, ESP) (4/5 Sterne)
+ - Physiotherapeut = Robin Garcia (ausgedachte Person, ESP) (4/5 Sterne)
+
+--------------------------------------------------
+
+[MOIST ESPORTS]
+ - Spieler 1 = JKnaps (4/5 Sterne)
+ - Spieler 2 = Chronic (5/5 Sterne)
+ - Spieler 3 = Rizzo (5/5 Sterne)
+ - Coach = Eversax (4,5/5 Sterne)
+ - Geschäftsführer = Casey Gonzalez (ausgedachte Person, DE) (5/5 Sterne)
+ - Finanzvorstand = Lucas Smith (ausgedachte Person, DE) (3/5 Sterne)
+ - PR-Manager = Jamie Jones (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Psychologe = Casey Miller (ausgedachte Person, DE) (4/5 Sterne)
+ - Scout = David Anderson (ausgedachte Person, DE) (4/5 Sterne)
+ - Anwalt = Sven Anderson (ausgedachte Person, DE) (4/5 Sterne)
+ - Event-Manager = Francis Lopez (ausgedachte Person, DE) (4/5 Sterne)
+ - Physiotherapeut = Jamie Garcia (ausgedachte Person, DE) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[WYLDE]
+ - Spieler 1 = BeastMode (4/5 Sterne)
+ - Spieler 2 = crr (4/5 Sterne)
+ - Spieler 3 = Torsos (4/5 Sterne)
+ - Coach = Jahzo (4,5/5 Sterne)
+ - Geschäftsführer = David Garcia (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Finanzvorstand = Chris Brown (ausgedachte Person, DE) (4/5 Sterne)
+ - PR-Manager = Casey Rodriguez (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Psychologe = Jamie Smith (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Scout = Skyler Müller (ausgedachte Person, DE) (3/5 Sterne)
+ - Anwalt = Arthur Miller (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Event-Manager = David Silva (ausgedachte Person, DE) (3/5 Sterne)
+ - Physiotherapeut = Gabriel Miller (ausgedachte Person, DE) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[ENDPOINT]
+ - Spieler 1 = Metsanauris (4,5/5 Sterne)
+ - Spieler 2 = Remkoe (5/5 Sterne)
+ - Spieler 3 = kamz (3,5/5 Sterne)
+ - Coach = Chrome (3,5/5 Sterne)
+ - Geschäftsführer = Dominik Gonzalez (ausgedachte Person, USA) (3,5/5 Sterne)
+ - Finanzvorstand = Gabriel Müller (ausgedachte Person, USA) (3,5/5 Sterne)
+ - PR-Manager = Taylor Thomas (ausgedachte Person, USA) (4/5 Sterne)
+ - Psychologe = Sam Jones (ausgedachte Person, USA) (3/5 Sterne)
+ - Scout = Arthur Hernandez (ausgedachte Person, USA) (3,5/5 Sterne)
+ - Anwalt = Marc Martinez (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Event-Manager = Lucas Miller (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Physiotherapeut = Jamie Thomas (ausgedachte Person, USA) (3/5 Sterne)
+
+--------------------------------------------------
+
+[INFAMOUS]
+ - Spieler 1 = Lj (4,5/5 Sterne)
+ - Spieler 2 = Acronik (3,5/5 Sterne)
+ - Spieler 3 = Daniel (4/5 Sterne)
+ - Coach = Eversax (3,5/5 Sterne)
+ - Geschäftsführer = Morgan Anderson (ausgedachte Person, UK) (3,5/5 Sterne)
+ - Finanzvorstand = Morgan Smith (ausgedachte Person, UK) (4,5/5 Sterne)
+ - PR-Manager = Lucas Taylor (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Psychologe = Jamie Müller (ausgedachte Person, UK) (3,5/5 Sterne)
+ - Scout = Jamie Miller (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Anwalt = Sam Jones (ausgedachte Person, UK) (4/5 Sterne)
+ - Event-Manager = Gabriel Brown (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Physiotherapeut = Chris Anderson (ausgedachte Person, UK) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[BS+COMPETITION]
+ - Spieler 1 = Retals (3,5/5 Sterne)
+ - Spieler 2 = Archie (4/5 Sterne)
+ - Spieler 3 = kaka (4,5/5 Sterne)
+ - Coach = Chrome (4,5/5 Sterne)
+ - Geschäftsführer = Gabriel Miller (ausgedachte Person, DE) (5/5 Sterne)
+ - Finanzvorstand = Chris Lopez (ausgedachte Person, DE) (4/5 Sterne)
+ - PR-Manager = Dominik Garcia (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Psychologe = Lucas Dupont (ausgedachte Person, DE) (3/5 Sterne)
+ - Scout = Sven Davis (ausgedachte Person, DE) (4/5 Sterne)
+ - Anwalt = Alex Dupont (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Event-Manager = Gabriel Thomas (ausgedachte Person, DE) (3/5 Sterne)
+ - Physiotherapeut = Skyler Thomas (ausgedachte Person, DE) (3/5 Sterne)
+
+--------------------------------------------------
+
+[G2 ESPORTS]
+ - Spieler 1 = Acronik (5/5 Sterne)
+ - Spieler 2 = Atow (4,5/5 Sterne)
+ - Spieler 3 = Oaly (4/5 Sterne)
+ - Coach = Fireburner (4,5/5 Sterne)
+ - Geschäftsführer = Sven Gonzalez (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Finanzvorstand = David Rodriguez (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - PR-Manager = Robin Davis (ausgedachte Person, ESP) (3/5 Sterne)
+ - Psychologe = Morgan Davis (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Scout = David Miller (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Anwalt = Arthur Müller (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Event-Manager = Sam Davis (ausgedachte Person, ESP) (4/5 Sterne)
+ - Physiotherapeut = Robin Silva (ausgedachte Person, ESP) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[77BLOCKS]
+ - Spieler 1 = Caard (5/5 Sterne)
+ - Spieler 2 = Sypical (5/5 Sterne)
+ - Spieler 3 = Dread (3,5/5 Sterne)
+ - Coach = Satthew (3,5/5 Sterne)
+ - Geschäftsführer = Marc Rodriguez (ausgedachte Person, ESP) (5/5 Sterne)
+ - Finanzvorstand = Lucas Müller (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - PR-Manager = Skyler Anderson (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Psychologe = Jamie Lopez (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Scout = Chris Smith (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Anwalt = Morgan Miller (ausgedachte Person, ESP) (3/5 Sterne)
+ - Event-Manager = Arthur Hernandez (ausgedachte Person, ESP) (3/5 Sterne)
+ - Physiotherapeut = Casey Silva (ausgedachte Person, ESP) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[BTF ESPORTS]
+ - Spieler 1 = BeastMode (4,5/5 Sterne)
+ - Spieler 2 = MajicBear (4,5/5 Sterne)
+ - Spieler 3 = Caard (5/5 Sterne)
+ - Coach = Chrome (4/5 Sterne)
+ - Geschäftsführer = David Jones (ausgedachte Person, AUS) (5/5 Sterne)
+ - Finanzvorstand = Arthur Johnson (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - PR-Manager = Ryan Taylor (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Psychologe = Sam Garcia (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Scout = Robin Wilson (ausgedachte Person, AUS) (4/5 Sterne)
+ - Anwalt = Alex Miller (ausgedachte Person, AUS) (4/5 Sterne)
+ - Event-Manager = Gabriel Thomas (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Physiotherapeut = Taylor Lopez (ausgedachte Person, AUS) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[CANTERBURY-BANKSTOWN BULLDOGS]
+ - Spieler 1 = carca (4,5/5 Sterne)
+ - Spieler 2 = kamz (4/5 Sterne)
+ - Spieler 3 = Satthew (4/5 Sterne)
+ - Coach = Sizz (4,5/5 Sterne)
+ - Geschäftsführer = Dominik Jones (ausgedachte Person, AUS) (5/5 Sterne)
+ - Finanzvorstand = Jordan Davis (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - PR-Manager = Dominik Martinez (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Psychologe = David Müller (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Scout = Marc Thomas (ausgedachte Person, AUS) (4/5 Sterne)
+ - Anwalt = Chris Lopez (ausgedachte Person, AUS) (3/5 Sterne)
+ - Event-Manager = Marc Lopez (ausgedachte Person, AUS) (3/5 Sterne)
+ - Physiotherapeut = Taylor Hernandez (ausgedachte Person, AUS) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[DEATH CLOUD ESPORTS]
+ - Spieler 1 = Comm (5/5 Sterne)
+ - Spieler 2 = EyeIgnite (3,5/5 Sterne)
+ - Spieler 3 = Scream (4,5/5 Sterne)
+ - Coach = Ferra (4,5/5 Sterne)
+ - Geschäftsführer = Arthur Martinez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Finanzvorstand = David Anderson (ausgedachte Person, BRA) (3/5 Sterne)
+ - PR-Manager = Pierre Dupont (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Psychologe = Jamie Jones (ausgedachte Person, BRA) (3/5 Sterne)
+ - Scout = Sven Silva (ausgedachte Person, BRA) (3/5 Sterne)
+ - Anwalt = Lucas Williams (ausgedachte Person, BRA) (4/5 Sterne)
+ - Event-Manager = Alex Müller (ausgedachte Person, BRA) (4/5 Sterne)
+ - Physiotherapeut = Jordan Miller (ausgedachte Person, BRA) (4/5 Sterne)
+
+--------------------------------------------------
+
+[DELETED GAMING]
+ - Spieler 1 = N1tro (5/5 Sterne)
+ - Spieler 2 = Remkoe (4/5 Sterne)
+ - Spieler 3 = Archie (4/5 Sterne)
+ - Coach = Eversax (3,5/5 Sterne)
+ - Geschäftsführer = Sam Taylor (ausgedachte Person, ESP) (5/5 Sterne)
+ - Finanzvorstand = Pierre Jones (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - PR-Manager = Gabriel Johnson (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Psychologe = Lucas Garcia (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Scout = Skyler Smith (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Anwalt = Jamie Anderson (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Event-Manager = Sam Lopez (ausgedachte Person, ESP) (4/5 Sterne)
+ - Physiotherapeut = Gabriel Miller (ausgedachte Person, ESP) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[GRACESBLAZE]
+ - Spieler 1 = Cheese (5/5 Sterne)
+ - Spieler 2 = Superlachie (5/5 Sterne)
+ - Spieler 3 = Metsanauris (3,5/5 Sterne)
+ - Coach = Ferra (3,5/5 Sterne)
+ - Geschäftsführer = Dominik Thomas (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Finanzvorstand = Gabriel Miller (ausgedachte Person, UK) (4/5 Sterne)
+ - PR-Manager = Alex Martinez (ausgedachte Person, UK) (4/5 Sterne)
+ - Psychologe = Alex Thomas (ausgedachte Person, UK) (3/5 Sterne)
+ - Scout = Pierre Gonzalez (ausgedachte Person, UK) (4/5 Sterne)
+ - Anwalt = Casey Taylor (ausgedachte Person, UK) (4/5 Sterne)
+ - Event-Manager = Casey Brown (ausgedachte Person, UK) (4/5 Sterne)
+ - Physiotherapeut = Taylor Silva (ausgedachte Person, UK) (3/5 Sterne)
+
+--------------------------------------------------
+
+[NOVA ESPORTS]
+ - Spieler 1 = Hntr (4/5 Sterne)
+ - Spieler 2 = Fever (3,5/5 Sterne)
+ - Spieler 3 = Metsanauris (4,5/5 Sterne)
+ - Coach = Satthew (4/5 Sterne)
+ - Geschäftsführer = Sven Williams (ausgedachte Person, BRA) (4/5 Sterne)
+ - Finanzvorstand = Taylor Anderson (ausgedachte Person, BRA) (4/5 Sterne)
+ - PR-Manager = Marc Wilson (ausgedachte Person, BRA) (4/5 Sterne)
+ - Psychologe = Morgan Garcia (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Scout = Jamie Davis (ausgedachte Person, BRA) (3/5 Sterne)
+ - Anwalt = Lucas Dupont (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Event-Manager = Casey Martinez (ausgedachte Person, BRA) (4/5 Sterne)
+ - Physiotherapeut = Sam Martinez (ausgedachte Person, BRA) (3/5 Sterne)
+
+--------------------------------------------------
+
+[NUTORIOUS]
+ - Spieler 1 = Superlachie (4,5/5 Sterne)
+ - Spieler 2 = JKnaps (5/5 Sterne)
+ - Spieler 3 = BeastMode (4,5/5 Sterne)
+ - Coach = Fireburner (3,5/5 Sterne)
+ - Geschäftsführer = Casey Gonzalez (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Finanzvorstand = Pierre Anderson (ausgedachte Person, BRA) (4/5 Sterne)
+ - PR-Manager = Pierre Jones (ausgedachte Person, BRA) (3/5 Sterne)
+ - Psychologe = Lucas Miller (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Scout = Chris Johnson (ausgedachte Person, BRA) (3/5 Sterne)
+ - Anwalt = Jordan Miller (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Event-Manager = Chris Silva (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Physiotherapeut = Arthur Johnson (ausgedachte Person, BRA) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[OVERLOOKED]
+ - Spieler 1 = Maestro (5/5 Sterne)
+ - Spieler 2 = N1tro (3,5/5 Sterne)
+ - Spieler 3 = Cheese (5/5 Sterne)
+ - Coach = Sizz (4,5/5 Sterne)
+ - Geschäftsführer = Sven Garcia (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Finanzvorstand = Francis Brown (ausgedachte Person, FR) (4,5/5 Sterne)
+ - PR-Manager = Lucas Jones (ausgedachte Person, FR) (4/5 Sterne)
+ - Psychologe = Chris Rodriguez (ausgedachte Person, FR) (4/5 Sterne)
+ - Scout = Jordan Martinez (ausgedachte Person, FR) (4/5 Sterne)
+ - Anwalt = Ryan Silva (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Event-Manager = Sam Brown (ausgedachte Person, FR) (3/5 Sterne)
+ - Physiotherapeut = Jordan Davis (ausgedachte Person, FR) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[SUNSET]
+ - Spieler 1 = Joreuz (4/5 Sterne)
+ - Spieler 2 = Fever (4/5 Sterne)
+ - Spieler 3 = Allushin (4/5 Sterne)
+ - Coach = Eversax (4/5 Sterne)
+ - Geschäftsführer = Taylor Taylor (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Finanzvorstand = Skyler Johnson (ausgedachte Person, DE) (3,5/5 Sterne)
+ - PR-Manager = Arthur Garcia (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Psychologe = Chris Smith (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Scout = Alex Rodriguez (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Anwalt = Gabriel Davis (ausgedachte Person, DE) (3/5 Sterne)
+ - Event-Manager = Morgan Garcia (ausgedachte Person, DE) (3/5 Sterne)
+ - Physiotherapeut = Taylor Hernandez (ausgedachte Person, DE) (3/5 Sterne)
+
+--------------------------------------------------
+
+[UNREAL NIGHTMARE]
+ - Spieler 1 = crr (3,5/5 Sterne)
+ - Spieler 2 = Comm (5/5 Sterne)
+ - Spieler 3 = EyeIgnite (4/5 Sterne)
+ - Coach = Fireburner (4,5/5 Sterne)
+ - Geschäftsführer = Jordan Wilson (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Finanzvorstand = Lucas Smith (ausgedachte Person, BRA) (3/5 Sterne)
+ - PR-Manager = David Martinez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Psychologe = Chris Gonzalez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Scout = Sam Dupont (ausgedachte Person, BRA) (4/5 Sterne)
+ - Anwalt = Pierre Johnson (ausgedachte Person, BRA) (3/5 Sterne)
+ - Event-Manager = Taylor Garcia (ausgedachte Person, BRA) (4/5 Sterne)
+ - Physiotherapeut = Dominik Taylor (ausgedachte Person, BRA) (4/5 Sterne)
+
+--------------------------------------------------
+
+[WIP ESPORTS]
+ - Spieler 1 = Maestro (3,5/5 Sterne)
+ - Spieler 2 = Turo (4/5 Sterne)
+ - Spieler 3 = hockser (5/5 Sterne)
+ - Coach = Sizz (4/5 Sterne)
+ - Geschäftsführer = Casey Hernandez (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Finanzvorstand = Lucas Martinez (ausgedachte Person, DE) (4,5/5 Sterne)
+ - PR-Manager = Chris Davis (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Psychologe = Robin Garcia (ausgedachte Person, DE) (4/5 Sterne)
+ - Scout = Taylor Gonzalez (ausgedachte Person, DE) (3/5 Sterne)
+ - Anwalt = Sam Dupont (ausgedachte Person, DE) (3/5 Sterne)
+ - Event-Manager = Sven Silva (ausgedachte Person, DE) (4/5 Sterne)
+ - Physiotherapeut = Taylor Anderson (ausgedachte Person, DE) (3/5 Sterne)
+
+--------------------------------------------------
+
+[WOO]
+ - Spieler 1 = Satthew (5/5 Sterne)
+ - Spieler 2 = JKnaps (4,5/5 Sterne)
+ - Spieler 3 = Chicago (5/5 Sterne)
+ - Coach = Jahzo (4,5/5 Sterne)
+ - Geschäftsführer = Jordan Miller (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Finanzvorstand = Francis Silva (ausgedachte Person, DE) (3,5/5 Sterne)
+ - PR-Manager = Taylor Gonzalez (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Psychologe = Chris Rodriguez (ausgedachte Person, DE) (4/5 Sterne)
+ - Scout = Chris Garcia (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Anwalt = Sven Anderson (ausgedachte Person, DE) (3/5 Sterne)
+ - Event-Manager = Pierre Garcia (ausgedachte Person, DE) (3/5 Sterne)
+ - Physiotherapeut = Morgan Garcia (ausgedachte Person, DE) (4/5 Sterne)
+
+--------------------------------------------------
+
+[ZOOKEEPERS]
+ - Spieler 1 = kamz (5/5 Sterne)
+ - Spieler 2 = N1tro (3,5/5 Sterne)
+ - Spieler 3 = Chronic (4/5 Sterne)
+ - Coach = Chrome (4,5/5 Sterne)
+ - Geschäftsführer = Alex Dupont (ausgedachte Person, FR) (4/5 Sterne)
+ - Finanzvorstand = Dominik Hernandez (ausgedachte Person, FR) (4,5/5 Sterne)
+ - PR-Manager = Robin Williams (ausgedachte Person, FR) (4/5 Sterne)
+ - Psychologe = Jamie Davis (ausgedachte Person, FR) (3/5 Sterne)
+ - Scout = Jordan Johnson (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Anwalt = Pierre Müller (ausgedachte Person, FR) (3/5 Sterne)
+ - Event-Manager = Skyler Lopez (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Physiotherapeut = David Taylor (ausgedachte Person, FR) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[GAMEWARD]
+ - Spieler 1 = M1k3rules (5/5 Sterne)
+ - Spieler 2 = Bananahead (3,5/5 Sterne)
+ - Spieler 3 = Torsos (4,5/5 Sterne)
+ - Coach = RawGregory (4,5/5 Sterne)
+ - Geschäftsführer = Gabriel Gonzalez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Finanzvorstand = Jordan Jones (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - PR-Manager = Pierre Müller (ausgedachte Person, BRA) (3/5 Sterne)
+ - Psychologe = Ryan Miller (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Scout = Taylor Garcia (ausgedachte Person, BRA) (4/5 Sterne)
+ - Anwalt = Robin Silva (ausgedachte Person, BRA) (3/5 Sterne)
+ - Event-Manager = David Hernandez (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Physiotherapeut = Taylor Martinez (ausgedachte Person, BRA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[25 SHOT CLUB]
+ - Spieler 1 = Sypical (5/5 Sterne)
+ - Spieler 2 = Chicago (3,5/5 Sterne)
+ - Spieler 3 = Caard (5/5 Sterne)
+ - Coach = Jahzo (3,5/5 Sterne)
+ - Geschäftsführer = Lucas Dupont (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Finanzvorstand = Gabriel Hernandez (ausgedachte Person, DE) (4,5/5 Sterne)
+ - PR-Manager = Sven Miller (ausgedachte Person, DE) (3/5 Sterne)
+ - Psychologe = Dominik Smith (ausgedachte Person, DE) (4/5 Sterne)
+ - Scout = Morgan Taylor (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Anwalt = Francis Dupont (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Event-Manager = Chris Jones (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Physiotherapeut = Gabriel Martinez (ausgedachte Person, DE) (3/5 Sterne)
+
+--------------------------------------------------
+
+[ENISORAIL]
+ - Spieler 1 = Markydooda (4,5/5 Sterne)
+ - Spieler 2 = CaioTG1 (4/5 Sterne)
+ - Spieler 3 = Hntr (3,5/5 Sterne)
+ - Coach = Jahzo (4,5/5 Sterne)
+ - Geschäftsführer = Chris Wilson (ausgedachte Person, UK) (4/5 Sterne)
+ - Finanzvorstand = Francis Rodriguez (ausgedachte Person, UK) (3,5/5 Sterne)
+ - PR-Manager = Casey Silva (ausgedachte Person, UK) (3,5/5 Sterne)
+ - Psychologe = Skyler Brown (ausgedachte Person, UK) (3,5/5 Sterne)
+ - Scout = Pierre Johnson (ausgedachte Person, UK) (3/5 Sterne)
+ - Anwalt = Morgan Gonzalez (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Event-Manager = Gabriel Thomas (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Physiotherapeut = Gabriel Taylor (ausgedachte Person, UK) (4/5 Sterne)
+
+--------------------------------------------------
+
+[FIZ6 GAMING]
+ - Spieler 1 = Caard (3,5/5 Sterne)
+ - Spieler 2 = hockser (5/5 Sterne)
+ - Spieler 3 = caleb (5/5 Sterne)
+ - Coach = Chrome (4,5/5 Sterne)
+ - Geschäftsführer = Jamie Garcia (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Finanzvorstand = Francis Wilson (ausgedachte Person, AUS) (3/5 Sterne)
+ - PR-Manager = Jamie Lopez (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Psychologe = Jordan Müller (ausgedachte Person, AUS) (4/5 Sterne)
+ - Scout = Jamie Dupont (ausgedachte Person, AUS) (3/5 Sterne)
+ - Anwalt = Pierre Taylor (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Event-Manager = Lucas Thomas (ausgedachte Person, AUS) (3/5 Sterne)
+ - Physiotherapeut = Lucas Thomas (ausgedachte Person, AUS) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[JUNGLE JUICERS]
+ - Spieler 1 = caleb (5/5 Sterne)
+ - Spieler 2 = Lj (3,5/5 Sterne)
+ - Spieler 3 = EyeIgnite (4,5/5 Sterne)
+ - Coach = Chrome (4,5/5 Sterne)
+ - Geschäftsführer = Sam Wilson (ausgedachte Person, USA) (4/5 Sterne)
+ - Finanzvorstand = Jordan Jones (ausgedachte Person, USA) (4,5/5 Sterne)
+ - PR-Manager = Lucas Wilson (ausgedachte Person, USA) (3,5/5 Sterne)
+ - Psychologe = Francis Rodriguez (ausgedachte Person, USA) (4/5 Sterne)
+ - Scout = Dominik Hernandez (ausgedachte Person, USA) (4/5 Sterne)
+ - Anwalt = Pierre Müller (ausgedachte Person, USA) (4/5 Sterne)
+ - Event-Manager = Sam Davis (ausgedachte Person, USA) (3/5 Sterne)
+ - Physiotherapeut = Arthur Martinez (ausgedachte Person, USA) (4/5 Sterne)
+
+--------------------------------------------------
+
+[L'ANTIQUE ESPORT]
+ - Spieler 1 = Superlachie (3,5/5 Sterne)
+ - Spieler 2 = crr (4/5 Sterne)
+ - Spieler 3 = CaioTG1 (4,5/5 Sterne)
+ - Coach = Chrome (4/5 Sterne)
+ - Geschäftsführer = Dominik Johnson (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Finanzvorstand = Jamie Anderson (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - PR-Manager = Robin Johnson (ausgedachte Person, BRA) (3/5 Sterne)
+ - Psychologe = Sven Wilson (ausgedachte Person, BRA) (4/5 Sterne)
+ - Scout = Alex Rodriguez (ausgedachte Person, BRA) (4/5 Sterne)
+ - Anwalt = Morgan Brown (ausgedachte Person, BRA) (4/5 Sterne)
+ - Event-Manager = David Brown (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Physiotherapeut = Taylor Johnson (ausgedachte Person, BRA) (3/5 Sterne)
+
+--------------------------------------------------
+
+[LOTUS 8 ESPORTS]
+ - Spieler 1 = kaka (3,5/5 Sterne)
+ - Spieler 2 = Caard (4,5/5 Sterne)
+ - Spieler 3 = Fever (4/5 Sterne)
+ - Coach = RawGregory (4,5/5 Sterne)
+ - Geschäftsführer = Dominik Johnson (ausgedachte Person, ESP) (4/5 Sterne)
+ - Finanzvorstand = Morgan Taylor (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - PR-Manager = Lucas Müller (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Psychologe = Francis Jones (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Scout = Pierre Miller (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Anwalt = Casey Anderson (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Event-Manager = Jamie Gonzalez (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Physiotherapeut = Francis Thomas (ausgedachte Person, ESP) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[STR1VE ESPORTS]
+ - Spieler 1 = Maestro (5/5 Sterne)
+ - Spieler 2 = Oski (4/5 Sterne)
+ - Spieler 3 = kaka (4/5 Sterne)
+ - Coach = Sizz (4,5/5 Sterne)
+ - Geschäftsführer = Taylor Garcia (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Finanzvorstand = David Rodriguez (ausgedachte Person, ESP) (3/5 Sterne)
+ - PR-Manager = Marc Silva (ausgedachte Person, ESP) (4/5 Sterne)
+ - Psychologe = Sam Williams (ausgedachte Person, ESP) (4/5 Sterne)
+ - Scout = Lucas Wilson (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Anwalt = Sven Dupont (ausgedachte Person, ESP) (3,5/5 Sterne)
+ - Event-Manager = Lucas Rodriguez (ausgedachte Person, ESP) (3/5 Sterne)
+ - Physiotherapeut = Sven Müller (ausgedachte Person, ESP) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[GRIDDYGOOSE]
+ - Spieler 1 = Sypical (4,5/5 Sterne)
+ - Spieler 2 = N1tro (4/5 Sterne)
+ - Spieler 3 = Amphis (3,5/5 Sterne)
+ - Coach = Sizz (4/5 Sterne)
+ - Geschäftsführer = Chris Davis (ausgedachte Person, DE) (4/5 Sterne)
+ - Finanzvorstand = Taylor Müller (ausgedachte Person, DE) (4/5 Sterne)
+ - PR-Manager = David Johnson (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Psychologe = Lucas Taylor (ausgedachte Person, DE) (3/5 Sterne)
+ - Scout = Sam Smith (ausgedachte Person, DE) (4/5 Sterne)
+ - Anwalt = Ryan Johnson (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Event-Manager = Chris Miller (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Physiotherapeut = Jamie Silva (ausgedachte Person, DE) (3/5 Sterne)
+
+--------------------------------------------------
+
+[NOVO ESPORTS]
+ - Spieler 1 = Amphis (3,5/5 Sterne)
+ - Spieler 2 = gReazymeister (5/5 Sterne)
+ - Spieler 3 = MajicBear (3,5/5 Sterne)
+ - Coach = Fireburner (4,5/5 Sterne)
+ - Geschäftsführer = Marc Thomas (ausgedachte Person, DE) (4/5 Sterne)
+ - Finanzvorstand = Taylor Miller (ausgedachte Person, DE) (4,5/5 Sterne)
+ - PR-Manager = Alex Taylor (ausgedachte Person, DE) (4/5 Sterne)
+ - Psychologe = Casey Thomas (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Scout = Morgan Dupont (ausgedachte Person, DE) (4/5 Sterne)
+ - Anwalt = Sam Wilson (ausgedachte Person, DE) (3/5 Sterne)
+ - Event-Manager = Dominik Gonzalez (ausgedachte Person, DE) (3/5 Sterne)
+ - Physiotherapeut = Dominik Rodriguez (ausgedachte Person, DE) (4/5 Sterne)
+
+--------------------------------------------------
+
+[EVIL GENIUSES]
+ - Spieler 1 = crr (4/5 Sterne)
+ - Spieler 2 = Firstkiller (3,5/5 Sterne)
+ - Spieler 3 = N1tro (4,5/5 Sterne)
+ - Coach = RawGregory (3,5/5 Sterne)
+ - Geschäftsführer = Jordan Rodriguez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Finanzvorstand = Morgan Lopez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - PR-Manager = Morgan Johnson (ausgedachte Person, BRA) (3/5 Sterne)
+ - Psychologe = Lucas Müller (ausgedachte Person, BRA) (4/5 Sterne)
+ - Scout = Ryan Müller (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Anwalt = Jordan Davis (ausgedachte Person, BRA) (4/5 Sterne)
+ - Event-Manager = Marc Martinez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Physiotherapeut = Skyler Müller (ausgedachte Person, BRA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[NORTHSTAR]
+ - Spieler 1 = kaka (4,5/5 Sterne)
+ - Spieler 2 = N1tro (3,5/5 Sterne)
+ - Spieler 3 = Fever (4,5/5 Sterne)
+ - Coach = Satthew (4/5 Sterne)
+ - Geschäftsführer = Dominik Lopez (ausgedachte Person, BRA) (5/5 Sterne)
+ - Finanzvorstand = Robin Williams (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - PR-Manager = David Rodriguez (ausgedachte Person, BRA) (4/5 Sterne)
+ - Psychologe = Sam Hernandez (ausgedachte Person, BRA) (3/5 Sterne)
+ - Scout = Sven Taylor (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Anwalt = Arthur Miller (ausgedachte Person, BRA) (4/5 Sterne)
+ - Event-Manager = Chris Dupont (ausgedachte Person, BRA) (4/5 Sterne)
+ - Physiotherapeut = Jamie Miller (ausgedachte Person, BRA) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[RENEGADES]
+ - Spieler 1 = Allushin (4,5/5 Sterne)
+ - Spieler 2 = reysbull (5/5 Sterne)
+ - Spieler 3 = gReazymeister (3,5/5 Sterne)
+ - Coach = Chrome (4,5/5 Sterne)
+ - Geschäftsführer = Francis Taylor (ausgedachte Person, AUS) (5/5 Sterne)
+ - Finanzvorstand = Skyler Müller (ausgedachte Person, AUS) (3/5 Sterne)
+ - PR-Manager = Dominik Rodriguez (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Psychologe = Alex Johnson (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Scout = Jordan Johnson (ausgedachte Person, AUS) (3/5 Sterne)
+ - Anwalt = Casey Rodriguez (ausgedachte Person, AUS) (4/5 Sterne)
+ - Event-Manager = Dominik Thomas (ausgedachte Person, AUS) (3/5 Sterne)
+ - Physiotherapeut = Pierre Johnson (ausgedachte Person, AUS) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[OPTIC GAMING]
+ - Spieler 1 = N1tro (4,5/5 Sterne)
+ - Spieler 2 = Kuxir97 (5/5 Sterne)
+ - Spieler 3 = Metsanauris (4,5/5 Sterne)
+ - Coach = RawGregory (4,5/5 Sterne)
+ - Geschäftsführer = Skyler Jones (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Finanzvorstand = Alex Williams (ausgedachte Person, FR) (4,5/5 Sterne)
+ - PR-Manager = Marc Martinez (ausgedachte Person, FR) (3/5 Sterne)
+ - Psychologe = Skyler Garcia (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Scout = Ryan Taylor (ausgedachte Person, FR) (4/5 Sterne)
+ - Anwalt = David Brown (ausgedachte Person, FR) (3/5 Sterne)
+ - Event-Manager = Taylor Dupont (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Physiotherapeut = Morgan Lopez (ausgedachte Person, FR) (3/5 Sterne)
+
+--------------------------------------------------
+
+[THE BRICKS]
+ - Spieler 1 = Fever (4,5/5 Sterne)
+ - Spieler 2 = Cheese (4,5/5 Sterne)
+ - Spieler 3 = kamz (4/5 Sterne)
+ - Coach = Jahzo (4,5/5 Sterne)
+ - Geschäftsführer = Morgan Rodriguez (ausgedachte Person, DE) (4/5 Sterne)
+ - Finanzvorstand = Chris Brown (ausgedachte Person, DE) (3,5/5 Sterne)
+ - PR-Manager = Casey Gonzalez (ausgedachte Person, DE) (3/5 Sterne)
+ - Psychologe = Francis Anderson (ausgedachte Person, DE) (4/5 Sterne)
+ - Scout = Lucas Anderson (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Anwalt = Pierre Dupont (ausgedachte Person, DE) (3/5 Sterne)
+ - Event-Manager = Jamie Martinez (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Physiotherapeut = Marc Hernandez (ausgedachte Person, DE) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[ROGUE]
+ - Spieler 1 = Scream (3,5/5 Sterne)
+ - Spieler 2 = Chicago (5/5 Sterne)
+ - Spieler 3 = Comm (5/5 Sterne)
+ - Coach = Chrome (4,5/5 Sterne)
+ - Geschäftsführer = Marc Rodriguez (ausgedachte Person, BRA) (4/5 Sterne)
+ - Finanzvorstand = Arthur Thomas (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - PR-Manager = Taylor Hernandez (ausgedachte Person, BRA) (3/5 Sterne)
+ - Psychologe = Chris Wilson (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Scout = Jamie Williams (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Anwalt = Robin Jones (ausgedachte Person, BRA) (4/5 Sterne)
+ - Event-Manager = Marc Miller (ausgedachte Person, BRA) (3/5 Sterne)
+ - Physiotherapeut = Skyler Brown (ausgedachte Person, BRA) (4/5 Sterne)
+
+--------------------------------------------------
+
+[COMPLEXITY GAMING]
+ - Spieler 1 = Joreuz (4/5 Sterne)
+ - Spieler 2 = Retals (4/5 Sterne)
+ - Spieler 3 = caleb (4/5 Sterne)
+ - Coach = RawGregory (4,5/5 Sterne)
+ - Geschäftsführer = Pierre Taylor (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Finanzvorstand = Gabriel Müller (ausgedachte Person, ESP) (3/5 Sterne)
+ - PR-Manager = Sam Müller (ausgedachte Person, ESP) (4/5 Sterne)
+ - Psychologe = Ryan Thomas (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Scout = Pierre Smith (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Anwalt = Arthur Miller (ausgedachte Person, ESP) (4/5 Sterne)
+ - Event-Manager = David Jones (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Physiotherapeut = Jamie Lopez (ausgedachte Person, ESP) (3/5 Sterne)
+
+--------------------------------------------------
+
+[TEAM BSK]
+ - Spieler 1 = Cheese (5/5 Sterne)
+ - Spieler 2 = noly (5/5 Sterne)
+ - Spieler 3 = Oaly (4/5 Sterne)
+ - Coach = Fireburner (4/5 Sterne)
+ - Geschäftsführer = Pierre Johnson (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Finanzvorstand = Robin Rodriguez (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - PR-Manager = Taylor Rodriguez (ausgedachte Person, KSA) (3/5 Sterne)
+ - Psychologe = Robin Jones (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Scout = Chris Garcia (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Anwalt = Casey Johnson (ausgedachte Person, KSA) (3/5 Sterne)
+ - Event-Manager = Jordan Miller (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Physiotherapeut = Pierre Hernandez (ausgedachte Person, KSA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[REVELATION]
+ - Spieler 1 = Caard (4/5 Sterne)
+ - Spieler 2 = Joyo (4/5 Sterne)
+ - Spieler 3 = Dread (5/5 Sterne)
+ - Coach = Jahzo (4,5/5 Sterne)
+ - Geschäftsführer = Lucas Gonzalez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Finanzvorstand = David Smith (ausgedachte Person, BRA) (3/5 Sterne)
+ - PR-Manager = Dominik Wilson (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Psychologe = Casey Brown (ausgedachte Person, BRA) (4/5 Sterne)
+ - Scout = Jordan Müller (ausgedachte Person, BRA) (4/5 Sterne)
+ - Anwalt = David Taylor (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Event-Manager = Jamie Anderson (ausgedachte Person, BRA) (3/5 Sterne)
+ - Physiotherapeut = Chris Hernandez (ausgedachte Person, BRA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[LILMIX]
+ - Spieler 1 = CaioTG1 (4,5/5 Sterne)
+ - Spieler 2 = Superlachie (3,5/5 Sterne)
+ - Spieler 3 = crr (5/5 Sterne)
+ - Coach = Jahzo (3,5/5 Sterne)
+ - Geschäftsführer = Gabriel Anderson (ausgedachte Person, KSA) (4/5 Sterne)
+ - Finanzvorstand = Francis Anderson (ausgedachte Person, KSA) (4/5 Sterne)
+ - PR-Manager = Sam Martinez (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Psychologe = Arthur Garcia (ausgedachte Person, KSA) (3/5 Sterne)
+ - Scout = Taylor Silva (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Anwalt = Francis Davis (ausgedachte Person, KSA) (4/5 Sterne)
+ - Event-Manager = Taylor Brown (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Physiotherapeut = Marc Müller (ausgedachte Person, KSA) (3/5 Sterne)
+
+--------------------------------------------------
+
+[GOD SPEED]
+ - Spieler 1 = AppJack (5/5 Sterne)
+ - Spieler 2 = Archie (4/5 Sterne)
+ - Spieler 3 = crr (4/5 Sterne)
+ - Coach = Jahzo (4/5 Sterne)
+ - Geschäftsführer = Pierre Davis (ausgedachte Person, AUS) (4/5 Sterne)
+ - Finanzvorstand = Dominik Taylor (ausgedachte Person, AUS) (4/5 Sterne)
+ - PR-Manager = Gabriel Davis (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Psychologe = Gabriel Miller (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Scout = Alex Rodriguez (ausgedachte Person, AUS) (4/5 Sterne)
+ - Anwalt = Chris Hernandez (ausgedachte Person, AUS) (4/5 Sterne)
+ - Event-Manager = Alex Taylor (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Physiotherapeut = Skyler Thomas (ausgedachte Person, AUS) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[GHOST GAMING]
+ - Spieler 1 = reysbull (5/5 Sterne)
+ - Spieler 2 = noly (4/5 Sterne)
+ - Spieler 3 = Allushin (4/5 Sterne)
+ - Coach = Fireburner (3,5/5 Sterne)
+ - Geschäftsführer = Gabriel Silva (ausgedachte Person, FR) (4/5 Sterne)
+ - Finanzvorstand = Alex Lopez (ausgedachte Person, FR) (4/5 Sterne)
+ - PR-Manager = Sven Johnson (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Psychologe = Ryan Hernandez (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Scout = Jordan Johnson (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Anwalt = Arthur Davis (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Event-Manager = Marc Martinez (ausgedachte Person, FR) (4/5 Sterne)
+ - Physiotherapeut = Morgan Lopez (ausgedachte Person, FR) (4/5 Sterne)
+
+--------------------------------------------------
+
+[ENVY]
+ - Spieler 1 = Rizzo (4/5 Sterne)
+ - Spieler 2 = carca (4/5 Sterne)
+ - Spieler 3 = ayyjayy (4,5/5 Sterne)
+ - Coach = Ferra (4,5/5 Sterne)
+ - Geschäftsführer = Jamie Jones (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Finanzvorstand = Jamie Brown (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - PR-Manager = Robin Gonzalez (ausgedachte Person, AUS) (4/5 Sterne)
+ - Psychologe = Arthur Garcia (ausgedachte Person, AUS) (4/5 Sterne)
+ - Scout = Chris Thomas (ausgedachte Person, AUS) (4,5/5 Sterne)
+ - Anwalt = Dominik Rodriguez (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Event-Manager = Jamie Müller (ausgedachte Person, AUS) (4/5 Sterne)
+ - Physiotherapeut = Sam Rodriguez (ausgedachte Person, AUS) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[BONK!]
+ - Spieler 1 = Retals (4/5 Sterne)
+ - Spieler 2 = Superlachie (4,5/5 Sterne)
+ - Spieler 3 = Atow (4,5/5 Sterne)
+ - Coach = Fireburner (3,5/5 Sterne)
+ - Geschäftsführer = Chris Taylor (ausgedachte Person, UK) (4/5 Sterne)
+ - Finanzvorstand = Casey Müller (ausgedachte Person, UK) (3,5/5 Sterne)
+ - PR-Manager = Casey Müller (ausgedachte Person, UK) (3/5 Sterne)
+ - Psychologe = Sven Davis (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Scout = Chris Johnson (ausgedachte Person, UK) (3/5 Sterne)
+ - Anwalt = Arthur Williams (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Event-Manager = David Gonzalez (ausgedachte Person, UK) (3,5/5 Sterne)
+ - Physiotherapeut = Jamie Davis (ausgedachte Person, UK) (4/5 Sterne)
+
+--------------------------------------------------
+
+[NTX ESPORTS]
+ - Spieler 1 = Retals (3,5/5 Sterne)
+ - Spieler 2 = noly (4/5 Sterne)
+ - Spieler 3 = Fever (5/5 Sterne)
+ - Coach = RawGregory (3,5/5 Sterne)
+ - Geschäftsführer = Jordan Martinez (ausgedachte Person, UK) (5/5 Sterne)
+ - Finanzvorstand = Morgan Miller (ausgedachte Person, UK) (3/5 Sterne)
+ - PR-Manager = Alex Miller (ausgedachte Person, UK) (3/5 Sterne)
+ - Psychologe = Robin Miller (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Scout = Arthur Wilson (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Anwalt = Taylor Wilson (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Event-Manager = Skyler Brown (ausgedachte Person, UK) (3/5 Sterne)
+ - Physiotherapeut = Robin Williams (ausgedachte Person, UK) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[PSG ESPORTS]
+ - Spieler 1 = Retals (4,5/5 Sterne)
+ - Spieler 2 = Superlachie (4,5/5 Sterne)
+ - Spieler 3 = crr (4/5 Sterne)
+ - Coach = Chrome (3,5/5 Sterne)
+ - Geschäftsführer = Pierre Martinez (ausgedachte Person, USA) (5/5 Sterne)
+ - Finanzvorstand = Marc Davis (ausgedachte Person, USA) (3/5 Sterne)
+ - PR-Manager = Dominik Silva (ausgedachte Person, USA) (3,5/5 Sterne)
+ - Psychologe = Taylor Gonzalez (ausgedachte Person, USA) (4/5 Sterne)
+ - Scout = Casey Smith (ausgedachte Person, USA) (4/5 Sterne)
+ - Anwalt = Dominik Jones (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Event-Manager = Skyler Davis (ausgedachte Person, USA) (4/5 Sterne)
+ - Physiotherapeut = Gabriel Thomas (ausgedachte Person, USA) (3/5 Sterne)
+
+--------------------------------------------------
+
+[SPLYCE]
+ - Spieler 1 = Superlachie (3,5/5 Sterne)
+ - Spieler 2 = MajicBear (5/5 Sterne)
+ - Spieler 3 = Kuxir97 (4,5/5 Sterne)
+ - Coach = Eversax (3,5/5 Sterne)
+ - Geschäftsführer = Dominik Wilson (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Finanzvorstand = Chris Miller (ausgedachte Person, USA) (4/5 Sterne)
+ - PR-Manager = Pierre Jones (ausgedachte Person, USA) (3,5/5 Sterne)
+ - Psychologe = Taylor Gonzalez (ausgedachte Person, USA) (3,5/5 Sterne)
+ - Scout = Lucas Taylor (ausgedachte Person, USA) (4/5 Sterne)
+ - Anwalt = Sven Anderson (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Event-Manager = Arthur Brown (ausgedachte Person, USA) (3,5/5 Sterne)
+ - Physiotherapeut = Pierre Dupont (ausgedachte Person, USA) (4,5/5 Sterne)
+
+--------------------------------------------------
+
+[IBUYPOWER]
+ - Spieler 1 = Turo (3,5/5 Sterne)
+ - Spieler 2 = reysbull (4/5 Sterne)
+ - Spieler 3 = N1tro (4/5 Sterne)
+ - Coach = RawGregory (3,5/5 Sterne)
+ - Geschäftsführer = Robin Wilson (ausgedachte Person, DE) (5/5 Sterne)
+ - Finanzvorstand = Chris Brown (ausgedachte Person, DE) (4,5/5 Sterne)
+ - PR-Manager = Sam Wilson (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Psychologe = Jordan Lopez (ausgedachte Person, DE) (3,5/5 Sterne)
+ - Scout = Marc Hernandez (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Anwalt = Gabriel Müller (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Event-Manager = Jamie Smith (ausgedachte Person, DE) (4,5/5 Sterne)
+ - Physiotherapeut = Skyler Smith (ausgedachte Person, DE) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[FLIPSID3 TACTICS]
+ - Spieler 1 = Satthew (3,5/5 Sterne)
+ - Spieler 2 = Comm (3,5/5 Sterne)
+ - Spieler 3 = AppJack (3,5/5 Sterne)
+ - Coach = Sizz (4/5 Sterne)
+ - Geschäftsführer = Jordan Miller (ausgedachte Person, BRA) (5/5 Sterne)
+ - Finanzvorstand = Morgan Johnson (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - PR-Manager = Francis Martinez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Psychologe = Dominik Martinez (ausgedachte Person, BRA) (3/5 Sterne)
+ - Scout = Arthur Johnson (ausgedachte Person, BRA) (4/5 Sterne)
+ - Anwalt = Chris Williams (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Event-Manager = Marc Johnson (ausgedachte Person, BRA) (3,5/5 Sterne)
+ - Physiotherapeut = Alex Smith (ausgedachte Person, BRA) (4/5 Sterne)
+
+--------------------------------------------------
+
+[NORTHERN GAMING]
+ - Spieler 1 = Maestro (5/5 Sterne)
+ - Spieler 2 = Cheese (4/5 Sterne)
+ - Spieler 3 = Acronik (4/5 Sterne)
+ - Coach = Sizz (4/5 Sterne)
+ - Geschäftsführer = Francis Johnson (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Finanzvorstand = Ryan Silva (ausgedachte Person, ESP) (3/5 Sterne)
+ - PR-Manager = Sven Taylor (ausgedachte Person, ESP) (3/5 Sterne)
+ - Psychologe = Casey Brown (ausgedachte Person, ESP) (3/5 Sterne)
+ - Scout = Chris Taylor (ausgedachte Person, ESP) (3/5 Sterne)
+ - Anwalt = Lucas Taylor (ausgedachte Person, ESP) (3/5 Sterne)
+ - Event-Manager = Casey Müller (ausgedachte Person, ESP) (4,5/5 Sterne)
+ - Physiotherapeut = Lucas Jones (ausgedachte Person, ESP) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[KINGS OF URBAN]
+ - Spieler 1 = Acronik (4,5/5 Sterne)
+ - Spieler 2 = CaioTG1 (4/5 Sterne)
+ - Spieler 3 = Oski (4,5/5 Sterne)
+ - Coach = Satthew (4,5/5 Sterne)
+ - Geschäftsführer = Pierre Davis (ausgedachte Person, FR) (4/5 Sterne)
+ - Finanzvorstand = Jamie Johnson (ausgedachte Person, FR) (3,5/5 Sterne)
+ - PR-Manager = Sven Miller (ausgedachte Person, FR) (4/5 Sterne)
+ - Psychologe = Jordan Anderson (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Scout = Sven Anderson (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Anwalt = Jordan Rodriguez (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Event-Manager = Marc Davis (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Physiotherapeut = Sven Johnson (ausgedachte Person, FR) (4/5 Sterne)
+
+--------------------------------------------------
+
+[MOCK-IT ESPORTS]
+ - Spieler 1 = Kuxir97 (4/5 Sterne)
+ - Spieler 2 = Oaly (4,5/5 Sterne)
+ - Spieler 3 = Oski (4/5 Sterne)
+ - Coach = Fireburner (4/5 Sterne)
+ - Geschäftsführer = Jordan Anderson (ausgedachte Person, UK) (5/5 Sterne)
+ - Finanzvorstand = Sven Anderson (ausgedachte Person, UK) (3,5/5 Sterne)
+ - PR-Manager = Dominik Jones (ausgedachte Person, UK) (4/5 Sterne)
+ - Psychologe = Ryan Davis (ausgedachte Person, UK) (3/5 Sterne)
+ - Scout = Lucas Rodriguez (ausgedachte Person, UK) (3/5 Sterne)
+ - Anwalt = Arthur Brown (ausgedachte Person, UK) (3/5 Sterne)
+ - Event-Manager = Skyler Martinez (ausgedachte Person, UK) (3/5 Sterne)
+ - Physiotherapeut = Sam Brown (ausgedachte Person, UK) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[CHIEFS ESPORTS CLUB]
+ - Spieler 1 = Metsanauris (4/5 Sterne)
+ - Spieler 2 = Torsos (4/5 Sterne)
+ - Spieler 3 = carca (3,5/5 Sterne)
+ - Coach = Ferra (4,5/5 Sterne)
+ - Geschäftsführer = David Jones (ausgedachte Person, USA) (4/5 Sterne)
+ - Finanzvorstand = Dominik Jones (ausgedachte Person, USA) (4/5 Sterne)
+ - PR-Manager = Jamie Martinez (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Psychologe = Arthur Rodriguez (ausgedachte Person, USA) (4/5 Sterne)
+ - Scout = Skyler Rodriguez (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Anwalt = Lucas Silva (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Event-Manager = Robin Brown (ausgedachte Person, USA) (4/5 Sterne)
+ - Physiotherapeut = Robin Hernandez (ausgedachte Person, USA) (3/5 Sterne)
+
+--------------------------------------------------
+
+[SELFLESS GAMING]
+ - Spieler 1 = Chicago (4,5/5 Sterne)
+ - Spieler 2 = CaioTG1 (5/5 Sterne)
+ - Spieler 3 = Fever (4,5/5 Sterne)
+ - Coach = Chrome (3,5/5 Sterne)
+ - Geschäftsführer = Ryan Davis (ausgedachte Person, USA) (4/5 Sterne)
+ - Finanzvorstand = Dominik Thomas (ausgedachte Person, USA) (3,5/5 Sterne)
+ - PR-Manager = David Anderson (ausgedachte Person, USA) (4/5 Sterne)
+ - Psychologe = Skyler Gonzalez (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Scout = Lucas Williams (ausgedachte Person, USA) (4/5 Sterne)
+ - Anwalt = Morgan Johnson (ausgedachte Person, USA) (4,5/5 Sterne)
+ - Event-Manager = Morgan Anderson (ausgedachte Person, USA) (3/5 Sterne)
+ - Physiotherapeut = Marc Müller (ausgedachte Person, USA) (3/5 Sterne)
+
+--------------------------------------------------
+
+[WE DEM GIRLZ]
+ - Spieler 1 = Scream (4/5 Sterne)
+ - Spieler 2 = MajicBear (4/5 Sterne)
+ - Spieler 3 = noly (3,5/5 Sterne)
+ - Coach = Satthew (4,5/5 Sterne)
+ - Geschäftsführer = Taylor Smith (ausgedachte Person, KSA) (4/5 Sterne)
+ - Finanzvorstand = Marc Lopez (ausgedachte Person, KSA) (4/5 Sterne)
+ - PR-Manager = Jordan Taylor (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Psychologe = David Smith (ausgedachte Person, KSA) (3/5 Sterne)
+ - Scout = Arthur Anderson (ausgedachte Person, KSA) (4,5/5 Sterne)
+ - Anwalt = Alex Smith (ausgedachte Person, KSA) (4/5 Sterne)
+ - Event-Manager = Arthur Miller (ausgedachte Person, KSA) (3/5 Sterne)
+ - Physiotherapeut = Marc Hernandez (ausgedachte Person, KSA) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[NEXT2NU ESPORTS]
+ - Spieler 1 = Daniel (4/5 Sterne)
+ - Spieler 2 = BeastMode (4,5/5 Sterne)
+ - Spieler 3 = JKnaps (4,5/5 Sterne)
+ - Coach = Chrome (4/5 Sterne)
+ - Geschäftsführer = Dominik Dupont (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Finanzvorstand = Dominik Lopez (ausgedachte Person, UK) (3,5/5 Sterne)
+ - PR-Manager = Casey Miller (ausgedachte Person, UK) (3/5 Sterne)
+ - Psychologe = Jordan Dupont (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Scout = Dominik Martinez (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Anwalt = Jordan Smith (ausgedachte Person, UK) (3,5/5 Sterne)
+ - Event-Manager = Sam Gonzalez (ausgedachte Person, UK) (4,5/5 Sterne)
+ - Physiotherapeut = Robin Thomas (ausgedachte Person, UK) (3/5 Sterne)
+
+--------------------------------------------------
+
+[DANGEROUS ESPORTS CLUB]
+ - Spieler 1 = Turo (4,5/5 Sterne)
+ - Spieler 2 = AppJack (3,5/5 Sterne)
+ - Spieler 3 = Amphis (3,5/5 Sterne)
+ - Coach = Eversax (4,5/5 Sterne)
+ - Geschäftsführer = Skyler Anderson (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Finanzvorstand = Morgan Davis (ausgedachte Person, AUS) (3/5 Sterne)
+ - PR-Manager = Ryan Thomas (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Psychologe = Dominik Dupont (ausgedachte Person, AUS) (4/5 Sterne)
+ - Scout = Morgan Thomas (ausgedachte Person, AUS) (3,5/5 Sterne)
+ - Anwalt = Gabriel Martinez (ausgedachte Person, AUS) (4/5 Sterne)
+ - Event-Manager = Dominik Johnson (ausgedachte Person, AUS) (3/5 Sterne)
+ - Physiotherapeut = Marc Rodriguez (ausgedachte Person, AUS) (3/5 Sterne)
+
+--------------------------------------------------
+
+[TEAM SILENCED]
+ - Spieler 1 = Daniel (5/5 Sterne)
+ - Spieler 2 = Remkoe (4,5/5 Sterne)
+ - Spieler 3 = Amphis (3,5/5 Sterne)
+ - Coach = RawGregory (4,5/5 Sterne)
+ - Geschäftsführer = Skyler Lopez (ausgedachte Person, BRA) (5/5 Sterne)
+ - Finanzvorstand = Casey Rodriguez (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - PR-Manager = Sven Williams (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Psychologe = Sam Taylor (ausgedachte Person, BRA) (4/5 Sterne)
+ - Scout = Casey Dupont (ausgedachte Person, BRA) (3/5 Sterne)
+ - Anwalt = Skyler Johnson (ausgedachte Person, BRA) (4,5/5 Sterne)
+ - Event-Manager = Taylor Martinez (ausgedachte Person, BRA) (4/5 Sterne)
+ - Physiotherapeut = Francis Silva (ausgedachte Person, BRA) (3/5 Sterne)
+
+--------------------------------------------------
+
+[445]
+ - Spieler 1 = Chronic (3,5/5 Sterne)
+ - Spieler 2 = caleb (4/5 Sterne)
+ - Spieler 3 = Metsanauris (3,5/5 Sterne)
+ - Coach = Jahzo (3,5/5 Sterne)
+ - Geschäftsführer = Sven Lopez (ausgedachte Person, CAN) (5/5 Sterne)
+ - Finanzvorstand = Chris Smith (ausgedachte Person, CAN) (3/5 Sterne)
+ - PR-Manager = Francis Anderson (ausgedachte Person, CAN) (3/5 Sterne)
+ - Psychologe = Pierre Taylor (ausgedachte Person, CAN) (4/5 Sterne)
+ - Scout = Dominik Smith (ausgedachte Person, CAN) (4/5 Sterne)
+ - Anwalt = Sven Martinez (ausgedachte Person, CAN) (3/5 Sterne)
+ - Event-Manager = Arthur Jones (ausgedachte Person, CAN) (3,5/5 Sterne)
+ - Physiotherapeut = Dominik Williams (ausgedachte Person, CAN) (3,5/5 Sterne)
+
+--------------------------------------------------
+
+[GODALIONS]
+ - Spieler 1 = Bananahead (3,5/5 Sterne)
+ - Spieler 2 = caleb (4/5 Sterne)
+ - Spieler 3 = kaka (5/5 Sterne)
+ - Coach = Fireburner (4/5 Sterne)
+ - Geschäftsführer = Sven Miller (ausgedachte Person, FR) (5/5 Sterne)
+ - Finanzvorstand = Sam Rodriguez (ausgedachte Person, FR) (4/5 Sterne)
+ - PR-Manager = Casey Gonzalez (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Psychologe = Lucas Silva (ausgedachte Person, FR) (3,5/5 Sterne)
+ - Scout = Jamie Smith (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Anwalt = Robin Taylor (ausgedachte Person, FR) (4,5/5 Sterne)
+ - Event-Manager = Robin Lopez (ausgedachte Person, FR) (4/5 Sterne)
+ - Physiotherapeut = Sven Taylor (ausgedachte Person, FR) (3,5/5 Sterne)
+
+--------------------------------------------------
+

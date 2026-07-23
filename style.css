@@ -13,6 +13,133 @@ body {
 .screen.hidden { display: none; }
 .hidden { display: none !important; }
 
+/* ── Scrollbalken (überall, nicht nur in Modals) ──────────────────────────
+   Electron/Chromium-Scrollbalken sind sonst hell/systemgrau und passen nicht
+   zum dunklen Spiel-Theme. `background-clip: padding-box` mit transparentem
+   Rand lässt den Thumb überall "eingerückt" wirken, egal welche Track-Farbe
+   im jeweiligen Container dahinter liegt — eine einzige globale Regel reicht
+   damit für Body-Scroll, Bracket-Container, Modal-Listen (Tabelle, Sound-
+   Kategorie, Transfer-Historie, Pools) usw. gleichermaßen. */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #2e3b6b;
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 20px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #445190;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Intro-Video (spielt bei jedem App-Start einmal ab) ───────────────────
+   Echtes Video (Game_Intro.mp4) statt CSS-Animation — spielt sofort beim
+   Start, rein passiv (nichts anklickbar/hoverbar, kein Überspringen), nach
+   Ende langsames Ausblenden (siehe renderer.js). */
+#screen-intro.intro-screen {
+  position: relative;
+  /* Bewusst `height` statt `min-height`: das Video darunter braucht eine
+     DEFINITE Elternhöhe, damit sein `height:100%` zuverlässig dagegen
+     aufgelöst wird -- mit nur `min-height` (ambige Höhe) ignorierte das
+     Video seine Höhen-Vorgabe bei Fenster-Seitenverhältnissen ab ~16:9 und
+     wurde stattdessen rein aus `width:100%` + eigenem Bildseitenverhältnis
+     berechnet, wodurch es (und mit ihm der Screen, per min-height-Wachstum)
+     über die Fensterhöhe hinausragte -- sichtbar als leichtes Scrollen. */
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 1.2s ease;
+}
+
+#screen-intro.intro-screen.is-leaving {
+  opacity: 0;
+}
+
+.intro-video {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* ── Rechtlicher Hinweis (nach dem Intro, vor dem Hauptmenü) ──────────────
+   Rein passiv wie das Intro-Video (nichts anklickbar/hoverbar, kein
+   Überspringen) — blendet ein, bleibt kurz stehen, blendet wieder aus
+   (Timing/Ablauf in renderer.js: playLegalScreen()). */
+#screen-legal.legal-screen {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, #1c2650 0%, #0d1220 65%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.9s ease;
+  padding: 24px 20px;
+}
+
+#screen-legal.legal-screen.is-visible {
+  opacity: 1;
+}
+
+#screen-legal.legal-screen.is-leaving {
+  opacity: 0;
+}
+
+.legal-content {
+  max-width: 620px;
+  text-align: center;
+}
+
+.legal-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 20px;
+  letter-spacing: 0.4px;
+}
+
+.legal-text {
+  color: #9aa6c9;
+  font-size: 13.5px;
+  line-height: 1.7;
+  margin: 0 0 14px;
+}
+
+.legal-text strong {
+  color: #cdd6f0;
+}
+
+.legal-copyright {
+  margin-top: 24px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #4a5580;
+  letter-spacing: 0.2px;
+}
+
 /* ── Turnier-Screen ────────────────────────────────────────────────────── */
 #screen-tournament {
   position: relative;
@@ -80,7 +207,11 @@ body {
   border-color: #6f8bff;
 }
 
-.season-guide-box {
+/* .modal-box.XXX-box (statt nur .XXX-box) nötig: beide Klassen landen auf
+   demselben Element und haben gleiche Spezifität — ohne den Doppel-Klassen-
+   Selektor würde die spätere Quellposition von .modal-box (max-width:420px)
+   diese Regel sonst überschreiben, egal wo diese Regel im Stylesheet steht. */
+.modal-box.season-guide-box {
   max-width: 560px;
   text-align: left;
 }
@@ -139,7 +270,8 @@ body {
 }
 
 /* ── Punktestand-Tabelle ───────────────────────────────────────────────── */
-.standings-box {
+/* .modal-box.standings-box nötig — siehe Kommentar bei .modal-box.season-guide-box. */
+.modal-box.standings-box {
   max-width: 640px;
   width: 100%;
   text-align: left;
@@ -226,15 +358,157 @@ body {
   border-radius: 50%;
 }
 
-/* ── Einstellungen ─────────────────────────────────────────────────────── */
-.settings-box {
-  max-width: 460px;
+/* ── Einstellungen (Sidebar, wie #screen-slots -- User-Wunsch: "im selben
+   Sidebar wie bei Speicherstände") ───────────────────────────────────────
+   Eigenständige Kopie der .slots-sidebar-Grundeigenschaften (Position/
+   Hintergrund/Blur/Animation) statt einer gemeinsamen Basisklasse -- bewusst
+   dupliziert statt .slots-sidebar zu einer Basisklasse zu refaktorieren, um
+   die bereits getestete Slot-Sidebar nicht anzufassen/zu riskieren. */
+.settings-sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 540px;
+  max-width: 88vw;
+  padding: 6vh 30px 26px 60px;
+  background: linear-gradient(100deg, rgba(150, 160, 190, 0.16) 0%, rgba(130, 140, 170, 0.12) 70%, rgba(130, 140, 170, 0) 100%);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  animation: slots-sidebar-slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.settings-sidebar.is-closing {
+  animation: slots-sidebar-slide-out 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.settings-sidebar .slots-title {
+  margin-bottom: 10px;
+}
+
+.settings-scroll {
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  text-align: left;
+  overflow-y: auto;
+  padding-right: 14px;
+}
+
+/* Kategorien als Button-Reihe oben statt einer durchgehenden, gequetscht
+   wirkenden Liste (User-Wunsch) -- nur die aktive Kategorie zeigt ihre
+   .settings-row-Inhalte, siehe showSettingsCategory() in renderer.js. */
+.settings-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 20px;
+}
+
+.settings-category-btn {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #8b98bd;
+  background: #171f3d;
+  border: 1px solid #2a3660;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-category-btn:hover {
+  color: #ffffff;
+  border-color: #3ecf72;
+}
+
+.settings-category-btn.is-active {
+  background: #3ecf72;
+  border-color: #3ecf72;
+  color: #0d1220;
+}
+
+.settings-category-panel {
+  display: none;
+}
+
+.settings-category-panel.is-active {
+  display: block;
+}
+
+.settings-sidebar-footer {
+  width: 100%;
+  flex: none;
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6a7699;
+  font-style: italic;
+}
+
+.settings-select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f5;
+  background: #171f3d;
+  border: 1px solid #2a3660;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: #3ecf72;
+}
+
+.settings-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-volume-slider {
+  flex: 1;
+  accent-color: #3ecf72;
+  cursor: pointer;
+}
+
+.settings-volume-value {
+  min-width: 38px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b3bede;
+}
+
+/* .modal-box .menu-btn (width:100%) greift hier nicht mehr, da die
+   Einstellungen jetzt eine Sidebar statt eines .modal-box-Popups sind --
+   kein Spezifitäts-Kampf mehr nötig. */
+.settings-volume-row .menu-btn {
+  width: auto;
+  flex: none;
+  margin-top: 0;
+  padding: 6px 12px;
+  font-size: 12px;
 }
 
 .settings-row {
-  margin: 16px 0;
+  margin: 13px 0;
 }
 
 .settings-row-toggle {
@@ -246,10 +520,10 @@ body {
 
 .settings-label {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: #b3bede;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .settings-row-toggle .settings-label {
@@ -275,12 +549,12 @@ body {
 
 .settings-speed-btn:hover {
   color: #ffffff;
-  border-color: #6f8bff;
+  border-color: #3ecf72;
 }
 
 .settings-speed-btn.is-active {
-  background: #6f8bff;
-  border-color: #6f8bff;
+  background: #3ecf72;
+  border-color: #3ecf72;
   color: #0d1220;
 }
 
@@ -288,15 +562,30 @@ body {
   width: 20px;
   height: 20px;
   flex: none;
-  accent-color: #6f8bff;
+  accent-color: #3ecf72;
   cursor: pointer;
 }
 
 .settings-buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 14px;
   margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+.settings-buttons .menu-btn {
+  width: auto;
+  flex: 1;
+  margin-top: 0;
+  min-width: 110px;
+  padding: 10px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.settings-sidebar-footer .settings-buttons {
+  margin-top: 0;
 }
 
 .champion-banner {
@@ -485,6 +774,18 @@ body {
   margin: 18px auto 6px;
 }
 
+/* Runde 101: Match-Bildschirm komplett neu (Orientierung an einem CS:GO-
+   Esport-Overlay -- Team A immer blau/links, Team B immer orange/rechts,
+   Ticker mittig als "Feed" zwischen beiden Kadern, s. Kopfkommentar an
+   #screen-match in index.html). Ersetzt die seit v0.3.0 unveränderte,
+   generische Karten-/Listen-Optik (.match-wrap/.match-rosters/.roster-column). */
+:root {
+  --match-blue: #4c8dff;
+  --match-blue-glow: rgba(76, 141, 255, 0.35);
+  --match-orange: #ff9142;
+  --match-orange-glow: rgba(255, 145, 66, 0.35);
+}
+
 #screen-match {
   position: relative;
   min-height: 100vh;
@@ -495,27 +796,57 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 15%, #1c2650 0%, #0d1220 60%);
+  background: radial-gradient(circle at 50% 10%, #1c2650 0%, #0d1220 65%);
   padding: 24px 20px;
 }
 
-.match-wrap {
-  width: 560px;
-  max-width: 90vw;
+.match-arena {
+  width: 1180px;
+  max-width: 96vw;
   text-align: center;
 }
 
-.match-wrap-wide {
-  width: 760px;
-  max-width: 94vw;
+.match-arena-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  margin-bottom: 14px;
 }
 
-.match-clock-row {
+.match-arena-team-name {
+  flex: 1;
+  max-width: 320px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, transparent, rgba(76, 141, 255, 0.08));
+}
+
+.match-arena-team-blue {
+  border-right: 3px solid var(--match-blue);
+  text-align: right;
+  background: linear-gradient(90deg, transparent, var(--match-blue-glow));
+}
+
+.match-arena-team-orange {
+  border-left: 3px solid var(--match-orange);
+  text-align: left;
+  background: linear-gradient(270deg, transparent, var(--match-orange-glow));
+}
+
+.match-arena-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 200px;
+}
+
+.match-arena-controls {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .speed-controls {
@@ -524,7 +855,7 @@ body {
 }
 
 .speed-btn {
-  padding: 4px 12px;
+  padding: 5px 13px;
   border-radius: 6px;
   border: 1px solid #2a3660;
   background: #171f3d;
@@ -543,7 +874,7 @@ body {
 }
 
 .instant-sim-btn {
-  padding: 4px 12px;
+  padding: 5px 13px;
   border-radius: 6px;
   border: 1px solid #3a2f60;
   background: #201a3d;
@@ -558,18 +889,34 @@ body {
   color: #e2ceff;
 }
 
-.match-rosters {
+/* Klassisches Esport-Overlay-Dreispalten-Layout: Kader | Ticker-Feed | Kader. */
+.match-arena-body {
   display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 16px;
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 18px;
 }
 
-.roster-column {
-  flex: 1;
+.match-arena-side {
+  flex: 0 0 260px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  text-align: left;
+}
+
+.match-arena-side-blue {
+  background: linear-gradient(160deg, rgba(76, 141, 255, 0.14), rgba(23, 31, 61, 0.6));
+  border: 1px solid rgba(76, 141, 255, 0.45);
+  box-shadow: 0 0 24px rgba(76, 141, 255, 0.12) inset;
+}
+
+.match-arena-side-orange {
+  background: linear-gradient(200deg, rgba(255, 145, 66, 0.14), rgba(23, 31, 61, 0.6));
+  border: 1px solid rgba(255, 145, 66, 0.45);
+  box-shadow: 0 0 24px rgba(255, 145, 66, 0.12) inset;
 }
 
 .match-roster {
@@ -617,11 +964,18 @@ body {
   padding: 8px 12px;
   background: #171f3d;
   border: 1px solid #2a3660;
+  border-left-width: 3px;
   display: flex;
   align-items: center;
   gap: 10px;
   transition: background 0.2s ease, border-color 0.2s ease;
 }
+
+/* Runde 101: dezenter Team-Farbakzent am linken Rand jeder Spielerkarte --
+   ein Blick genügt, um zu sehen, wem die Karte gehört, auch wenn man nur
+   auf einen einzelnen Tile schaut statt aufs ganze Panel. */
+.match-arena-side-blue .player-tile { border-left-color: var(--match-blue); }
+.match-arena-side-orange .player-tile { border-left-color: var(--match-orange); }
 
 .tile-rating {
   font-size: 14px;
@@ -684,6 +1038,22 @@ body {
   100% { box-shadow: 0 0 0 rgba(183, 156, 242, 0); }
 }
 
+/* Runde 102, User-Vorgabe ("Match für Match automatisch nacheinander
+   aufgelöst statt alle Bot-Matches gleichzeitig fertig"): kurzer, neutraler
+   Aufblitz-Effekt für GENAU das Match-Element (Bracket-/RoundRobin-Karte
+   ODER Swiss-Tabellenzeile), das cascadeRevealStep() gerade aufgedeckt hat --
+   dieselbe Muster-Sprache wie .tile-flash-goal/-save/-sub oben, aber
+   neutral/ereignisfarben statt team-/aktionsspezifisch eingefärbt. */
+.is-cascade-revealed {
+  animation: cascade-reveal-pulse 0.9s ease-out;
+}
+
+@keyframes cascade-reveal-pulse {
+  0%   { box-shadow: 0 0 0 rgba(255, 255, 255, 0); background-color: rgba(255, 255, 255, 0.16); }
+  20%  { box-shadow: 0 0 18px rgba(255, 255, 255, 0.35); background-color: rgba(255, 255, 255, 0.16); }
+  100% { box-shadow: 0 0 0 rgba(255, 255, 255, 0); background-color: transparent; }
+}
+
 .ticker-row.ticker-sub .ticker-msg {
   color: #b79cf2;
   font-weight: 700;
@@ -723,44 +1093,49 @@ body {
   border-color: #ef4444;
 }
 
-.match-scoreboard {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  margin-bottom: 6px;
-}
-
+/* Runde 101: Team-Name sitzt jetzt in .match-arena-team-blue/-orange (Kopf-
+   zeile links/rechts der Mitte) -- Farbe kommt von dort, keine eigene
+   Ausrichtungslogik mehr nötig (der Elternblock übernimmt text-align). */
 .match-team-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: #c7d1f0;
-  flex: 1;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
 }
 
-.match-team-name:first-child { text-align: right; }
-.match-team-name:last-child { text-align: left; }
+.match-arena-team-blue .match-team-name { color: var(--match-blue); }
+.match-arena-team-orange .match-team-name { color: var(--match-orange); }
 
 .match-score {
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 900;
   color: #ffffff;
+  line-height: 1.1;
 }
 
 .match-clock {
   color: #7c8bb5;
   font-size: 13px;
   font-weight: 700;
-  margin-bottom: 16px;
+  margin-top: 4px;
 }
 
 .match-ticker {
-  height: 240px;
+  flex: 1;
+  min-width: 0;
+  min-height: 340px;
+  /* Runde 102, User-Meldung ("ab einer gewissen Anzahl an Ereignissen soll man
+     im Textfeld runterscrollen, nicht die ganze Seite runterstrecken"): OHNE
+     max-height wächst die Box mit ihrem Inhalt unbegrenzt weiter -- overflow-y
+     greift erst, sobald es eine tatsächliche Höhenbegrenzung gibt. Bei einem
+     langen Match (viele Ticker-Zeilen) zog das bisher den ganzen
+     #screen-match-Bildschirm (min-height:100vh, kein Deckel) in die Länge,
+     statt nur INNERHALB der Box zu scrollen. */
+  max-height: 46vh;
   overflow-y: auto;
   background: #10152a;
   border: 1px solid #2a3660;
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   text-align: left;
 }
 
@@ -807,36 +1182,218 @@ body {
 }
 
 #btn-match-continue {
-  margin-top: 18px;
+  margin: 18px auto 0;
   width: 260px;
 }
 
-/* ── Charaktererstellung ───────────────────────────────────────────────── */
+/* ── Charaktererstellung (Manager erstellen) ──────────────────────────────
+   Zwei-Panel-Layout: links Eigenschafts-Regler (Punkte-Pool), rechts
+   Identität (Name/Geschlecht/Nation/Geburtsdatum/Avatar). Orientiert an
+   einem Referenz-Screenshot ("Esport Manager 2026"), aber an unser
+   bestehendes dunkles Karten-/Glow-Design angepasst (siehe .menu-panel/
+   .menu-glow im Hauptmenü-Abschnitt). */
 #screen-character {
   position: relative;
   min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Bildschirmfüllendes Frosted-Glass-Overlay über der geteilten Atmosphäre
+   (#app-atmosphere bleibt sichtbar und schimmert stark unscharf durch --
+   User-Wunsch: "verschwommen, dass man stark unscharf das Hauptmenü sieht").
+   Slidet als GANZE Fläche von links rein (und beim Zurück wieder raus),
+   statt wie die Sidebars nur ein Teil-Panel zu sein. */
+.character-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 20%, #1c2650 0%, #0d1220 60%);
-  padding: 40px 20px;
+  padding: 3vh 24px 80px;
+  overflow-y: auto;
+  background: rgba(8, 11, 22, 0.55);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  animation: character-overlay-slide-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.character-wrap {
-  max-width: 640px;
+@keyframes character-overlay-slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.character-overlay.is-closing {
+  animation: character-overlay-slide-out 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes character-overlay-slide-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+/* Trägt den mittleren Inhalt (Titel/Panels/Bottom-Row) -- wird verschoben,
+   wenn eine der beiden rechten Sidebars öffnet (Portrait- ODER Manager-
+   Auswahl), siehe .side-panel-open unten und setSidePanelOpen() in
+   renderer.js. #character-overlay selbst behält seine eigene Slide-in/-out-
+   Animation unangetastet. Zurück/Weiter (.char-corner-btn) liegen bewusst
+   AUSSERHALB dieses Wrappers -- die bekommen ihre eigene, kleinere
+   Verschiebung weiter unten, damit Zurück nicht mit aus dem Fenster läuft. */
+.character-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   width: 100%;
-  text-align: center;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.character-subtitle {
-  margin: -10px 0 26px;
-  color: #7c8bb5;
-  font-size: 14px;
+.character-content.side-panel-open {
+  transform: translateX(-190px);
+}
+
+.character-title {
+  font-size: 42px;
+  font-weight: 300;
+  color: #ffffff;
+  margin: 0 0 34px;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+}
+
+.character-panels {
+  display: flex;
+  gap: 30px;
+  align-items: stretch;
+  text-align: left;
+  width: 100%;
+  max-width: 1480px;
+}
+
+/* Halbtransparent statt voll gefüllt -- das Overlay dahinter liefert schon
+   den Frosted-Glass-Grund, die Panels setzen nur noch eine leichte Kante. */
+.character-panel {
+  flex: 1 1 0;
+  background: rgba(10, 14, 28, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 32px 36px;
+}
+
+.character-traits-panel {
+  flex-basis: 46%;
+  display: flex;
+  flex-direction: column;
+}
+
+.character-identity-panel {
+  flex-basis: 54%;
+  display: flex;
+  gap: 26px;
+}
+
+/* ── Eigenschafts-Regler ───────────────────────────────────────────────── */
+.character-trait-list {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  flex: 1;
+}
+
+.trait-axis-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trait-axis-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #e8edfa;
+  text-transform: uppercase;
+}
+
+/* Zwei Regler pro Achse (rechter Pol wächst LTR nach rechts, linker Pol
+   wächst per direction:rtl nach links) statt einem einzigen bipolaren
+   Regler -- beide sitzen im selben Track und treffen sich in der Mitte. */
+.trait-axis-track {
+  display: flex;
+}
+
+.trait-axis-slider {
+  -webkit-appearance: none;
+  width: 50%;
+  height: 8px;
+  border-radius: 4px;
+  outline: none;
+  margin: 5px 0 3px;
+  cursor: pointer;
+}
+
+.trait-axis-slider-left {
+  direction: rtl;
+}
+
+/* Weißer Knopf ohne farbigen Rand -- wie die weißen Punkte der Vorlage. */
+.trait-axis-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.trait-axis-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #3f4a75;
+}
+
+.character-panel-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: 26px;
+}
+
+.character-points-remaining {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  text-align: right;
+  color: #c3cbe4;
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+
+.character-points-remaining span:last-child {
+  font-size: 30px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1;
+}
+
+/* ── Identität ─────────────────────────────────────────────────────────── */
+.character-identity-fields {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
 }
 
 .character-field {
   text-align: left;
-  margin-bottom: 18px;
 }
 
 .character-field-row {
@@ -847,197 +1404,1260 @@ body {
 
 .character-field label {
   display: block;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.3px;
   color: #8fa0cc;
   text-transform: uppercase;
-  margin-bottom: 6px;
+  margin-bottom: 7px;
 }
 
 .character-field input,
 .character-field select {
   width: 100%;
   box-sizing: border-box;
-  background: #171f3d;
-  border: 1px solid #2a3660;
-  border-radius: 10px;
-  padding: 11px 14px;
+  background: rgba(10, 14, 28, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  padding: 12px 14px;
   color: #e2e8f5;
-  font-size: 14px;
+  font-size: 14.5px;
   font-family: inherit;
 }
 
 .character-field input:focus,
 .character-field select:focus {
   outline: none;
-  border-color: #4c6fff;
+  border-color: #3ecf72;
 }
 
-.character-path-list {
+/* Ersetzt ein natives <select> NUR für die Nation-Auswahl: native
+   <select>/<option>-Elemente werden unter Windows vom Betriebssystem
+   gerendert (eigene Combobox), nicht von Chromium selbst -- Flaggen-Emoji
+   (zusammengesetzt aus zwei Regional-Indicator-Zeichen) werden dort oft nur
+   als Länderkürzel-Text dargestellt statt als echte Flagge. Ein simples
+   Div-basiertes Dropdown läuft dagegen komplett durch Chromiums eigenes
+   Rendering und zeigt Flaggen-Emoji korrekt an. */
+.char-dropdown {
+  position: relative;
+}
+
+.char-dropdown-trigger {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  background: rgba(10, 14, 28, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  padding: 10px 12px;
+  color: #e2e8f5;
+  font-size: 13.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.char-dropdown-trigger:hover,
+.char-dropdown-trigger:focus {
+  outline: none;
+  border-color: #3ecf72;
+}
+
+.char-dropdown-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #10152a;
+  border: 1px solid #2a3660;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+}
+
+.char-dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: #e2e8f5;
+  cursor: pointer;
+}
+
+.char-flag-icon {
+  width: 20px;
+  height: 15px;
+  object-fit: cover;
+  border-radius: 2px;
+  vertical-align: middle;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* Farbkästchen für die Teamfarbe-Auswahl (Organisation erstellen) --
+   spiegelt .char-flag-icon (gleiche Einbettung im Dropdown-Trigger/den
+   Optionen), aber als Quadrat statt Flaggen-Seitenverhältnis. */
+.char-color-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  vertical-align: middle;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.char-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.char-dropdown-option:hover {
+  background: #1e2a52;
+}
+
+.char-dropdown-option.is-selected {
+  background: rgba(62, 207, 114, 0.22);
+}
+
+/* Checkbox-Optik wie in der Referenz-Vorlage ("☐ M  ☒ F" mit grünem Kreuz)
+   statt gefüllter Toggle-Pillen -- funktional weiter dieselben zwei Buttons. */
+.character-gender-toggle {
+  display: flex;
+  gap: 26px;
+}
+
+.character-gender-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  color: #e8edfa;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.character-gender-box {
+  width: 19px;
+  height: 19px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(10, 14, 28, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  transition: border-color 0.12s ease;
+}
+
+.character-gender-btn:hover .character-gender-box {
+  border-color: #3ecf72;
+}
+
+.character-gender-btn.is-active .character-gender-box::after {
+  content: '✕';
+  color: #3ecf72;
+  font-weight: 800;
+}
+
+.character-birthdate-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr auto;
+  gap: 8px;
+}
+
+/* ── Portrait-Platzhalter ──────────────────────────────────────────────────
+   Echte Manager-Portrait-Fotos (wie in der Referenz-Vorlage) kommen später
+   als Projekt-Assets -- bis dahin gesperrte Hochladen/Auswählen-Buttons und
+   ein Silhouetten-Platzhalter. Bewusst OHNE eigenen Bildrahmen (kein Border/
+   Hintergrund-Box) -- User-Wunsch: das Portrait soll frei im Panel stehen,
+   genau wie das Personenfoto in der Referenz-Vorlage nicht eingerahmt ist. */
+.character-portrait-block {
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.character-portrait-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.character-portrait-actions .char-icon-btn {
+  width: 150px;
+  text-align: center;
+}
+
+.character-portrait-frame {
+  flex: 1;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+/* Eigenes hochgeladenes/ausgewähltes Bild (siehe renderCharacterPortraitPreview()
+   in renderer.js) füllt den Platzhalterbereich, statt frei zu schweben --
+   bewusst weiterhin ohne eigenen Rahmen/Border, nur die Bildecken abgerundet. */
+.character-portrait-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.character-portrait-placeholder {
+  font-size: 96px;
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+
+.character-portrait-note {
+  font-size: 12px;
+  font-style: italic;
+  color: #6a7699;
+}
+
+.character-identity-random {
+  align-self: flex-end;
+}
+
+/* ── Rechte Sidebars in der Charaktererstellung (Portrait- UND Manager-
+   Auswahl teilen sich dieses generische Aussehen) ────────────────────────
+   Spiegelt .slots-sidebar/.settings-sidebar (gleiche Optik/Blur/Animations-
+   Timing), aber rechts statt links -- siehe openPortraitPicker()/
+   closePortraitPicker()/openManagerPicker()/closeManagerPicker() in
+   renderer.js. */
+.char-side-sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  max-width: 40vw;
+  padding: 6vh 30px 26px;
+  overflow-y: auto;
+  background: linear-gradient(260deg, rgba(150, 160, 190, 0.16) 0%, rgba(130, 140, 170, 0.12) 70%, rgba(130, 140, 170, 0) 100%);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  animation: char-side-sidebar-slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes char-side-sidebar-slide-in {
+  from { transform: translateX(60px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.char-side-sidebar.is-closing {
+  animation: char-side-sidebar-slide-out 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes char-side-sidebar-slide-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(60px); opacity: 0; }
+}
+
+.char-side-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.char-side-sidebar-header .slots-title {
+  margin: 0;
+}
+
+.char-side-sidebar-close-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #c3cbe4;
+  width: 30px;
+  height: 30px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+
+.char-side-sidebar-close-btn:hover {
+  border-color: #ff9f8a;
+  color: #ff9f8a;
+}
+
+.portrait-picker-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  width: 100%;
+  margin-top: 20px;
 }
 
-.character-path-card {
+.portrait-picker-item {
   position: relative;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid #2a3660;
-  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
-  text-align: left;
+  aspect-ratio: 3 / 4;
+  border-radius: 6px;
+  overflow: hidden;
   cursor: pointer;
-  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  border: 2px solid transparent;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.character-path-card:hover {
-  transform: translateY(-2px);
-  border-color: #4c6fff;
+.portrait-picker-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
-.character-path-card.selected {
+.portrait-picker-item:hover {
+  border-color: rgba(62, 207, 114, 0.5);
+}
+
+.portrait-picker-item.is-selected {
   border-color: #3ecf72;
-  box-shadow: 0 0 0 1px #3ecf72, 0 8px 20px rgba(62, 207, 114, 0.2);
+  box-shadow: 0 0 14px rgba(62, 207, 114, 0.55);
 }
 
-.character-path-title {
-  font-size: 14px;
-  font-weight: 800;
-  color: #ffd873;
+/* Team-Logos sind quadratisch statt hochkant wie Portraits. */
+#org-logo-picker-grid .portrait-picker-item {
+  aspect-ratio: 1 / 1;
 }
 
-.character-path-desc {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #b3bede;
+.portrait-picker-empty {
+  color: #8fa0cc;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 20px;
 }
 
-.character-path-effect {
-  margin-top: 6px;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.character-path-effect.effect-bonus { color: #6fe89a; }
-.character-path-effect.effect-malus { color: #ff8a6a; }
-.character-path-effect.effect-neutral { color: #8fa0cc; }
-
+/* ── Fehler + untere Aktionsleiste ─────────────────────────────────────── */
 .character-error {
   color: #ff8a6a;
   font-size: 13px;
   font-weight: 700;
-  margin: 4px 0 14px;
-}
-
-#btn-character-continue {
-  width: 260px;
-  margin-top: 8px;
-}
-
-/* ── Org-Auswahlmenü ───────────────────────────────────────────────────── */
-#screen-org-select {
-  position: relative;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(circle at 50% 15%, #1c2650 0%, #0d1220 60%);
-  padding: 40px 20px;
-}
-
-.org-select-wrap {
-  max-width: 1000px;
-  width: 100%;
+  margin: 16px 0 0;
   text-align: center;
 }
 
-.org-select-subtitle {
-  margin: -10px 0 26px;
-  color: #7c8bb5;
-  font-size: 14px;
-}
-
-.org-select-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
-  max-height: 70vh;
-  overflow-y: auto;
-  padding: 4px 4px 12px;
-  text-align: left;
-}
-
-.org-select-card {
-  position: relative;
-  padding: 16px 18px;
-  border-radius: 14px;
-  border: 1px solid #2a3660;
-  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
-  cursor: pointer;
-  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.org-select-card:hover {
-  transform: translateY(-3px);
-  border-color: #4c6fff;
-  box-shadow: 0 10px 24px rgba(76, 111, 255, 0.2);
-}
-
-.org-select-card-header {
+.character-bottom-center-row {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 32px;
 }
 
-.org-select-card-name {
-  font-size: 15px;
-  font-weight: 800;
-  color: #ffd873;
-}
-
-.org-select-card-strength {
-  font-size: 11px;
-  font-weight: 700;
-  color: #8fa0cc;
-  white-space: nowrap;
-}
-
-.org-select-card-budget {
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #8fe7a8;
-}
-
-.org-select-card-line {
-  margin-top: 6px;
+/* Cyan leuchtende Aktions-Buttons wie in der Referenz-Vorlage. */
+.char-icon-btn {
+  padding: 9px 16px;
+  border-radius: 4px;
+  border: 1px solid #3fbdd6;
+  background: rgba(8, 12, 24, 0.6);
+  color: #7fdcef;
   font-size: 12px;
-  line-height: 1.4;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(63, 189, 214, 0.35), inset 0 0 8px rgba(63, 189, 214, 0.12);
+  transition: box-shadow 0.15s ease, color 0.12s ease, transform 0.1s ease;
 }
 
-.org-select-card-line.line-pro { color: #6fe89a; }
-.org-select-card-line.line-con { color: #ff8a6a; }
+.char-icon-btn:hover:not(:disabled) {
+  color: #c9f3fb;
+  box-shadow: 0 0 18px rgba(63, 189, 214, 0.6), inset 0 0 12px rgba(63, 189, 214, 0.2);
+  transform: translateY(-1px);
+}
 
-.org-select-card.org-select-card-disabled {
-  cursor: not-allowed;
+.char-icon-btn:disabled {
   opacity: 0.45;
-  filter: grayscale(0.7);
+  cursor: not-allowed;
 }
 
-.org-select-card.org-select-card-disabled:hover {
-  transform: none;
-  border-color: #2a3660;
+.char-icon-btn-square {
+  padding: 9px 12px;
+}
+
+/* Zurück (rot, unten links) / Weiter (grün, unten rechts) fest in den
+   Overlay-Ecken -- gleiche Leucht-Optik wie die Vorlage. Bleiben bewusst
+   AUSSERHALB von #character-content (siehe HTML) -- Zurück bewegt sich nie,
+   Weiter rückt bei offener Sidebar über eine Änderung von `right` (nicht
+   `transform`!) nach links, damit es sich mit dem Hover-Lift
+   (transform:translateY, siehe unten) nicht in die Quere kommt. */
+.char-corner-btn {
+  position: absolute;
+  bottom: 22px;
+  z-index: 5;
+  padding: 12px 26px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: right 0.35s cubic-bezier(0.22, 1, 0.36, 1), transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.char-corner-btn-back {
+  left: 24px;
+  background: rgba(40, 12, 10, 0.7);
+  border: 1px solid #e8543e;
+  color: #ff9f8a;
+  box-shadow: 0 0 12px rgba(232, 84, 62, 0.35);
+}
+
+.char-corner-btn-back:hover {
+  box-shadow: 0 0 20px rgba(232, 84, 62, 0.6);
+  transform: translateY(-2px);
+}
+
+.char-corner-btn-next {
+  right: 24px;
+  background: rgba(9, 38, 20, 0.7);
+  border: 1px solid #3ecf72;
+  color: #7fe8a8;
+  box-shadow: 0 0 12px rgba(62, 207, 114, 0.35);
+}
+
+.character-overlay.side-panel-open .char-corner-btn-next {
+  right: 404px;
+}
+
+.char-corner-btn-next:hover:not(:disabled) {
+  box-shadow: 0 0 22px rgba(62, 207, 114, 0.65);
+  transform: translateY(-2px);
+}
+
+.char-corner-btn-next:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
   box-shadow: none;
 }
 
-.org-select-card-soon {
-  margin-top: 6px;
+/* ── Organisations-Modus (bestehende Org übernehmen oder eigene erstellen) ──
+   Teilt sich #app-atmosphere mit Hauptmenü/Charaktererstellung (siehe
+   .org-mode-overlay unten) statt eines eigenen Glow-Hintergrunds. */
+#screen-org-mode-select {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Bildschirmfüllendes Frosted-Glass-Overlay, spiegelt .character-overlay
+   (gleicher Blur/Hintergrund) -- aber ohne dessen seitliche Slide-Animation,
+   da hier stattdessen die beiden Karten selbst von unten reinfliegen (siehe
+   .org-mode-card weiter unten). */
+.org-mode-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 11, 22, 0.55);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  padding: 40px 20px;
+}
+
+.org-mode-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.org-mode-cards {
+  display: flex;
+  gap: 40px;
+}
+
+.org-mode-card {
+  width: 380px;
+  padding: 48px 34px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(17, 23, 46, 0.75), rgba(11, 15, 28, 0.75));
+  border: 1px solid #232d52;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  animation: org-mode-card-fly-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Zweite Karte etwas zeitversetzt -- fliegen dadurch spürbar nacheinander
+   statt exakt synchron ein. */
+.org-mode-cards .org-mode-card:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+@keyframes org-mode-card-fly-in {
+  from { transform: translateY(70px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.org-mode-card:hover:not(.org-mode-card-disabled):not(.is-selected) {
+  transform: translateY(-4px);
+  border-color: #4c6fff;
+  box-shadow: 0 16px 40px rgba(76, 111, 255, 0.25);
+}
+
+/* Bleibt dauerhaft ausgefüllt stehen, bis die andere Karte gewählt wird
+   (siehe selectOrgMode() in renderer.js) -- eigene, deutlich sattere Farbe
+   (Marken-Grün) statt des nur transienten Hover-Blaus, damit "ausgewählt"
+   klar von "gerade drüber" zu unterscheiden ist. */
+.org-mode-card.is-selected {
+  border-color: #3ecf72;
+  background: linear-gradient(180deg, rgba(62, 207, 114, 0.32), rgba(62, 207, 114, 0.12));
+  box-shadow: 0 16px 40px rgba(62, 207, 114, 0.35);
+}
+
+.org-mode-card-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.org-mode-icon {
+  font-size: 72px;
+  margin-bottom: 28px;
+  filter: drop-shadow(0 0 20px rgba(90, 130, 255, 0.3));
+}
+
+.org-mode-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 20px;
+  line-height: 1.35;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.org-mode-desc {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #9aa6c9;
+  margin: 0;
+}
+
+.org-mode-badge {
+  margin-top: 22px;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #6a76a0;
+}
+
+/* ── Eigene Organisation erstellen ─────────────────────────────────────────
+   Nur die Seite/UI (siehe Kommentar in index.html) -- Formularfelder/Dropdowns/
+   Checkbox-Optionen sind voll interaktiv (reines Eingabe-Widget-Verhalten,
+   keine Spiellogik), "Erstellen" bleibt bewusst disabled. */
+.org-create-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 11, 22, 0.55);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  padding: 4vh 24px;
+}
+
+.org-create-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.org-create-content.side-panel-open {
+  transform: translateX(-190px);
+}
+
+.org-create-panel {
+  width: 100%;
+  max-width: 1080px;
+  background: rgba(10, 14, 28, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 34px 38px;
+}
+
+.org-create-row {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+}
+
+.org-create-fields {
+  flex: 1.3;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.character-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(10, 14, 28, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  padding: 12px 14px;
+  color: #e2e8f5;
+  font-size: 14px;
+  font-family: inherit;
+  min-height: 72px;
+  resize: vertical;
+}
+
+.character-field textarea:focus {
+  outline: none;
+  border-color: #3ecf72;
+}
+
+.character-field-standalone-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #8fa0cc;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+
+/* Checkbox-Optik wie bei .character-gender-box (grünes Kreuz), hier für
+   mehrzeilige Options-Listen (Startinvestition/Free-Agents) statt der
+   zweispaltigen Geschlecht-Auswahl. */
+.org-create-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.org-create-option {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: none;
+  background: none;
+  padding: 2px 0;
+  color: #e8edfa;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.org-create-option-box {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(10, 14, 28, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s ease;
+}
+
+.org-create-option:hover .org-create-option-box {
+  border-color: #3ecf72;
+}
+
+.org-create-option.is-active .org-create-option-box::after {
+  content: '✕';
+  color: #3ecf72;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.org-create-option-extra {
+  color: #8fa0cc;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.org-create-logo-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.org-create-logo-frame {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(20, 26, 48, 0.5), rgba(8, 11, 22, 0.6));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.org-create-logo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.org-create-logo-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.org-create-logo-actions .char-icon-btn {
+  flex: 1;
+  padding: 9px 8px;
+  text-align: center;
+}
+
+.org-create-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 26px;
+}
+
+.org-create-submit-btn {
+  padding: 12px 26px;
+  font-size: 14px;
+}
+
+.corner-back-btn {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  padding: 12px 22px;
+  border-radius: 10px;
+  background: #2a1420;
+  border: 1px solid #5a2a38;
+  color: #ff9fb0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.corner-back-btn:hover {
+  background: #3a1c26;
+  border-color: #6b2f3a;
+  transform: translateY(-2px);
+}
+
+/* ── Org-Auswahlmenü (Listen-UI, orientiert an einer Referenz-Vorlage:
+   linke Sidebar mit Suche/Filter/Zeilenliste/Pagination, rechts nur der
+   verschwommene #app-atmosphere-Hintergrund) ──────────────────────────── */
+#screen-org-select {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Echte linksbündige Sidebar (spiegelt .slots-sidebar/.char-side-sidebar --
+   gleicher Blur/Hintergrund/Slide-in, hier per bereits vorhandener
+   slots-sidebar-slide-in-Keyframe wiederverwendet statt dupliziert, da nur
+   die Animation geteilt wird, keine sonstige Klasse). */
+.org-select-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 4;
+  width: 480px;
+  max-width: 88vw;
+  padding: 6vh 30px 26px 60px;
+  overflow-y: auto;
+  background: linear-gradient(100deg, rgba(150, 160, 190, 0.16) 0%, rgba(130, 140, 170, 0.12) 70%, rgba(130, 140, 170, 0) 100%);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  animation: slots-sidebar-slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.org-select-panel-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 20px;
+  letter-spacing: 0.4px;
+}
+
+.org-select-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.org-select-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #171f3d;
+  border: 1px solid #2a3660;
+  border-radius: 10px;
+  padding: 10px 14px;
+  min-width: 0;
+}
+
+.org-select-search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: #e2e8f5;
+  font-size: 13.5px;
+  font-family: inherit;
+}
+
+.org-select-search-icon {
+  opacity: 0.6;
+  font-size: 14px;
+}
+
+.org-select-region-dropdown {
+  position: relative;
+}
+
+.org-select-region-trigger {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #171f3d;
+  border: 1px solid #2a3660;
+  border-radius: 10px;
+  font-size: 16px;
+  cursor: pointer;
+  color: #e2e8f5;
+}
+
+.org-select-region-trigger:hover {
+  border-color: #4c6fff;
+}
+
+.org-select-region-dropdown .char-dropdown-menu {
+  right: 0;
+  left: auto;
+  min-width: 220px;
+}
+
+.org-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 56vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.org-select-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(160deg, rgba(23, 31, 61, 0.8), rgba(16, 21, 42, 0.8));
+  border: 1px solid #232d52;
+  border-radius: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+
+.org-select-row:hover {
+  border-color: #4c6fff;
+  transform: translateX(3px);
+}
+
+.org-select-row-logo {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 5px;
+  box-sizing: border-box;
+}
+
+.org-select-row-icon {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.org-select-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.org-select-row-name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.org-select-row-flag {
+  width: 18px;
+  height: 13px;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.org-select-row-name {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #ffffff;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.org-select-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.org-select-stars {
+  position: relative;
+  display: inline-block;
   font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.org-select-stars .stars-empty {
+  color: #2a3660;
+}
+
+.org-select-stars .stars-filled {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: #ffd873;
+}
+
+/* "SCHWIERIGKEIT:" bleibt standardmäßig weiß -- nur das Wort dahinter
+   (LEICHT/MITTEL/SCHWER) trägt die Grün/Gelb/Rot-Einfärbung. */
+.org-select-difficulty-label {
+  color: #e8edfa;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.org-select-difficulty {
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.org-select-difficulty.difficulty-easy { color: #6fe89a; }
+.org-select-difficulty.difficulty-medium { color: #ffd873; }
+.org-select-difficulty.difficulty-hard { color: #ff8a6a; }
+
+.org-select-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.org-select-page-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #171f3d;
+  border: 1px solid #2a3660;
+  color: #e2e8f5;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.org-select-page-btn:hover:not(:disabled) {
+  border-color: #4c6fff;
+}
+
+.org-select-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.org-select-page-label {
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+  min-width: 16px;
+  text-align: center;
+}
+
+.org-select-count-label {
+  font-size: 12px;
+  color: #6a76a0;
+  margin-left: auto;
+}
+
+.org-select-row.is-selected {
+  border-color: #3ecf72;
+  background: linear-gradient(160deg, rgba(30, 60, 40, 0.55), rgba(16, 21, 42, 0.8));
+}
+
+/* ── Org-Vorschau-Panel (ersetzt das alte Modal-Popup) — rechts neben der
+   Liste, orientiert an einer Referenz-Vorlage: Header mit Logo/Stärke/
+   Budget, Spieler-/Mitarbeiter-/Nachwuchs-Platzhalter-Reihen, Unterschreiben-
+   Button. Spieler-Rollen bewusst NICHT wie in der Vorlage (Rifler/AWPer aus
+   CS) — RLCS Legends kennt nur "Spieler" (3v3, keine Rollen-Differenzierung).
+   Mitarbeiter/Nachwuchs sind noch keine echten Systeme -- rein visuelle
+   Platzhalter für spätere Runden. */
+.org-preview-panel {
+  position: absolute;
+  z-index: 1;
+  top: 6vh;
+  bottom: 6vh;
+  left: 520px;
+  right: 40px;
+  max-width: 820px;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(17, 23, 46, 0.88), rgba(11, 15, 28, 0.88));
+  border: 1px solid #232d52;
+  border-radius: 18px;
+  padding: 28px 32px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+/* Leerzustand (noch keine Org angeklickt, siehe goToOrgSelection() in
+   renderer.js) -- blendet die GESAMTE Box (Rahmen/Hintergrund/Schatten) aus,
+   damit rechts nur der verschwommene Hauptmenü-Hintergrund zu sehen ist,
+   statt eines leeren dunklen Kastens mit Platzhaltertext. */
+.org-preview-panel:empty {
+  display: none;
+}
+
+.org-preview-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.org-preview-logo {
+  flex: 0 0 76px;
+  width: 76px;
+  height: 76px;
+  border-radius: 14px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.org-preview-icon {
+  flex: 0 0 76px;
+  width: 76px;
+  height: 76px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.org-preview-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.org-preview-name {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.org-preview-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.org-preview-meta-row .org-select-stars {
+  font-size: 15px;
+}
+
+.org-preview-budget {
+  color: #8fe7a8;
+  font-weight: 800;
+}
+
+.org-preview-flag {
+  width: 22px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.org-preview-desc {
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid #1a2242;
+}
+
+.org-preview-desc-line {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+  color: #9aa6c9;
+}
+
+.org-preview-section {
+  margin-top: 24px;
+}
+
+.org-preview-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #8fa0cc;
+  margin: 0 0 12px;
+}
+
+.org-preview-avatar-row {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.org-preview-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 76px;
+  text-align: center;
+}
+
+.org-preview-avatar-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  background: #171f3d;
+  border: 2px solid #2a3660;
+}
+
+.org-preview-avatar.is-locked .org-preview-avatar-circle {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+
+.org-preview-avatar-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #9aa6c9;
+  line-height: 1.3;
+}
+
+.org-preview-avatar.is-locked .org-preview-avatar-label {
+  color: #4a5580;
+}
+
+.org-preview-avatar-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.org-preview-avatar-flag-sm {
+  width: 14px;
+  height: 10px;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+
+.org-preview-avatar-stars {
+  font-size: 9px;
+}
+
+.org-preview-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: #4a5580;
   font-style: italic;
-  color: #5a6690;
+}
+
+.org-preview-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 28px;
+}
+
+.org-preview-sign-btn {
+  padding: 13px 26px;
+  border-radius: 10px;
+  background: rgba(62, 207, 114, 0.14);
+  border: 1px solid #3ecf72;
+  color: #6fe89a;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.org-preview-sign-btn:hover {
+  background: rgba(62, 207, 114, 0.28);
+  transform: translateY(-2px);
+  box-shadow: 0 0 24px rgba(62, 207, 114, 0.25);
 }
 
 /* ── Org-Intro & Spielautomat ──────────────────────────────────────────── */
@@ -1163,52 +2783,332 @@ body {
 }
 
 /* ── Hauptmenü ─────────────────────────────────────────────────────────── */
+/* Gemeinsamer, dauerhaft lebendiger Hintergrund für Hauptmenü + Slot-
+   Sidebar (siehe #app-atmosphere in index.html) -- position:fixed statt
+   in den einzelnen .screen-Elementen, damit er beim Wechsel zwischen den
+   beiden NICHT mit versteckt/neu erzeugt wird und seine Loop-Animationen
+   (Logo-Wand-Scroll, Trophäe-Schweben) lückenlos weiterlaufen. */
+.app-atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #05070f;
+}
+
 #screen-menu {
+  position: relative;
   min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Spielt einmalig direkt nach dem Intro (siehe showMenuWithFlyIn() in
+   renderer.js) -- Klassen werden danach wieder entfernt, damit spätere
+   Rückkehr zum Hauptmenü (z.B. über "← Hauptmenü"-Buttons) nicht erneut
+   einfliegt. Screen UND Inhalt faden gemeinsam (leicht zeitversetzt) ein,
+   statt dass der Hintergrund hart aufpoppt und nur der Inhalt reinfliegt. */
+#screen-menu.menu-screen-entering {
+  animation: menu-screen-fade-in 1s ease both;
+}
+
+@keyframes menu-screen-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Hauptmenü-Hintergrund: Logo-Wand + Vignette + Lichtstrahl + Trophäe ──
+   User-Wunsch (Referenz-Screenshot): dunkle Wand aus echten Team-Logo-Kacheln
+   hinter einer Vignette, ein diagonaler Lichtstrahl und eine 3D-artige
+   Trophäe rechts als Blickfang. Logo-Kacheln werden per JS aus den bereits
+   vorhandenen assets/team-logos/-Dateien gebaut (renderMenuLogoWall() in
+   renderer.js) statt hier hart im HTML zu stehen. */
+.mainmenu-logowall {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Jede Reihe enthält ihre Kachel-Sequenz ZWEIMAL hintereinander (siehe
+   renderMenuLogoWall()) -- dadurch ist eine Verschiebung um genau -50% eine
+   perfekt nahtlose Schleife (User-Wunsch: "wie eine Plakatleinwand, die nach
+   links weg dreht und rechts wieder kommt, dauerhaft"). Unterschiedliche
+   animation-duration pro Reihe (inline per JS gesetzt) sorgt für einen
+   organischeren, leicht versetzten Lauf statt eines starren Gleichtakts. */
+.mainmenu-logowall-row {
+  display: flex;
+  flex: 0 0 112px;
+  width: max-content;
+  animation-name: mainmenu-scroll-left;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes mainmenu-scroll-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.mainmenu-logowall-tile {
+  flex: 0 0 112px;
+  width: 112px;
+  height: 112px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.mainmenu-logowall-tile img {
+  width: 60%;
+  height: 60%;
+  object-fit: contain;
+  filter: saturate(0.85) brightness(0.95);
+}
+
+.mainmenu-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
   background:
-    radial-gradient(circle at 50% 20%, #1c2650 0%, #0d1220 60%);
-  padding: 24px 20px;
+    linear-gradient(90deg, rgba(4, 6, 13, 0.95) 0%, rgba(4, 6, 13, 0.55) 50%, rgba(4, 6, 13, 0.25) 100%),
+    radial-gradient(ellipse at 50% 100%, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 55%);
 }
 
-.menu-wrap {
-  text-align: center;
+.mainmenu-beam {
+  position: absolute;
+  z-index: 2;
+  top: -15%;
+  right: 10%;
+  width: 220px;
+  height: 130%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 72%);
+  transform: rotate(16deg);
+  filter: blur(30px);
+  pointer-events: none;
+  mix-blend-mode: screen;
 }
 
-.menu-logo {
-  font-size: 52px;
-  font-weight: 900;
-  letter-spacing: 2px;
+.mainmenu-trophy-wrap {
+  position: absolute;
+  z-index: 3;
+  right: 6%;
+  top: 50%;
+  width: min(30vw, 340px);
+  transform: translateY(-50%);
+  filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.6));
+  animation: mainmenu-trophy-float 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.mainmenu-trophy {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+@keyframes mainmenu-trophy-float {
+  0%, 100% { transform: translateY(-50%); }
+  50% { transform: translateY(calc(-50% - 14px)); }
+}
+
+.mainmenu-left {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 7vh 40px 26px 60px;
+  max-width: 460px;
+}
+
+.mainmenu-left.menu-flying-in {
+  animation: menu-fly-in 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+
+@keyframes menu-fly-in {
+  from { opacity: 0; transform: translateX(-26px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.mainmenu-logo-img {
+  display: block;
+  width: min(220px, 30vw);
+  height: auto;
+  margin-bottom: 34px;
+  mix-blend-mode: screen;
+}
+
+.mainmenu-continue {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-bottom: 24px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid #2a3660;
+  background: linear-gradient(135deg, rgba(76, 111, 255, 0.18), rgba(17, 23, 46, 0.6));
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.mainmenu-continue:hover {
+  transform: translateY(-2px);
+  border-color: #4c6fff;
+  background: linear-gradient(135deg, rgba(76, 111, 255, 0.28), rgba(17, 23, 46, 0.7));
+}
+
+.mainmenu-continue-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-weight: 800;
+  font-size: 16px;
+  color: #fff;
+}
+
+.mainmenu-continue-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.mainmenu-continue-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mainmenu-continue-title {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.mainmenu-continue-title::before {
+  content: '▶ ';
+  color: #7fa3ff;
+}
+
+.mainmenu-continue-sub {
+  font-size: 12px;
+  color: #9aa6c9;
+}
+
+.mainmenu-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 30px;
+}
+
+.mainmenu-nav-item {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #b9c2e0;
+  cursor: pointer;
+  transition: color 0.12s ease, transform 0.12s ease;
+  width: fit-content;
+}
+
+.mainmenu-nav-item:hover:not(:disabled) {
+  color: #3ecf72;
+  transform: translateX(4px);
+}
+
+.mainmenu-nav-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.mainmenu-nav-soon {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: none;
+  color: #4a5580;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.mainmenu-nav-primary {
   color: #ffffff;
 }
 
-.menu-logo span {
-  display: block;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 8px;
-  color: #6f8bff;
-  margin-top: 2px;
+.mainmenu-nav-danger:hover {
+  color: #ff8fa0;
 }
 
-.menu-tagline {
-  margin: 14px 0 40px;
-  color: #7c8bb5;
-  font-size: 14px;
-  letter-spacing: 0.3px;
+.mainmenu-footer {
+  margin-top: auto;
+  width: 100%;
 }
 
-.menu-buttons {
+.mainmenu-social-row {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 260px;
-  margin: 0 auto;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.mainmenu-social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid #3a4570;
+  background: rgba(255, 255, 255, 0.03);
+  color: #b9c2e0;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.mainmenu-social-btn:hover:not(:disabled) {
+  color: #3ecf72;
+  border-color: #3ecf72;
+}
+
+.mainmenu-social-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mainmenu-version {
+  position: absolute;
+  right: 22px;
+  bottom: 16px;
+  z-index: 4;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b9c2e0;
 }
 
 .menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
   padding: 13px 20px;
   border-radius: 10px;
   border: 1px solid #2a3660;
@@ -1218,12 +3118,18 @@ body {
   font-weight: 700;
   letter-spacing: 0.4px;
   cursor: pointer;
-  transition: transform 0.1s ease, background 0.15s ease;
+  transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.menu-btn-icon {
+  font-size: 15px;
+  line-height: 1;
 }
 
 .menu-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   background: #1e2a52;
+  border-color: #3a4a80;
 }
 
 .menu-btn:disabled {
@@ -1252,20 +3158,12 @@ body {
   border-color: #6b2f3a;
 }
 
-.menu-version {
-  margin-top: 34px;
-  font-size: 11px;
-  color: #3f4a75;
-}
-
 .menu-disclaimer {
   margin-top: 10px;
   font-size: 9.5px;
   line-height: 1.4;
   color: #2e3757;
   max-width: 280px;
-  margin-left: auto;
-  margin-right: auto;
 }
 
 .update-check-btn {
@@ -1302,6 +3200,54 @@ body {
   display: flex;
   gap: 10px;
   margin-top: 20px;
+}
+
+/* ── Feedback-Popup ────────────────────────────────────────────────────── */
+.feedback-modal-subtitle {
+  margin: 6px 0 16px;
+  font-size: 13px;
+  color: #9aa6c9;
+  line-height: 1.4;
+}
+
+.feedback-stars {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.feedback-star {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 32px;
+  line-height: 1;
+  color: #2a3660;
+  cursor: pointer;
+  transition: color 0.1s ease, transform 0.1s ease;
+}
+
+.feedback-star:hover {
+  transform: scale(1.12);
+}
+
+.feedback-star.is-active {
+  color: #ffd873;
+}
+
+.feedback-char-count {
+  margin: 4px 0 0;
+  text-align: right;
+  font-size: 11px;
+  color: #4a5580;
+}
+
+.feedback-status-ok {
+  color: #3ecf72 !important;
+}
+
+.feedback-status-error {
+  color: #ff8fa0 !important;
 }
 
 /* ── Verhandlungs-Popup ────────────────────────────────────────────────── */
@@ -1579,8 +3525,9 @@ body {
   color: #ffd873;
 }
 
-/* ── Speicherstand-Auswahl (Slots) ─────────────────────────────────────── */
-#screen-slots,
+/* ── Spielmodus-Auswahl (von hier aus nicht mehr erreichbar, siehe
+   Nav-Umbau weiter unten -- Regel bleibt für einen möglichen späteren
+   zweiten Modus bestehen) ────────────────────────────────────────────── */
 #screen-mode-select {
   min-height: 100vh;
   display: flex;
@@ -1589,28 +3536,139 @@ body {
   background: radial-gradient(circle at 50% 15%, #1c2650 0%, #0d1220 60%);
 }
 
-.slots-wrap {
+/* ── Speicherstand-Auswahl (Slots) ─────────────────────────────────────── */
+
+/* ── Slot-Auswahl-Sidebar (User-Wunsch: keine eigene Seite, sondern eine
+   von links einfliegende Sidebar über derselben Logo-Wand/Trophäe-Atmosphäre
+   wie das Hauptmenü, siehe #screen-slots) ────────────────────────────────── */
+#screen-slots {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.slots-sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   width: 460px;
-  max-width: 90vw;
-  text-align: center;
+  max-width: 86vw;
+  padding: 7vh 30px 26px 60px;
+  /* Bewusst deutlich HELLER/gräulicher als der allgemeine (fast schwarze)
+     Hintergrund, plus backdrop-filter -- User-Wunsch: die Sidebar soll sich
+     klar als eigenes (angedeutet durchscheinendes/"verschwommenes") Panel
+     vom Rest abheben, statt optisch mit dem Seitenhintergrund zu verschmelzen. */
+  background: linear-gradient(100deg, rgba(150, 160, 190, 0.16) 0%, rgba(130, 140, 170, 0.12) 70%, rgba(130, 140, 170, 0) 100%);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  animation: slots-sidebar-slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes slots-sidebar-slide-in {
+  from { transform: translateX(-60px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Beim Klick auf "Zurück" (siehe closeSlotPicker() in renderer.js) --
+   spielt die Slide-in-Animation rückwärts ab, BEVOR tatsächlich zum
+   Hauptmenü gewechselt wird. */
+.slots-sidebar.is-closing {
+  /* Dieselbe Easing-Kurve wie beim Reinsliden (nicht nur dieselbe Dauer) --
+     eine "ease-in"-Kurve (langsamer Start, schnelles Ende) HAT zwar die
+     gleiche Gesamtdauer, wirkt aber spürbar träger, weil der Großteil der
+     sichtbaren Bewegung erst in der zweiten Hälfte passiert. Mit identischer
+     Kurve fühlen sich beide Richtungen gleich schnell an, nicht nur auf dem
+     Papier gleich lang. */
+  animation: slots-sidebar-slide-out 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes slots-sidebar-slide-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-60px); opacity: 0; }
+}
+
+/* Sitzt jetzt ALS TEIL der Sidebar (Flex-Kind mit margin-top:auto statt
+   position:absolute) -- vorher lag der Button als Geschwister-Element
+   außerhalb von .slots-sidebar, wurde aber von dessen höherem z-index
+   optisch verdeckt/unklickbar, weil die Sidebar dieselbe Bildschirmecke
+   überlappte. Gleiche Farbgebung wie .corner-back-btn (an anderer Stelle
+   im Spiel), nur im normalen Fluss statt frei positioniert. */
+.slots-back-btn {
+  margin-top: auto;
+  padding: 12px 22px;
+  border-radius: 10px;
+  background: #2a1420;
+  border: 1px solid #5a2a38;
+  color: #ff9fb0;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.slots-back-btn:hover {
+  background: #3a1c26;
+  border-color: #6b2f3a;
+  transform: translateY(-2px);
 }
 
 .slots-title {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 800;
   color: #ffffff;
-  margin: 0 0 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 22px;
+}
+
+.slot-create-btn {
+  display: block;
+  width: 100%;
+  padding: 13px 18px;
+  margin-bottom: 22px;
+  border-radius: 10px;
+  border: 1px solid #3ecf72;
+  background: rgba(62, 207, 114, 0.08);
+  color: #3ecf72;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.slot-create-btn:hover:not(:disabled) {
+  background: rgba(62, 207, 114, 0.16);
+  transform: translateY(-2px);
+}
+
+.slot-create-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .slots-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
+  max-height: 58vh;
+  overflow-y: auto;
 }
 
 .slot-card {
   position: relative;
-  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 40px 12px 12px;
   border-radius: 12px;
   border: 1px solid #2a3660;
   background: #171f3d;
@@ -1624,31 +3682,77 @@ body {
   background: #1e2a52;
 }
 
-.slot-card.slot-empty {
-  border-style: dashed;
-  opacity: 0.6;
+.slot-card-logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
 }
 
-.slot-card.slot-disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
+.slot-card-logo.slot-card-logo-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #fff;
+  font-size: 18px;
 }
 
-.slot-card.slot-disabled:hover {
-  transform: none;
-  background: #171f3d;
+.slot-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.slot-card-user {
+  font-size: 11px;
+  color: #7c8bb5;
+  margin-bottom: 2px;
 }
 
 .slot-org {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   color: #ffd873;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .slot-meta {
-  margin-top: 4px;
-  font-size: 13px;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: #8a96bd;
+}
+
+.slot-meta strong {
   color: #b3bede;
+}
+
+.slot-saved-at {
+  color: #3ecf72;
+  font-weight: 700;
+}
+
+.slot-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+/* Manager-Vorlagen-Karten (siehe renderManagerPickerList() in renderer.js)
+   nutzen dieselbe Karte, zeigen aber statt des Emoji-Kreises ein echtes
+   <img> mit dem hochgeladenen/ausgewählten Portrait -- object-fit sorgt
+   dafür, dass das Bild den Kreis füllt statt gequetscht zu werden. */
+img.slot-card-avatar {
+  object-fit: cover;
 }
 
 .slot-empty-label {
@@ -1781,19 +3885,6 @@ body {
   color: #5a6690;
 }
 
-.slot-mode-tag {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.3px;
-  background: #232d52;
-  color: #8fa0cc;
-  vertical-align: middle;
-}
-
 .slot-delete-btn {
   position: absolute;
   top: 12px;
@@ -1873,10 +3964,8 @@ body {
 .org-line {
   font-size: 12px;
   line-height: 1.5;
+  color: #9aa6c9;
 }
-
-.org-pro { color: #8fe7a8; }
-.org-con { color: #ff9d9d; }
 
 /* ── Budget-Leiste ─────────────────────────────────────────────────────── */
 #budget-bar {
@@ -2127,4 +4216,4802 @@ main {
   font-weight: 600;
   color: #c7d1f0;
   text-align: right;
+}
+
+/* ── Vertrags-Screen (Gründungsvereinbarung) ───────────────────────────────
+   Eigener animierter Hintergrund statt der geteilten #app-atmosphere-Blur --
+   dunkle Basis + langsam driftendes, gekacheltes Org-Logo (falls vorhanden),
+   damit der Screen unabhängig von der jeweiligen Org optisch "lebt". */
+.org-contract-overlay {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 15%, #182142 0%, #0c1226 55%, #05070f 100%);
+}
+
+.org-contract-bg-pattern {
+  position: absolute;
+  inset: -120px;
+  background-repeat: repeat;
+  background-size: 190px 190px;
+  opacity: 0;
+  filter: grayscale(1) brightness(1.4);
+  animation: org-contract-bg-drift 42s linear infinite;
+  pointer-events: none;
+}
+
+.org-contract-bg-pattern.has-logo {
+  opacity: 0.1;
+}
+
+@keyframes org-contract-bg-drift {
+  from { background-position: 0 0; }
+  to { background-position: 380px 380px; }
+}
+
+/* Zweite, immer aktive Bewegungsebene -- pulsiert sanft, damit der
+   Hintergrund auch bei Orgas OHNE Logo (kein Kachelmuster) nicht komplett
+   statisch wirkt. */
+.org-contract-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 10%, rgba(76, 111, 255, 0.16), transparent 60%);
+  animation: org-contract-bg-pulse 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes org-contract-bg-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.org-contract-paper {
+  position: relative;
+  z-index: 1;
+  width: 620px;
+  max-width: 92vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: #efeee7;
+  color: #23262e;
+  border-radius: 6px;
+  padding: 34px 40px 26px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  animation: org-contract-paper-fly-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.35s both;
+}
+
+@keyframes org-contract-paper-fly-in {
+  from { transform: translateY(140px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.org-contract-logo {
+  position: absolute;
+  top: 22px;
+  right: 28px;
+  width: 60px;
+  height: 60px;
+}
+
+.org-contract-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.org-contract-logo-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.org-contract-header {
+  text-align: center;
+  padding-right: 70px;
+  margin-bottom: 14px;
+}
+
+.org-contract-header h1 {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  margin: 0 0 6px;
+}
+
+.org-contract-header p {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5a5f6c;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.org-contract-body {
+  overflow-y: auto;
+  padding-right: 22px;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.org-contract-body p {
+  margin: 0 0 11px;
+}
+
+.org-contract-options {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(35, 38, 46, 0.15);
+}
+
+.org-contract-options-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #7a7f8c;
+  margin: 8px 0 6px;
+}
+
+.org-contract-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  background: none;
+  padding: 3px 0;
+  color: #23262e;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.org-contract-option-box {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(35, 38, 46, 0.4);
+  background: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s ease;
+}
+
+.org-contract-option:hover .org-contract-option-box {
+  border-color: #22a758;
+}
+
+.org-contract-option.is-active .org-contract-option-box::after {
+  content: '✕';
+  color: #1f9c52;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.org-contract-clear-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 96px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  border: none;
+  background: none;
+  color: #8a8f9c;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.org-contract-clear-btn:hover {
+  color: #d94f4f;
+}
+
+.org-contract-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(35, 38, 46, 0.15);
+}
+
+.org-contract-date-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #7a7f8c;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+#org-contract-date {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.org-contract-signature-block {
+  position: relative;
+  text-align: center;
+}
+
+#org-contract-signature-canvas {
+  width: 220px;
+  height: 66px;
+  border-bottom: 1px solid rgba(35, 38, 46, 0.5);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.org-contract-signature-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #7a7f8c;
+}
+
+.org-contract-signature-error {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #d94f4f;
+}
+
+/* ── Erfolge (Achievements) ────────────────────────────────────────────────
+   Spiegelt .transfer-log-list/.transfer-row strukturell -- eigene Karten
+   statt Zeilen, da hier zusätzlich ein Schloss/Pokal-Icon + Beschreibung
+   pro Eintrag gebraucht wird. */
+.achievements-list {
+  max-width: 720px;
+  margin: 24px auto 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 20px;
+}
+
+.achievement-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
+  border: 1px solid #2a3660;
+  opacity: 0.55;
+}
+
+.achievement-card.is-unlocked {
+  opacity: 1;
+  border-color: #3ecf72;
+  background: linear-gradient(160deg, rgba(62, 207, 114, 0.14) 0%, #10152a 70%);
+}
+
+.achievement-card-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.achievement-card-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #e8edfa;
+}
+
+.achievement-card-desc {
+  font-size: 12px;
+  color: #8fa0cc;
+  margin-top: 2px;
+}
+
+/* Kurzzeitiges Popup oben rechts beim Freischalten -- eigenständiges,
+   selbst-verschwindendes Element statt eines blockierenden Modals (bewusst
+   anders als die eingehenden Bot-Angebote, die eine Reaktion erfordern). */
+.achievement-toast {
+  position: fixed;
+  top: 20px;
+  right: -360px;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 320px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #182142 0%, #0c1226 100%);
+  border: 1px solid #3ecf72;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  transition: right 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.achievement-toast.is-visible {
+  right: 20px;
+}
+
+.achievement-toast-icon {
+  font-size: 26px;
+}
+
+.achievement-toast-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #7fe8a8;
+}
+
+.achievement-toast-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #e8edfa;
+  margin-top: 2px;
+}
+
+/* ── Game-Over (CEO entlassen) ─────────────────────────────────────────── */
+.gameover-overlay {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 20%, #3a1414 0%, #150808 55%, #050505 100%);
+}
+
+.gameover-card {
+  width: 480px;
+  max-width: 90vw;
+  text-align: center;
+  padding: 46px 40px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(40, 12, 10, 0.85), rgba(11, 6, 6, 0.9));
+  border: 1px solid #e8543e;
+  box-shadow: 0 0 40px rgba(232, 84, 62, 0.3);
+}
+
+.gameover-card h1 {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ff9f8a;
+  margin: 0 0 16px;
+}
+
+.gameover-reason {
+  font-size: 14px;
+  color: #d8c2bd;
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+.gameover-summary {
+  font-size: 13px;
+  font-weight: 700;
+  color: #b3bede;
+  margin: 0 0 30px;
+}
+
+.gameover-btn {
+  padding: 12px 28px;
+  border-radius: 4px;
+  background: rgba(9, 38, 20, 0.7);
+  border: 1px solid #3ecf72;
+  color: #7fe8a8;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(62, 207, 114, 0.35);
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.gameover-btn:hover {
+  box-shadow: 0 0 22px rgba(62, 207, 114, 0.65);
+  transform: translateY(-2px);
+}
+
+/* ── Dashboard (neuer Haupt-Hub nach Vertragsunterschrift) ─────────────────
+   Sidebar+Top-Nav-Layout nach Referenz-Screenshot -- Grün statt des
+   Referenz-Gelbs, damit es zur bereits etablierten Akzentfarbe des restlichen
+   Spiels passt (Buttons/Badges/Ecken-Buttons sind hier überall grün). Diese
+   Runde bewusst nur die Hülle, .dashboard-main bleibt Platzhalter.
+   Grau-Textur-Hintergrund (User-Wunsch, wie im Screenshot) über ein
+   feTurbulence-Rauschmuster als SVG-Data-URI -- kein externes Bild nötig.
+   Topbar/Sidebar/Main teilen sich diese eine Fläche (kein eigener
+   Sidebar-Kasten mehr), ::before liegt dafür unter dem Inhalt (z-index). */
+#screen-dashboard {
+  padding: 0;
+}
+
+.dashboard-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(160deg, #3a3c41 0%, #26282c 45%, #18191c 100%);
+}
+
+.dashboard-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.dashboard-topbar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-shrink: 0;
+  height: 96px;
+  padding: 0 30px;
+  background: rgba(10, 11, 13, 0.32);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dashboard-org-logo {
+  width: 54px;
+  height: 54px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.dashboard-org-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #171f3d;
+}
+
+.dashboard-org-logo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.dashboard-identity-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.dashboard-manager-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #a5adc4;
+}
+
+.dashboard-org-name {
+  font-size: 19px;
+  font-weight: 800;
+  color: #f2f4f8;
+  letter-spacing: 0.3px;
+}
+
+.dashboard-history-nav {
+  display: flex;
+  gap: 5px;
+}
+
+.dashboard-history-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: #7a8099;
+  font-size: 16px;
+  cursor: not-allowed;
+}
+
+.dashboard-title-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dashboard-region-badge {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #f2f4f8;
+  white-space: nowrap;
+}
+
+#dashboard-region-value {
+  color: #3ecf72;
+}
+
+.dashboard-page-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #8a91a8;
+  margin: 0;
+}
+
+.dashboard-date-block {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.dashboard-date-text {
+  text-align: right;
+  line-height: 1.35;
+}
+
+.dashboard-date-weekday {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #b8bfd6;
+}
+
+.dashboard-date-line {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.dashboard-weiter-btn {
+  padding: 12px 24px;
+  border-radius: 6px;
+  border: none;
+  background: #3ecf72;
+  color: #06210f;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+
+.dashboard-weiter-btn:hover {
+  background: #56e087;
+  transform: translateY(-1px);
+}
+
+/* Runde 105, User-Vorgabe ("während der Kaskaden-Animation soll der Button
+   ausgegraut werden, um zu symbolisieren, dass er gesperrt ist"): ohne diese
+   Regel blieb der Button auch im `disabled`-Zustand (siehe
+   renderDashboardTopbar()/cascadeAnimationActive) optisch unverändert grün --
+   `disabled` allein ändert bei einem so individuell gestylten Button nichts
+   Sichtbares, nur `cursor` je nach Browser. */
+.dashboard-weiter-btn:disabled {
+  background: #3a4150;
+  color: #8890a0;
+  cursor: not-allowed;
+  transform: none;
+}
+.dashboard-weiter-btn:disabled:hover {
+  background: #3a4150;
+  transform: none;
+}
+
+.dashboard-fast-forward-btn {
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #2a2f45;
+  color: #d7dcf2;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+
+.dashboard-fast-forward-btn:hover {
+  background: #383f5c;
+  transform: translateY(-1px);
+}
+
+.dashboard-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.dashboard-sidebar {
+  width: 264px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 22px 16px;
+  overflow-y: auto;
+}
+
+.dashboard-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #c3c9d9;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dashboard-sidebar-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.dashboard-sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f2f4f8;
+}
+
+.dashboard-sidebar-item.is-active {
+  background: rgba(62, 207, 114, 0.18);
+  color: #7fe8a8;
+  box-shadow: inset 3px 0 0 #3ecf72;
+}
+
+/* Kategorien, die noch nicht spielbar sind (Shop, Basecamp, Strategien,
+   Nachrichten, Statistiken, Runde 42) -- bleiben klickbar (zeigen den
+   Sperr-Hinweis im Hauptbereich), aber optisch klar als "noch gesperrt"
+   erkennbar, ähnlich .org-mode-card-disabled. */
+.dashboard-sidebar-item.is-locked {
+  opacity: 0.6;
+}
+
+.dashboard-sidebar-item.is-locked:hover {
+  opacity: 0.85;
+}
+
+.dashboard-sidebar-item.is-locked.is-active {
+  background: rgba(255, 255, 255, 0.07);
+  color: #c3c9d9;
+  box-shadow: inset 3px 0 0 #565c72;
+  opacity: 0.85;
+}
+
+.dashboard-sidebar-lock-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 13px;
+  filter: grayscale(0.3);
+}
+
+.dashboard-sidebar-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #e05c5c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 8px rgba(224, 92, 92, 0.5);
+}
+
+.dashboard-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard-main-placeholder {
+  color: #9096ab;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  max-width: 340px;
+}
+
+.dashboard-main-placeholder.is-locked {
+  color: #b8bdd0;
+}
+
+/* ── Dashboard-Seite "Einstellungen" ────────────────────────────────────────
+   Einzige der 16 Seiten mit echtem Inhalt in dieser Runde -- nutzt die
+   ECHTEN appSettings/window.electronAPI-Werte (siehe .settings-select/
+   .settings-volume-slider/.settings-row/.settings-label, wiederverwendet aus
+   dem bestehenden screen-settings, keine Zweit-Styles nötig). Card-Look/
+   Sektionstitel/Vollbild-Checkbox/Exit-Button sind neu, angelehnt an den
+   Referenz-Screenshot. */
+.dashboard-settings-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.dashboard-settings-card {
+  width: 460px;
+  max-width: 100%;
+  padding: 34px 38px;
+  border-radius: 12px;
+  background: rgba(10, 11, 13, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.dashboard-settings-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #9aa1b8;
+  text-align: center;
+  margin: 22px 0 14px;
+}
+
+.dashboard-settings-section-title:first-child {
+  margin-top: 0;
+}
+
+.dashboard-settings-dropdown-row {
+  display: flex;
+  gap: 12px;
+}
+
+.dashboard-settings-dropdown-row .settings-select {
+  flex: 1;
+}
+
+.dashboard-settings-checkbox-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px auto 0;
+  border: none;
+  background: none;
+  color: #e2e8f5;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-settings-checkbox-box {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s ease;
+}
+
+.dashboard-settings-checkbox-btn:hover .dashboard-settings-checkbox-box {
+  border-color: #3ecf72;
+}
+
+.dashboard-settings-checkbox-btn.is-active .dashboard-settings-checkbox-box::after {
+  content: '✕';
+  color: #3ecf72;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.dashboard-settings-exit-btn {
+  display: block;
+  width: 100%;
+  margin-top: 28px;
+  padding: 14px 18px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1.5px solid #3fbdd6;
+  color: #3fbdd6;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dashboard-settings-exit-btn:hover {
+  background: #3fbdd6;
+  color: #06210f;
+}
+
+/* ── Dashboard-Seite "Finanzen" ──────────────────────────────────────────── */
+.dashboard-finance-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  gap: 20px;
+  padding: 24px;
+  overflow-y: auto;
+  align-items: stretch;
+}
+
+.dashboard-finance-main {
+  flex: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.dashboard-finance-card {
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 20px 26px;
+}
+
+.dashboard-finance-summary-card {
+  display: flex;
+  justify-content: space-around;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dashboard-finance-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-finance-summary-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #9aa1b8;
+}
+
+.dashboard-finance-summary-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #e2e8f5;
+}
+
+.dashboard-finance-balance {
+  color: #f2f4f8; /* User-Wunsch: Gesamtsaldo weiß statt grün */
+}
+
+/* User-Wunsch: Einnahmen durchgehend grün, Ausgaben durchgehend rot --
+   dieselben Farbtöne wie schon in der Transaktionsliste (.is-income/
+   .is-expense), jetzt als eigene, breiter wiederverwendbare Klassen. */
+.dashboard-finance-value-income {
+  color: #7fe8a8;
+}
+
+.dashboard-finance-value-expense {
+  color: #ff8a8a;
+}
+
+/* Runde 101: eigene Farbe für ausstehendes (noch nicht ausgezahltes)
+   Preisgeld -- bewusst dieselbe Gold-/Amber-Familie wie die Transferfenster-
+   Kalenderfarbe (TRANSFER_WINDOW_COLOR), da beides "noch nicht verfügbares
+   Geld" signalisiert. */
+.dashboard-finance-value-pending {
+  color: #e0b45a;
+}
+
+.dashboard-finance-alloc-card {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+
+.dashboard-finance-pie-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.dashboard-finance-pie {
+  width: 150px;
+  height: 150px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.dashboard-finance-unallocated {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.dashboard-finance-unallocated-label-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dashboard-finance-unallocated-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #9aa1b8;
+}
+
+.dashboard-finance-unallocated-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: #e2e8f5;
+}
+
+.dashboard-finance-alloc-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dashboard-finance-alloc-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 6px;
+}
+
+.dashboard-finance-alloc-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.dashboard-finance-swatch-transfers { background: #e8d84a; }
+.dashboard-finance-swatch-salaries { background: #d64fc7; }
+.dashboard-finance-swatch-marketing { background: #a83fd6; }
+.dashboard-finance-swatch-operations { background: #3f7fd6; }
+.dashboard-finance-swatch-unallocated { background: #4a4f63; }
+
+.dashboard-finance-alloc-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #e2e8f5;
+}
+
+.dashboard-finance-alloc-value {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b3bede;
+}
+
+.dashboard-finance-alloc-slider {
+  width: 100%;
+  accent-color: #3fbdd6;
+  cursor: pointer;
+}
+
+.dashboard-finance-cashflow-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.dashboard-finance-cashflow-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dashboard-finance-cashflow-value {
+  font-size: 19px;
+  font-weight: 800;
+  color: #e2e8f5;
+}
+
+.dashboard-finance-cfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* User-Wunsch: CFO-Block direkt neben dem Bericht-Button -- die Gruppe
+     (nicht mehr der Button allein) wird ans rechte Ende geschoben. */
+  margin-left: auto;
+}
+
+.dashboard-finance-cfo-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.dashboard-finance-cfo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.dashboard-finance-cfo-role {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9aa1b8;
+}
+
+.dashboard-finance-cfo-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #e2e8f5;
+}
+
+.dashboard-finance-report-btn {
+  margin-left: 14px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1.5px solid #3fbdd6;
+  color: #3fbdd6;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.dashboard-finance-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 130px;
+}
+
+.dashboard-finance-chart-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.dashboard-finance-chart-bars {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 1px;
+}
+
+.dashboard-finance-chart-income {
+  width: 100%;
+  background: linear-gradient(180deg, #3ecf72, #1a7a44);
+  border-radius: 3px 3px 0 0;
+}
+
+.dashboard-finance-chart-expense {
+  width: 100%;
+  background: linear-gradient(180deg, #d64f4f, #7a1a1a);
+  border-radius: 0 0 3px 3px;
+}
+
+.dashboard-finance-chart-label {
+  margin-top: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #8a91a8;
+}
+
+.dashboard-finance-transactions {
+  flex: 1;
+  min-width: 0;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 18px 20px;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.dashboard-finance-transactions-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.8fr 1fr 1.3fr;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #e8d84a;
+}
+
+.dashboard-finance-transactions-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-finance-transaction-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.8fr 1fr 1.3fr;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12.5px;
+  color: #c3c9d9;
+}
+
+.dashboard-finance-transaction-row .is-income {
+  color: #7fe8a8;
+  font-weight: 700;
+}
+
+.dashboard-finance-transaction-row .is-expense {
+  color: #ff8a8a;
+  font-weight: 700;
+}
+
+.dashboard-finance-transactions-empty {
+  padding: 40px 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a7189;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+/* ── Dashboard-Seite "Sponsoren" ─────────────────────────────────────────── */
+.dashboard-sponsors-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  gap: 24px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.dashboard-sponsors-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-sponsors-subtabs {
+  display: flex;
+  gap: 26px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 12px;
+}
+
+.dashboard-sponsors-subtab {
+  border: none;
+  background: none;
+  color: #9aa1b8;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  padding-bottom: 6px;
+}
+
+.dashboard-sponsors-subtab.is-active {
+  color: #f2f4f8;
+  border-bottom: 2px solid #e8a23e;
+}
+
+.dashboard-sponsors-tier-filter {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.dashboard-sponsors-tier-btn {
+  border: none;
+  background: none;
+  color: #8a91a8;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-sponsors-tier-btn.is-active {
+  color: #e8a23e;
+}
+
+.dashboard-sponsors-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.dashboard-sponsor-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.dashboard-sponsor-card:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.dashboard-sponsor-card.is-selected {
+  border-color: #6f8bff;
+  background: rgba(111, 139, 255, 0.08);
+}
+
+.dashboard-sponsor-logo {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.dashboard-sponsor-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-sponsor-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #f2f4f8;
+  letter-spacing: 0.3px;
+}
+
+.dashboard-sponsor-stars {
+  margin: 3px 0 6px;
+  font-size: 12px;
+}
+
+.dashboard-sponsor-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dashboard-sponsor-category-badge {
+  padding: 2px 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #0d1220;
+}
+
+.dashboard-sponsor-tier-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a91a8;
+}
+
+.dashboard-sponsor-tier-label strong {
+  color: #e2e8f5;
+}
+
+.dashboard-sponsor-card-status-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  align-self: flex-start;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.dashboard-sponsor-card-status-dot.is-available { background: #3ecf72; color: #3ecf72; }
+.dashboard-sponsor-card-status-dot.is-unavailable { background: #e8c23e; color: #e8c23e; }
+.dashboard-sponsor-card-status-dot.is-locked { background: #e05c5c; color: #e05c5c; }
+.dashboard-sponsor-card-status-dot.is-signed { background: #4f8cf7; color: #4f8cf7; }
+
+.dashboard-sponsors-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.dashboard-sponsors-page-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: #9aa1b8;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-sponsors-page-btn.is-active {
+  color: #f2f4f8;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-sponsors-page-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.dashboard-sponsors-mine-empty {
+  padding: 60px 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a7189;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.dashboard-sponsors-jersey-col {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard-sponsors-jersey-frame {
+  position: relative;
+  width: 260px;
+  height: 300px;
+}
+
+.dashboard-sponsors-jersey-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.4));
+}
+
+.dashboard-sponsors-jersey-svg path {
+  fill: #3ecf72;
+  stroke: rgba(0, 0, 0, 0.15);
+  stroke-width: 1;
+}
+
+.dashboard-sponsors-jersey-logo {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 800;
+  color: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dashboard-sponsors-jersey-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* ── Sponsor-Detailansicht (Runde 39) ──────────────────────────────────── */
+.dashboard-sponsors-overview-row {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.dashboard-sponsors-browse {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-sponsor-detail {
+  width: 300px;
+  flex-shrink: 0;
+  padding: 18px 20px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-sponsor-detail-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 16px;
+}
+
+.dashboard-sponsor-detail-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.dashboard-sponsor-detail-status-dot.is-available { background: #3ecf72; color: #3ecf72; }
+.dashboard-sponsor-detail-status-dot.is-unavailable { background: #e8c23e; color: #e8c23e; }
+.dashboard-sponsor-detail-status-dot.is-locked { background: #e05c5c; color: #e05c5c; }
+.dashboard-sponsor-detail-status-dot.is-signed { background: #4f8cf7; color: #4f8cf7; }
+
+.dashboard-sponsor-detail-status-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f5;
+}
+
+.dashboard-sponsor-detail-head {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-sponsor-detail-logo {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.dashboard-sponsor-detail-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #f2f4f8;
+  margin-bottom: 4px;
+}
+
+.dashboard-sponsor-detail-description {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #9aa1b8;
+}
+
+.dashboard-sponsor-detail-actions {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-sponsor-offer-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1.5px solid #3ecf72;
+  background: rgba(62, 207, 114, 0.14);
+  color: #7fe8a8;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dashboard-sponsor-offer-btn:hover {
+  background: rgba(62, 207, 114, 0.24);
+}
+
+.dashboard-sponsor-revenue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: #e2e8f5;
+}
+
+.dashboard-sponsor-revenue-label {
+  color: #3fbdd6;
+  font-weight: 700;
+}
+
+.dashboard-sponsor-detail-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9aa1b8;
+}
+
+.dashboard-sponsor-goal {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+.dashboard-sponsor-goal-bullet {
+  flex-shrink: 0;
+  color: #6f8bff;
+  font-weight: 800;
+  margin-top: 1px;
+}
+
+.dashboard-sponsor-goal.is-done .dashboard-sponsor-goal-bullet {
+  color: #3ecf72;
+}
+
+.dashboard-sponsor-goal-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #e2e8f5;
+  line-height: 1.4;
+}
+
+.dashboard-sponsor-goal.is-done .dashboard-sponsor-goal-label {
+  color: #7fe8a8;
+  text-decoration: line-through;
+  text-decoration-color: rgba(127, 232, 168, 0.5);
+}
+
+.dashboard-sponsor-goal-reward {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6f8bff;
+  margin-top: 2px;
+}
+
+.dashboard-sponsor-goal-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-sponsor-goal-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dashboard-sponsor-goal-fraction {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #9aa1b8;
+}
+
+.dashboard-sponsor-goal.is-done .dashboard-sponsor-goal-fraction {
+  color: #7fe8a8;
+}
+
+.dashboard-sponsor-goal-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.dashboard-sponsor-goal-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #6f8bff;
+}
+
+.dashboard-sponsor-goal.is-done .dashboard-sponsor-goal-bar-fill {
+  background: #3ecf72;
+}
+
+.dashboard-sponsor-goal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.dashboard-sponsor-goal-badge {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #3ecf72;
+  background: rgba(62, 207, 114, 0.14);
+  border: 1px solid rgba(62, 207, 114, 0.35);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.dashboard-sponsor-goal-collect-btn {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #f2d778;
+  background: rgba(232, 194, 62, 0.16);
+  border: 1px solid rgba(232, 194, 62, 0.5);
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.dashboard-sponsor-goal-collect-btn:hover {
+  background: rgba(232, 194, 62, 0.28);
+}
+
+.dashboard-sponsor-fire-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1.5px solid #e05c5c;
+  background: rgba(224, 92, 92, 0.14);
+  color: #f29a9a;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dashboard-sponsor-fire-btn:hover {
+  background: rgba(224, 92, 92, 0.24);
+}
+
+.dashboard-sponsor-collect-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: 8px;
+  border: 1.5px solid #e8c23e;
+  background: rgba(232, 194, 62, 0.14);
+  color: #f2d778;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dashboard-sponsor-collect-btn:hover {
+  background: rgba(232, 194, 62, 0.24);
+}
+
+.dashboard-sponsor-card-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 82px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1.5px dashed rgba(255, 255, 255, 0.12);
+  cursor: default;
+}
+
+.dashboard-sponsor-card-empty:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dashboard-sponsor-card-empty-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #565c72;
+}
+
+/* ── Dashboard-Seite "Turniere" (Runde 43) ───────────────────────────────
+   Kalender (links) + "Bevorstehend"-Liste (rechts), reine Anzeige über die
+   bestehende Saisonstruktur (season.js), siehe renderDashboardTournamentsPanel()
+   in renderer.js. Layout/Optik spiegelt Sponsoren/Finanzen-Seiten. */
+.dashboard-tournaments-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/* Runde 100: `flex-basis: 100%` in einem wrap-fähigen Flex-Container erzwingt
+   einen Zeilenumbruch davor/danach -- Banner nimmt so die volle Breite über
+   den beiden Spalten ein, ohne deren bestehendes Row-Layout anzufassen. */
+.dashboard-season-skip-banner {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ffd7d7;
+  font-weight: 700;
+}
+
+.dashboard-season-skip-btn {
+  padding: 10px 18px;
+  border-radius: 6px;
+  border: none;
+  background: #ef4444;
+  color: #2a0808;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.dashboard-season-skip-btn:hover {
+  background: #f66a6a;
+  transform: translateY(-1px);
+}
+
+.dashboard-tournaments-calendar-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-tournaments-list-col {
+  width: 400px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dashboard-tournaments-breadcrumb {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #8a91a8;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+/* Runde 102, User-Vorgabe ("oben mittig über dem Kalender: Transferfenster:
+   Geöffnet/Geschlossen"): zeigt den ECHTEN aktuellen Stand (heutiges
+   careerDate, siehe renderTournamentCalendar()) -- unabhängig davon, welchen
+   Monat/welches Jahr man sich gerade im Kalender ansieht. */
+.dashboard-transfer-window-status {
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.dashboard-transfer-window-status.is-open {
+  color: #e0b45a;
+  background: rgba(224, 180, 90, 0.12);
+}
+
+.dashboard-transfer-window-status.is-closed {
+  color: #8a91a8;
+  background: rgba(138, 145, 168, 0.08);
+}
+
+.dashboard-tournament-cal-card {
+  border-radius: 12px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 20px;
+}
+
+.dashboard-tournament-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.dashboard-tournament-cal-title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #f2f4f8;
+  min-width: 180px;
+  text-align: center;
+}
+
+.dashboard-tournament-cal-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #c3c9d9;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dashboard-tournament-cal-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f2f4f8;
+}
+
+.dashboard-tournament-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+
+.dashboard-tournament-cal-weekdays span {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6a7189;
+  text-transform: uppercase;
+}
+
+.dashboard-tournament-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.dashboard-tournament-cal-cell {
+  min-height: 74px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 6px 7px;
+  overflow: hidden;
+}
+
+.dashboard-tournament-cal-cell.is-empty {
+  background: none;
+  border: none;
+}
+
+.dashboard-tournament-cal-cell.is-today {
+  background: rgba(232, 194, 62, 0.16);
+  border-color: rgba(232, 194, 62, 0.5);
+}
+
+.dashboard-tournament-cal-day {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #c3c9d9;
+  margin-bottom: 5px;
+}
+
+.dashboard-tournament-cal-cell.is-today .dashboard-tournament-cal-day {
+  color: #f2d778;
+}
+
+.dashboard-tournament-cal-bar {
+  height: 3px;
+  border-radius: 2px;
+  margin-bottom: 4px;
+}
+
+.dashboard-tournament-cal-phase-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.dashboard-tournaments-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.dashboard-tournaments-list-empty {
+  padding: 60px 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a7189;
+}
+
+.dashboard-tournament-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-left: 3px solid var(--tournament-accent, #4f8cf7);
+}
+
+.dashboard-tournament-card-logo {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.dashboard-tournament-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-tournament-card-dates {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #8a91a8;
+  margin-bottom: 3px;
+}
+
+.dashboard-tournament-card-name {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #f2f4f8;
+  margin-bottom: 5px;
+}
+
+.dashboard-tournament-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.dashboard-tournament-stars {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.dashboard-tournament-star {
+  font-size: 11px;
+  color: #3a3f52;
+}
+
+.dashboard-tournament-star.is-filled {
+  color: #e8c23e;
+}
+
+.dashboard-tournament-tier-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #f2d778;
+  background: rgba(232, 194, 62, 0.14);
+  border: 1px solid rgba(232, 194, 62, 0.35);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.dashboard-tournament-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9aa1b8;
+}
+
+.dashboard-tournament-location-flag {
+  width: 16px;
+  height: 11px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.dashboard-tournament-card-prize {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #7fe8a8;
+}
+
+.dashboard-tournament-details-btn {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 9px 14px;
+  border-radius: 7px;
+  border: 1.5px solid #3fbdd6;
+  background: rgba(63, 189, 214, 0.12);
+  color: #7fd8ec;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+}
+
+.dashboard-tournament-details-btn:hover {
+  background: rgba(63, 189, 214, 0.22);
+}
+
+.dashboard-tournament-details-btn.is-danger {
+  border-color: #e8543e;
+  background: rgba(232, 84, 62, 0.12);
+  color: #ff9f8a;
+}
+
+.dashboard-tournament-details-btn.is-danger:hover {
+  background: rgba(232, 84, 62, 0.22);
+}
+
+/* ── Turnier-Detailseite (Runde 44) ──────────────────────────────────── */
+.dashboard-tournament-detail-panel {
+  width: 100%;
+  height: 100%;
+  padding: 24px 30px;
+  overflow-y: auto;
+}
+
+.dashboard-tournament-detail-back {
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 18px;
+  transition: color 0.12s ease, transform 0.12s ease;
+}
+
+.dashboard-tournament-detail-back:hover {
+  color: #3ecf72;
+  transform: translateX(-3px);
+}
+
+.dashboard-tournament-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 22px;
+  border-radius: 12px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  margin-bottom: 22px;
+}
+
+.dashboard-tournament-detail-logo {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-tournament-detail-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-tournament-detail-dates {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #8a91a8;
+  margin-bottom: 4px;
+}
+
+.dashboard-tournament-detail-name {
+  font-size: 24px;
+  font-weight: 800;
+  color: #f2f4f8;
+  margin: 0 0 6px;
+}
+
+.dashboard-tournament-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-tournament-detail-region {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #7fe8a8;
+  text-transform: uppercase;
+}
+
+.dashboard-tournament-detail-header-right {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.dashboard-tournament-detail-header-right .dashboard-tournament-card-prize {
+  font-size: 18px;
+  margin-bottom: 2px;
+}
+
+.dashboard-tournament-detail-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 20px;
+}
+
+.dashboard-tournament-detail-tab {
+  padding: 10px 18px;
+  border: none;
+  background: none;
+  color: #8a91a8;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.dashboard-tournament-detail-tab:hover {
+  color: #c3c9d9;
+}
+
+.dashboard-tournament-detail-tab.is-active {
+  color: #3ecf72;
+  border-bottom-color: #3ecf72;
+}
+
+.dashboard-tournament-detail-tab-arrow {
+  display: flex;
+  align-items: center;
+  color: #5a6280;
+  font-size: 16px;
+  padding: 0 2px;
+  user-select: none;
+}
+
+.dashboard-tournament-detail-tab.has-next-own-match::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: #ffcf4d;
+  box-shadow: 0 0 6px 1px rgba(255, 207, 77, 0.65);
+  vertical-align: middle;
+  animation: dashboardNextOwnMatchPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes dashboardNextOwnMatchPulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.dashboard-tournament-detail-tab-content.hidden {
+  display: none;
+}
+
+.dashboard-tournament-detail-registration {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 26px;
+}
+
+.dashboard-tournament-detail-status {
+  font-size: 13.5px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.dashboard-tournament-detail-status.is-unavailable {
+  color: #e8a23e;
+}
+
+.dashboard-tournament-detail-status.is-open {
+  color: #7fe8a8;
+}
+
+.dashboard-tournament-detail-status.is-running {
+  color: #8a91a8;
+}
+
+.dashboard-tournament-detail-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+/* Runde 85: Ergebnis-Zeilen (Platzierungen nach automatischer Turnier-
+   Auflösung) -- spannen bewusst die volle Breite des Grid-Elternelements,
+   statt sich wie die Teilnehmer-Slot-Badges in einzelne Grid-Zellen
+   einzureihen. */
+.dashboard-tournament-result-row {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: #c7cbe0;
+  padding: 3px 0;
+}
+
+.dashboard-tournament-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  text-align: center;
+}
+
+.dashboard-tournament-slot img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.dashboard-tournament-slot-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.dashboard-tournament-slot span {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #c3c9d9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.dashboard-tournament-slot.is-empty {
+  color: #565c72;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.dashboard-tournament-slot.is-own-team {
+  border-color: #3ecf72;
+  background: rgba(62, 207, 114, 0.1);
+}
+
+.dashboard-tournament-slot.is-own-team span {
+  color: #7fe8a8;
+}
+
+.dashboard-tournament-detail-stub {
+  padding: 60px 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a7189;
+}
+
+/* ── Turnier-Detail Swiss/Playoff-Stages (Runde 47/48/49) ────────────────── */
+.dashboard-tournament-stage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+/* SVG-Verbindungslinien (Runde 49) -- laufzeit-gezeichnet per
+   getBoundingClientRect() in drawSvgConnectors(), NICHT per CSS geraten.
+   Braucht einen position:relative-Container (siehe .swiss-ladder/
+   .bracket-tree-wrap/.bracket-afl-wrap/.bracket-group-wrap unten). */
+.tournament-connectors {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dashboard-tournament-stage {
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 18px 20px;
+}
+
+.dashboard-tournament-stage-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.dashboard-tournament-stage-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.dashboard-tournament-stage-count {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #7fe8a8;
+  letter-spacing: 0.3px;
+}
+
+.dashboard-tournament-stage-desc {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #9aa6c9;
+  margin: 0 0 18px;
+}
+
+.tournament-stage-group-block + .tournament-stage-group-block {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.tournament-stage-group-block-label {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #e8c23e;
+  margin-bottom: 12px;
+}
+
+/* Match-Karte -- gemeinsamer Baustein für Swiss-Leiter, Round-Robin-Gruppen
+   und Bracket-Bäume. Eine Karte = ein Match = 2 Teams untereinander (Runde
+   50, Referenz-Vorlage: "bei 8 Teams 4 Boxen, bei 4 Teams 2 Boxen"). */
+/* Runde 55, User-Vorgabe (RLCS-World-Championship-"Hybrid Playoff
+   Bracket"-Screenshot, 1:1-Angleichung): keine Uhr/Zeit-Kopfzeile mehr --
+   pro Team-Zeile jetzt Logo-Platzhalter + Name + Score-Box rechts, exakt
+   wie im Referenzbild (Team-Icon links, Name daneben, Ergebnis-Zahl in
+   eigener kleiner Box ganz rechts). Bo-Angabe sitzt jetzt am Runden-Label
+   (siehe .bracket-round-bo), nicht mehr auf der Karte. */
+.tournament-match-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Runde 64, User-Referenzfoto: jedes Match ist im Original mit einem
+   Buchstaben beschriftet ("Match A" usw.), vertikal links neben der Karte
+   -- nur gesetzt, wenn tournamentMatchCardHtml() ein matchLabel bekommt
+   (aktuell nur der Playoff-Baum, siehe buildAflBracket()). `position:
+   relative` oben ist der Anker; `.bracket-afl-wrap` bekommt entsprechend
+   mehr linkes Padding, damit dieses Label bei der ersten Spalte nicht
+   abgeschnitten wird. */
+.tournament-match-card-label {
+  position: absolute;
+  left: -28px;
+  top: 50%;
+  width: 16px;
+  transform: translateY(-50%) rotate(180deg);
+  writing-mode: vertical-rl;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #565c72;
+  white-space: nowrap;
+}
+
+.tournament-match-card-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c3c9d9;
+}
+
+.tournament-match-card-team + .tournament-match-card-team {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.tournament-match-card-logo {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.09);
+  /* Runde 87: echtes Logo (background-image, per applyOrgLogoToElement()
+     gesetzt) oder Badge-Fallback (Initiale als Text, Farbe per
+     background-color) -- beide teilen sich dieselbe Box. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.tournament-match-card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tournament-match-card-score {
+  flex-shrink: 0;
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #8a91a8;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Runde 86: Sieger-Hervorhebung, sobald echte Ergebnisse eingetragen sind
+   (siehe fillMatchCardResult()) -- rein additiv, betrifft keine bestehenden
+   TBD-Platzhalter-Karten. */
+.tournament-match-card-team.is-winner .tournament-match-card-name {
+  color: #eef1fb;
+}
+
+.tournament-match-card-team.is-winner .tournament-match-card-score {
+  color: #7fe8a8;
+  background: rgba(127, 232, 168, 0.15);
+}
+
+/* Runde 95, User-Vorgabe ("eigenes Team & Orga soll orange hervorgehoben
+   werden, egal in welchem Bracket/Swiss/Tabelle"): eine einzige `.is-own-org`-
+   Modifier-Klasse (siehe isOwnOrgName() in renderer.js), auf allen vier
+   Team-Zeilen-/Karten-Typen einsetzbar -- Bracket-Match-Karten (Zeile UND die
+   einzelne "Qualifiziert"-Box), Swiss-Leiter-Zellen, Round-Robin-Standings. */
+.tournament-match-card-team.is-own-org,
+.tournament-match-card.is-own-org,
+.swiss-table-team.is-own-org,
+.tournament-rr-standings-team.is-own-org {
+  background: rgba(232, 162, 62, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(232, 162, 62, 0.55);
+}
+
+.tournament-match-card-team.is-own-org .tournament-match-card-name,
+.tournament-match-card.is-own-org .tournament-match-card-name,
+.swiss-table-team.is-own-org .swiss-table-team-label,
+.tournament-rr-standings-team.is-own-org .tournament-rr-standings-label {
+  color: #e8a23e;
+  font-weight: 800;
+}
+
+/* Swiss-Leiter: horizontal scrollende Tag-Spalten, echte Verbindungslinien
+   per SVG (siehe .tournament-connectors oben) statt Tabellen-Optik --
+   position:relative ist der Anker für das SVG-Overlay. */
+/* Runde 54, User-Korrektur (Ist-Screenshot vs. RLCS-2024-Worlds-Referenz):
+   der bisherige Aufbau (Runde 51-53) machte JEDE Tabelle -- auch
+   Qualifiziert/Eliminiert -- zu einem eigenen Flex-Element auf oberster
+   Ebene und positionierte sie per transform:translateY(), was künstliche
+   Breite/Leerräume erzeugte ("ewig weit auseinandergezogen", Linien
+   "ragen über Tabellen"). Neu: EIN Wrapper pro Tag (.swiss-day-column),
+   der Qualifiziert oben, aktive Spalten in der Mitte, Eliminiert unten in
+   natürlicher (nicht verschobener) Reihenfolge stapelt -- exakt wie im
+   Referenzbild, wo QUALIFIED/2-1/1-2/ELIMINATED sichtbar in EINER Spalte
+   übereinandersitzen. `align-items: center` auf den äußeren Container
+   erzeugt den Fächer-/Diamant-Effekt automatisch (unterschiedlich hohe
+   Tages-Wrapper werden auf eine gemeinsame Mittellinie zentriert), ganz
+   ohne manuelle Pixel-Offsets -- dadurch exakt so breit wie die echten
+   Tages-Slots (Tag1..Tag6) und ohne künstliche Lücken. */
+.swiss-ladder {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 16px 4px;
+}
+
+.swiss-day-column {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+/* Runde 52-54, User-Vorgabe (nach RLCS-2024-Worlds-Referenz-Screenshot):
+   EINE große Tabelle pro Tag/Bilanz-Spalte (farbiger Header-Balken +
+   schlichte Zeilen darin) statt vieler einzeln umrandeter Match-Karten.
+   Qualifiziert-/Eliminiert-Endpunkte nutzen dieselbe .swiss-table-Struktur
+   (.swiss-table-endcap-Modifier) und sitzen jetzt INNERHALB des
+   Tages-Wrappers (siehe .swiss-day-column), nicht mehr als eigene
+   Top-Level-Spalte. */
+.swiss-table {
+  position: relative;
+  z-index: 1;
+  /* Runde 90, User-Vorgabe ("etwas größer machen, damit man die gespielten
+     Einzelergebnisse... lesen kann"): von 128px auf 176px verbreitert --
+     Team-Logo + Name + Score müssen jetzt nebeneinander Platz haben.
+     Runde 95, User-Vorgabe ("ganze Teamnamen reinpassen, Logos besser
+     erkennbar"): nochmal auf 224px verbreitert -- lange Org-Namen (z.B.
+     manche der 454 generierten Orgas, siehe data/organizations.js) wurden bei
+     176px trotz ellipsis abgeschnitten. */
+  width: 224px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.swiss-table-header {
+  padding: 6px 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  text-align: center;
+  white-space: nowrap;
+  color: #0c1226;
+  background: #6f8bff;
+}
+
+.swiss-table.is-winning .swiss-table-header { background: #3ecf72; }
+.swiss-table.is-losing .swiss-table-header { background: #e05c5c; color: #fff; }
+.swiss-table.is-decider .swiss-table-header { background: #e8a23e; }
+.swiss-table.is-qualified .swiss-table-header { background: #3ecf72; }
+.swiss-table.is-eliminated .swiss-table-header { background: #e05c5c; color: #fff; }
+
+.swiss-table-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.swiss-table-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Runde 90: etwas mehr Luft (5px 8px -> 7px 9px) + größere Schrift
+     (10.5px -> 11.5px), passend zur verbreiterten Spalte (176px). */
+  padding: 7px 9px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #8a91a8;
+}
+
+.swiss-table-row + .swiss-table-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.swiss-table-team {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+/* Runde 87: zweites Team (rechts von "vs") wird an den Rand gedrückt --
+   ersetzt das frühere `text-align: right`, das bei einem reinen Text-Span
+   funktionierte, jetzt aber (Logo + Label als Flex-Kinder) keine Wirkung
+   mehr hätte. */
+.swiss-table-team:last-child {
+  justify-content: flex-end;
+}
+
+/* Runde 87: Team-Logo (echtes Bild oder Farb-Badge mit Initiale, siehe
+   applyOrgLogoToElement()) links vom Namen. */
+.swiss-table-team-logo {
+  flex-shrink: 0;
+  /* Runde 90: 14x14 -> 16x16. Runde 95, User-Vorgabe ("Logos besser
+     erkennbar"): nochmal auf 20x20 vergrößert, passend zur breiteren Zeile. */
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.09);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.swiss-table-team-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swiss-table-vs {
+  flex-shrink: 0;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #454b60;
+}
+
+/* Runde 90, User-Vorgabe ("die gespielten Einzelergebnisse... gescheit
+   anzeigen und lesen können"): sobald ein Match wirklich gespielt wurde,
+   ersetzt fillSwissLadderResults() den "VS"-Platzhaltertext durch den
+   echten Score (z.B. "3:2") -- diese Klasse macht ihn dann deutlich
+   sichtbarer als das dezente "vs" (größer, heller, mit eigenem Hintergrund-
+   Chip, exakt wie .tournament-match-card-score anderswo im Bracket-System). */
+.swiss-table-vs.has-score {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: normal;
+  text-transform: none;
+  color: #eef1fb;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+
+/* Round-Robin-Gruppen (Major/Worlds Gruppenphase) -- echte Standings-Tabelle
+   wie bei RLCS-Broadcast-Grafiken, Spielplan darunter. */
+.tournament-rr-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 22px;
+}
+
+.tournament-rr-group-label {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #e8c23e;
+  margin-bottom: 10px;
+}
+
+.tournament-rr-standings {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 14px;
+}
+
+.tournament-rr-standings th {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #6a7189;
+  text-align: left;
+  padding: 0 8px 6px;
+}
+
+.tournament-rr-standings th:nth-child(1) { width: 24px; }
+.tournament-rr-standings th:nth-child(3),
+.tournament-rr-standings th:nth-child(4) { width: 32px; text-align: center; }
+
+.tournament-rr-standings td {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #c3c9d9;
+  padding: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tournament-rr-standings td:first-child {
+  font-weight: 800;
+  color: #6a7189;
+}
+
+.tournament-rr-standings td:nth-child(3),
+.tournament-rr-standings td:nth-child(4) {
+  text-align: center;
+  color: #565c72;
+}
+
+/* Runde 87: Team-Zelle mit Logo (echtes Bild oder Farb-Badge, siehe
+   applyOrgLogoToElement()) + Name nebeneinander. */
+.tournament-rr-standings-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tournament-rr-standings-logo {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.09);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.tournament-rr-standings-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tournament-rr-group-matches-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #565c72;
+  margin-bottom: 8px;
+}
+
+.tournament-rr-group-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Einzel-K.o.-Bracket (nur LCQ) -- echte Verbindungslinien per SVG. */
+.bracket-tree-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.bracket-tree {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 56px;
+  overflow-x: auto;
+  padding: 4px 4px 12px;
+}
+
+.bracket-round {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+}
+
+/* Runde 55, an RLCS-Referenzbild angeglichen: Großbuchstaben statt
+   "»"-Präfix, Bo-Wert als eigenes gedämpftes Badge dahinter (kam vorher
+   von der Match-Karte, siehe .tournament-match-card-Kommentar oben). */
+.bracket-round-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #e8c23e;
+  margin-bottom: 14px;
+  white-space: nowrap;
+}
+
+.bracket-round-bo {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #6a7189;
+  text-transform: none;
+}
+
+/* Runde 68, User-Vorgabe: "Bo5" bei Halbfinale minimal weiter nach rechts
+   -- nur dort, die anderen Runden-Labels bleiben bei margin-left:6px. */
+.bracket-round-bo-nudge {
+  margin-left: 16px;
+}
+
+.bracket-round-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 22px;
+}
+
+.bracket-trophy {
+  flex-shrink: 0;
+  width: 150px;
+  height: auto;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 26px rgba(232, 194, 62, 0.28));
+}
+
+/* Gruppenphase-Doppel-K.o. (8 Teams, Runde 73, 1:1 nach echtem User-
+   Referenzscreenshot einer Bracket-Hosting-Seite) -- KEIN Grand Final,
+   kein Pokal, kein einzelner Gruppen-Champion. Stattdessen zwei
+   übereinander gestapelte Zeilen (Oberes Bracket oben, Unteres Bracket
+   unten), jede mit 3 Spalten (Viertelfinale -> Halbfinale -> Qualifiziert)
+   -- ersetzt das alte Grid-basierte `.bracket-doubleelim-wrap` (das eine
+   über beide Zeilen ragende Grand-Final-Spalte brauchte, die es hier gar
+   nicht mehr gibt). */
+.bracket-group-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  overflow-x: auto;
+  padding: 4px 4px 12px;
+}
+
+/* Runde 74, User-Vorgabe: die erste (obere) Halbfinale-Tabelle soll
+   zwischen den ersten beiden Viertelfinale-Tabellen stehen, die zweite
+   (untere) zwischen den letzten beiden -- `align-items: stretch` (statt
+   `center`) lässt jede Runden-Spalte auf die volle Zeilen-Höhe strecken,
+   `.bracket-round-body`s bereits vorhandenes `justify-content:
+   space-around` verteilt die 2 Halbfinale-Karten dann automatisch je
+   mittig auf die obere/untere Hälfte dieser Höhe -- exakt zwischen ihrem
+   jeweiligen Viertelfinale-Paar. Derselbe etablierte Trick wie bei
+   `.bracket-tree` (Einzel-K.o.-Baum). */
+.bracket-group-row {
+  display: flex;
+  align-items: stretch;
+  gap: 56px;
+}
+
+/* Qualifiziert-Slot: KEIN Match (kein Score, keine Bo-Angabe) -- ein
+   einzelnes Team pro Box, grün akzentuiert wie das etablierte
+   "qualifiziert"-Farbmotiv der Swiss-Leiter (`.swiss-table.is-qualified`). */
+.group-qualified-slot {
+  border-color: rgba(62, 207, 114, 0.35);
+  background: rgba(62, 207, 114, 0.08);
+}
+
+/* Freilos-Badge auf einem LCQ-Vorrunde-Qualifiziert-Slot (Runde 106) --
+   markiert Teams, die ohne Match automatisch durchgereicht wurden, statt
+   ein K.o.-Match gewonnen zu haben. */
+.lcq-vorrunde-bye-tag {
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #d9c25a;
+  background: rgba(217, 194, 90, 0.15);
+  white-space: nowrap;
+}
+.lcq-vorrunde-bye-tag.hidden {
+  display: none;
+}
+
+/* "AFL Final Eight"-Bracket (afl8/afl12, Runde 56, 1:1 nach echtem
+   RLCS-World-Championship-"Hybrid Playoff Bracket"-Referenzfoto) -- ANDERE
+   Form als der klassische Doppel-K.o. oben: hier gibt es KEIN separates
+   Ober-/Unterbracket-Grid, sondern eine einfache Spalten-Kette (wie beim
+   Einzel-K.o.-Baum), weil Oberes-Bracket-Runde-1-Sieger NICHT gegeneinander
+   weiterspielen, sondern per Freilos direkt ins Halbfinale springen. Runde
+   1 ist die einzige Spalte mit zwei gestapelten Gruppen (Oberes Bracket
+   oben, Unteres Bracket unten). Runde 57, User-Korrektur: `align-items`
+   von `center` auf `flex-end` -- Viertelfinale/Halbfinale/Grand-Final
+   sollen auf derselben Höhe wie "Unteres Bracket – Runde 1" liegen (wie im
+   Referenzfoto), nicht mittig zwischen Ober- und Unterbracket schweben.
+   Runde 60: der frühere zusätzliche Top-Padding (28px) für eine separate
+   Freilos-Gasse am oberen Rand ist wieder entfernt -- drawSvgConnectors()
+   routet spaltenüberspringende Stämme jetzt auf sourceMidY-Höhe (die beim
+   Quell-Bracket naturgemäß über der übersprungenen Spalte liegt) statt
+   über eine weit entfernte Gasse, das brauchte keinen reservierten
+   Freiraum mehr und erzeugte vorher unschön lange Striche. */
+.bracket-afl-wrap {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 48px;
+  overflow-x: auto;
+  /* Runde 64: linkes Padding erhöht (4px -> 34px), damit das neue
+     Match-Buchstaben-Label (siehe .tournament-match-card-label) bei der
+     ersten Spalte nicht vom Container abgeschnitten wird. */
+  padding: 4px 4px 12px 34px;
+}
+
+.bracket-afl-column {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  flex: 0 0 auto;
+}
+
+.bracket-afl-r1-group {
+  display: contents;
+}
+
+/* Runde 58, User-Vorgabe: Viertelfinale/Halbfinale/Grand-Final sollen NICHT
+   exakt bündig mit "Unteres Bracket – Runde 1" abschließen, sondern ein
+   kleines Stück höher liegen (leichte Versetzung, wie im Referenzfoto) --
+   margin-bottom auf einem `align-items:flex-end`-Kind hebt dessen Inhalt
+   genau um diesen Betrag über die sonst bündige Unterkante an. */
+.bracket-afl-lifted {
+  margin-bottom: 20px;
+}
+
+.bracket-afl-gf {
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+}
+
+/* ── Dashboard-Seite "Statistiken" (Runde 110) ───────────────────────────
+   Teams-Tabelle (links) + Detailpanel (rechts: Logo/Beschreibung, Form-
+   Verlauf-Grafik, Neueste Erfolge), siehe renderDashboardStatsPanel() in
+   renderer.js. Layout/Optik spiegelt Sponsoren/Turniere-Seiten. */
+.dashboard-stats-panel {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/* Bug-Fix (User-Meldung: "man kann bei der Tabelle nicht scrollen"):
+   `.dashboard-main` (der gemeinsame Seiten-Rahmen aller Dashboard-
+   Unterseiten) zentriert seine Kinder standardmäßig (`align-items: center`,
+   ursprünglich nur für den generischen Platzhaltertext gedacht) und hat kein
+   `min-height: 0` -- ein Flex-Kind mit `height: 100%` UND weiteren
+   Flex-Kindern darin kann sich dadurch einfach auf seine natürliche Höhe
+   aufblasen, statt auf den sichtbaren Bereich begrenzt zu bleiben, wodurch
+   das `overflow-y: auto` oben nie greift. `.dashboard-stats-table-wrap`
+   bekommt deshalb SEIN EIGENES Scrollen (`flex: 1; min-height: 0`
+   innerhalb der Flex-Spalte `.dashboard-stats-main`) -- funktioniert dadurch
+   zuverlässig, unabhängig von Eigenheiten der äußeren Container.
+   Betrifft strukturell auch die anderen Dashboard-Seiten, aber nur hier
+   sind reale Tabellen mit potenziell vielen Zeilen betroffen. */
+.dashboard-stats-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-stats-detail-col {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dashboard-stats-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.dashboard-stats-tabs {
+  display: flex;
+  gap: 26px;
+}
+
+.dashboard-stats-tab {
+  border: none;
+  background: none;
+  color: #9aa1b8;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  padding-bottom: 6px;
+  border-bottom: 2px solid transparent;
+}
+
+.dashboard-stats-tab.is-active {
+  color: #f2f4f8;
+  border-bottom-color: #e8a23e;
+}
+
+.dashboard-stats-tab.is-locked {
+  color: #565c72;
+  cursor: not-allowed;
+}
+
+.dashboard-stats-search-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dashboard-stats-team-count {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #9aa1b8;
+}
+
+.dashboard-stats-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.dashboard-stats-search-input {
+  width: 200px;
+  padding: 8px 30px 8px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e8f5;
+  font-size: 12.5px;
+}
+
+.dashboard-stats-search-input:focus {
+  outline: none;
+  border-color: rgba(232, 162, 62, 0.5);
+}
+
+.dashboard-stats-search-clear {
+  position: absolute;
+  right: 6px;
+  border: none;
+  background: none;
+  color: #8a91a8;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.dashboard-stats-region-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dashboard-stats-region-btn {
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: #9aa1b8;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-stats-region-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-stats-region-btn.is-active {
+  background: rgba(232, 162, 62, 0.16);
+  border-color: rgba(232, 162, 62, 0.5);
+  color: #f2d778;
+}
+
+.dashboard-stats-table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.dashboard-stats-table-header {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 56px 1fr 90px 70px 70px 80px 80px;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #6a7189;
+}
+
+.dashboard-stats-col-num {
+  text-align: right;
+}
+
+/* Spieler-Tabelle (Runde 113) hat 8 statt 7 Spalten -- eigenes Grid-Template,
+   sonst identisches Erscheinungsbild (Zeilen teilen sich .dashboard-stats-row
+   für Hover/Auswahl/eigene-Org-Markierung). */
+/* Bug-Fix (User-Meldung: "Spielerseite geht ins Endlose nach rechts"):
+   8 Spalten statt 7 (wie bei Teams) brauchten mehr Fixbreite, als bei
+   kleineren Fenstergrößen (z.B. 1280x800, kleinste unterstützte Auflösung)
+   übrig blieb -- die `1fr`-Namensspalte wurde dadurch auf ~0px gequetscht,
+   die Zeile überlief nach rechts. Root Cause war eigentlich, dass
+   `.dashboard-body`/`.dashboard-main` als flex:1-Elemente kein `min-width:0`
+   hatten (Breiten-Äquivalent des Runde-111-`min-height:0`-Fixes) und sich
+   dadurch am Inhalt statt am Fenster orientierten -- das ist jetzt behoben
+   (siehe dortige Regeln). Zusätzlich hier: engere, realistischere
+   Spaltenbreiten (kurze Zahlen/Prozente/Sterne brauchen keine 90px) UND
+   kleinerer Spalten-Abstand, damit auch bei 1280x800 noch genug Platz für
+   Spielernamen übrig bleibt. */
+.dashboard-stats-player-table-header {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 40px 1fr 52px 62px 48px 56px 58px 56px;
+  gap: 6px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #6a7189;
+}
+
+.dashboard-stats-row.is-player-row {
+  grid-template-columns: 40px 1fr 52px 62px 48px 56px 58px 56px;
+  gap: 6px;
+}
+
+.dashboard-stats-tab-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-stats-tab-view.hidden {
+  display: none;
+}
+
+.dashboard-stats-player-team-logo {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.dashboard-stats-player-team-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dashboard-stats-player-detail-team-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 6px;
+}
+
+.dashboard-stats-player-team-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9aa1b8;
+}
+
+.dashboard-stats-table-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-stats-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 90px 70px 70px 80px 80px;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.dashboard-stats-row:last-child {
+  border-bottom: none;
+}
+
+.dashboard-stats-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dashboard-stats-row.is-selected {
+  background: rgba(232, 162, 62, 0.1);
+  box-shadow: inset 3px 0 0 #e8a23e;
+}
+
+.dashboard-stats-row.is-own-org {
+  background: rgba(62, 207, 114, 0.08);
+}
+
+/* User-Vorgabe (diese Runde): grüne Hervorhebung für Teams, die nach ihrem
+   aktuellen Punktestand für Major/Weltmeisterschaft qualifizieren würden
+   (siehe statsQualifiesForMajorOrWorlds()) -- deutlicherer grüner
+   Rand-Akzent als das dezente .is-own-org, damit beide gleichzeitig
+   erkennbar bleiben, falls die eigene Org selbst qualifiziert ist. */
+.dashboard-stats-row.is-qualified {
+  background: rgba(62, 207, 114, 0.14);
+  box-shadow: inset 3px 0 0 #3ecf72;
+}
+
+.dashboard-stats-row.is-qualified.is-selected {
+  background: rgba(62, 207, 114, 0.16);
+  box-shadow: inset 3px 0 0 #e8a23e, inset 0 0 0 1px rgba(62, 207, 114, 0.4);
+}
+
+.dashboard-stats-row-rank {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #9aa1b8;
+}
+
+.dashboard-stats-row.is-own-org .dashboard-stats-row-rank {
+  color: #7fe8a8;
+}
+
+.dashboard-stats-row.is-qualified .dashboard-stats-row-rank {
+  color: #3ecf72;
+}
+
+.dashboard-stats-row-team {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dashboard-stats-row-logo {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  overflow: hidden;
+}
+
+.dashboard-stats-row-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dashboard-stats-row-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-stats-row-num {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #c3c9d9;
+  text-align: right;
+}
+
+.dashboard-stats-row-num.is-dev-positive {
+  color: #3ecf72;
+}
+
+.dashboard-stats-row-num.is-dev-negative {
+  color: #e0556f;
+}
+
+/* ── Dashboard-Startseite ("Startseite", User-Vorgabe: UI wie im mitgeschickten
+   Referenz-Screenshot "Esports Manager 2026") ─────────────────────────────── */
+.dashboard-home-panel {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dashboard-home-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: rgba(62, 207, 114, 0.1);
+  border: 1px solid rgba(62, 207, 114, 0.3);
+  flex-shrink: 0;
+}
+
+.dashboard-home-status-banner.is-warning {
+  background: rgba(232, 90, 62, 0.1);
+  border-color: rgba(232, 90, 62, 0.35);
+}
+
+.dashboard-home-status-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.dashboard-home-status-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dashboard-home-status-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #e2e8f5;
+}
+
+.dashboard-home-status-sub {
+  font-size: 12px;
+  color: #9aa1b8;
+}
+
+.dashboard-home-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.dashboard-home-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.dashboard-home-card {
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  padding: 16px;
+  min-width: 0;
+}
+
+.dashboard-home-card-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #9aa1b8;
+  letter-spacing: 0.3px;
+  margin-bottom: 12px;
+}
+
+.dashboard-home-ranking-region {
+  font-weight: 600;
+  color: #6a7189;
+}
+
+/* "Organisation"-Karte: kompakte Avatar-Reihe des aktiven Kaders (Starter +
+   Sub) statt der vollen Kader-Karten (die gehören auf die eigentliche
+   Kader-Seite, Runde 119) -- hier nur ein schneller Überblick. */
+.dashboard-home-org-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #6a7189;
+  letter-spacing: 0.4px;
+  margin-bottom: 8px;
+}
+
+.dashboard-home-org-avatars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.dashboard-home-mini-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 60px;
+}
+
+.dashboard-home-mini-avatar-circle {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.dashboard-home-mini-avatar-name {
+  font-size: 10px;
+  font-weight: 700;
+  color: #c3c9d9;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.dashboard-home-org-condition {
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 9px 12px;
+  border-radius: 7px;
+}
+
+.dashboard-home-org-condition.is-ok {
+  background: rgba(62, 207, 114, 0.12);
+  color: #7fe8a8;
+}
+
+.dashboard-home-org-condition.is-warning {
+  background: rgba(232, 162, 62, 0.12);
+  color: #f2c675;
+}
+
+/* "Wichtige Ereignisse"-Karte */
+.dashboard-home-event-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-home-event-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.dashboard-home-event-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dashboard-home-event-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f5;
+}
+
+.dashboard-home-event-sub {
+  font-size: 12px;
+  color: #9aa1b8;
+}
+
+/* "Anstehende Turniere"-Karte -- klickbar, öffnet dieselbe Turnier-Detail-
+   seite wie die Karten auf der echten Turniere-Seite (openTournamentDetail()). */
+.dashboard-home-upcoming {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboard-home-upcoming-empty {
+  font-size: 12.5px;
+  color: #6a7189;
+}
+
+.dashboard-home-upcoming-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.dashboard-home-upcoming-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dashboard-home-upcoming-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.dashboard-home-upcoming-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-home-upcoming-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #e2e8f5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-home-upcoming-stars {
+  font-size: 10px;
+  color: #e8a23e;
+}
+
+.dashboard-home-upcoming-countdown {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9aa1b8;
+  text-align: right;
+  flex-shrink: 0;
+  max-width: 120px;
+}
+
+/* "Letzte Ergebnisse"-Karte */
+.dashboard-home-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-home-results-empty {
+  font-size: 12.5px;
+  color: #6a7189;
+}
+
+.dashboard-home-result-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.dashboard-home-result-pill {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.dashboard-home-result-pill.is-win {
+  background: #3ecf72;
+}
+
+.dashboard-home-result-pill.is-loss {
+  background: #e85a3e;
+}
+
+.dashboard-home-result-opponent {
+  flex: 1;
+  min-width: 0;
+  color: #c3c9d9;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-home-result-score {
+  font-weight: 800;
+  color: #e2e8f5;
+}
+
+/* "Saison-Rangliste"-Karte (adaptiert vom Referenz-Screenshot -- siehe
+   Kopfkommentar in index.html: kein globales Elo-/Liga-Stufen-System,
+   sondern die echte, regionsgebundene Saison-Rangliste, dieselbe
+   Datenquelle/Hervorhebung wie die Statistiken-Seite). Eigene, schmalere
+   3-Spalten-Fassung des .dashboard-stats-row-Grids (Platz/Team/Punkte statt
+   der vollen 7 Statistik-Spalten). */
+.dashboard-home-ranking-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dashboard-home-ranking-header {
+  grid-template-columns: 40px 1fr 60px;
+  border-radius: 8px 8px 0 0;
+}
+
+.dashboard-home-ranking-body {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+
+.dashboard-home-ranking-body .dashboard-stats-row {
+  grid-template-columns: 40px 1fr 60px;
+  padding: 8px 10px;
+  cursor: default;
+}
+
+.dashboard-home-ranking-separator {
+  text-align: center;
+  padding: 4px 0;
+  color: #565c72;
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+
+/* Bug-Fix (User-Meldung: "Seitenzahlen-Leiste scrollt gefühlt endlos nach
+   rechts, sieht unsauber aus"): bei 454 Teams/~1800 Spielern und 20 Einträgen
+   pro Seite entstehen leicht 20-90 Seitenzahl-Buttons -- ohne Begrenzung
+   liefen die einfach über die Tabellenbreite hinaus und rissen die Seite
+   wieder horizontal auf. Jetzt eine EIGENE, auf die Tabellenbreite begrenzte
+   Scroll-Leiste (`overflow-x:auto`, `max-width:100%`) statt den ganzen
+   Kartenbereich zu sprengen -- Buttons behalten via `flex-shrink:0` ihre
+   Größe, statt gequetscht zu werden. */
+.dashboard-stats-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  max-width: 100%;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  padding-bottom: 4px;
+}
+
+.dashboard-stats-page-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: #9aa1b8;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.dashboard-stats-page-btn.is-active {
+  color: #f2f4f8;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-stats-page-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.dashboard-stats-detail-card {
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 16px;
+}
+
+.dashboard-stats-detail-head {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dashboard-stats-detail-logo {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  overflow: hidden;
+}
+
+.dashboard-stats-detail-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dashboard-stats-detail-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #f2f4f8;
+  margin-bottom: 4px;
+}
+
+.dashboard-stats-detail-description {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #9aa1b8;
+}
+
+.dashboard-stats-more-info-btn {
+  display: block;
+  width: 100%;
+  padding: 9px;
+  border-radius: 7px;
+  border: 1.5px solid #3fbdd6;
+  background: rgba(63, 189, 214, 0.12);
+  color: #7fd8ec;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+}
+
+.dashboard-stats-more-info-btn:hover {
+  background: rgba(63, 189, 214, 0.22);
+}
+
+.dashboard-stats-detail-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #8a91a8;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.dashboard-stats-form-chart {
+  height: 130px;
+}
+
+.dashboard-stats-form-chart-empty {
+  height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #565c72;
+  text-align: center;
+}
+
+.dashboard-stats-recent-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-stats-recent-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dashboard-stats-recent-result-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dashboard-stats-recent-result-event {
+  color: #c3c9d9;
+  font-weight: 600;
+}
+
+/* ── Dashboard-Seite "Team-Info" (Runde 111) ─────────────────────────────
+   Von Statistiken über "MEHR INFO" erreichbar, siehe openTeamInfo()/
+   renderTeamInfoPanel() in renderer.js. Spiegelt die Turnier-Detailseite
+   strukturell (eigenständiges verstecktes Panel, per Zurück-Button/Sidebar-
+   Klick verlassbar). */
+.dashboard-team-info-panel {
+  width: 100%;
+  height: 100%;
+  padding: 24px 30px;
+  overflow-y: auto;
+}
+
+.dashboard-team-info-body {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.dashboard-team-info-jersey-col {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 20px;
+}
+
+.dashboard-team-info-main-card {
+  flex: 2;
+  min-width: 0;
+  border-radius: 12px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 22px 26px;
+}
+
+.dashboard-team-info-side-col {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dashboard-team-info-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.dashboard-team-info-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #f2f4f8;
+  margin: 0;
+}
+
+.dashboard-team-info-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.dashboard-team-info-flag {
+  width: 22px;
+  height: 15px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.dashboard-team-info-flag-sm {
+  width: 16px;
+  height: 11px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.dashboard-team-info-country {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c3c9d9;
+}
+
+.dashboard-team-info-description {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #9aa1b8;
+  margin: 0 0 20px;
+}
+
+.dashboard-team-info-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin-bottom: 20px;
+}
+
+.dashboard-team-info-coach-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.dashboard-team-info-coach-avatar {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.dashboard-team-info-coach-role {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #8a91a8;
+  margin-bottom: 3px;
+}
+
+.dashboard-team-info-coach-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #e2e8f5;
+  margin-bottom: 4px;
+}
+
+.dashboard-team-info-coach-country-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-team-info-coach-country {
+  font-size: 11.5px;
+  color: #9aa1b8;
+}
+
+.dashboard-team-info-results-box {
+  min-height: 90px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+}
+
+.dashboard-team-info-results-empty {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #565c72;
+}
+
+.dashboard-team-info-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.dashboard-team-info-match-opponent {
+  color: #c3c9d9;
+  font-weight: 600;
+}
+
+.dashboard-team-info-match-outcome {
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.dashboard-team-info-match-outcome.is-win {
+  color: #7fe8a8;
+}
+
+.dashboard-team-info-match-outcome.is-loss {
+  color: #f29a9a;
+}
+
+.dashboard-stats-recent-result-place {
+  color: #f2d778;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.dashboard-stats-recent-results-empty {
+  font-size: 12px;
+  font-weight: 600;
+  color: #565c72;
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* ── Sponsoring-Bewerbung-Popup ───────────────────────────────────────── */
+.dashboard-sponsor-request-box {
+  position: relative;
+  max-width: 380px;
+}
+
+.dashboard-sponsor-request-close {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  border: none;
+  background: none;
+  color: #8a91a8;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.dashboard-sponsor-request-close:hover {
+  color: #e2e8f5;
+}
+
+.dashboard-sponsor-request-text {
+  margin: 14px 0 10px;
+  font-size: 14px;
+  color: #e2e8f5;
+  text-align: center;
+}
+
+.dashboard-sponsor-request-remaining {
+  font-size: 13px;
+  color: #9aa1b8;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.dashboard-sponsor-request-remaining strong {
+  color: #6f8bff;
+}
+
+/* ── Dashboard-Seite "Transfers" (Runde 114, Tabs auf reine Log-Ansicht
+   vereinheitlicht Runde 115) ───────────────────────────────────────────────
+   Reine Übersichts-/Log-Seite (User-Vorgabe: Kaufen/Verkaufen bewusst NICHT
+   hier, kommt später auf "Scouting") -- strukturell an "Statistiken"
+   angelehnt (.dashboard-stats-panel/-tabs/-table-* wiederverwendet, siehe
+   renderer.js). Alle 3 Tabs (Meine/Weltweite/laufende Transfers) teilen sich
+   jetzt dieselbe Tabellenstruktur -- "Transferliste" ist KEIN allgemeiner
+   Marktüberblick (User-Korrektur Runde 115), sondern dieselbe Log-Ansicht,
+   nur auf meine aktuell LAUFENDEN Transfers gefiltert. */
+.dashboard-transfers-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-transfers-log-header {
+  grid-template-columns: 180px 90px 100px 120px 1fr 1fr 130px 120px;
+}
+
+.dashboard-stats-row.dashboard-transfers-log-row {
+  grid-template-columns: 180px 90px 100px 120px 1fr 1fr 130px 120px;
+  cursor: default;
+}
+
+.dashboard-transfers-cell {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #c3c9d9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-transfers-cell-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #e2e8f5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.dashboard-transfers-price {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #7fe8a8;
+  text-align: right;
+}
+
+.dashboard-transfers-empty {
+  padding: 60px 20px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #565c72;
+}
+
+/* ── Dashboard-Seite "Scouting" (Runde 116) ────────────────────────────────
+   Strukturell an "Statistiken"/"Transfers" angelehnt (.dashboard-stats-panel/
+   -tabs/-table-* wiederverwendet). Eigene Info-Zeile (Scouts/Spieler-Anzahl/
+   Transferbudget/Suche/Filter) + einklappbares Filter-Panel oben drauf. */
+.dashboard-scouting-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.dashboard-scouting-info-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.dashboard-scouting-info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-scouting-info-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9aa1b8;
+}
+
+.dashboard-scouting-info-value {
+  font-size: 13px;
+  font-weight: 800;
+  color: #e2e8f5;
+}
+
+.dashboard-scouting-info-value.is-budget {
+  color: #7fe8a8;
+}
+
+.dashboard-scouting-scout-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+.dashboard-scouting-filter-btn {
+  padding: 8px 14px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e8f5;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-scouting-filter-btn:hover,
+.dashboard-scouting-filter-btn.is-active {
+  background: rgba(232, 162, 62, 0.14);
+  border-color: rgba(232, 162, 62, 0.5);
+  color: #f2d778;
+}
+
+.dashboard-scouting-filter-panel {
+  display: flex;
+  gap: 20px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-scouting-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #9aa1b8;
+}
+
+.dashboard-scouting-filter-field select {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f5;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.dashboard-scouting-table-header {
+  grid-template-columns: 1fr 70px 44px 70px 90px 70px 90px 100px 100px 1fr 110px;
+}
+
+.dashboard-stats-row.dashboard-scouting-row {
+  grid-template-columns: 1fr 70px 44px 70px 90px 70px 90px 100px 100px 1fr 110px;
+}
+
+.dashboard-scouting-row-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.dashboard-scouting-row-team:hover .dashboard-transfers-cell-name {
+  color: #f2d778;
+}
+
+/* Runde 120: "Free Agent" steht andersfarbig da, wo sonst Team-Logo+Name
+   stehen -- kein Logo (kein Team vorhanden), nicht anklickbar (keine
+   Team-Info-Seite für ein nicht existentes Team). */
+.dashboard-scouting-free-agent-label {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: #7fe3a8;
+}
+
+/* Runde 121: Sperr-Hinweis oben auf dem Personal-Tab (User-Vorgabe "Personal
+   soll erstmal gesperrt sein und Hinweistext dass ein späteres Update dazu
+   kommt") -- dieselbe Rot/Sperr-Farbsprache wie .dashboard-sponsor-*-status-dot.is-locked. */
+.dashboard-scouting-locked-banner {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(224, 92, 92, 0.12);
+  border: 1px solid rgba(224, 92, 92, 0.35);
+  color: #e8a3a3;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+/* "Personal"-Tab (Runde 117) -- eine Spalte mehr als "Spieler" (AKTION-Button
+   für die tatsächliche Verpflichtung, siehe signStaffMember() in renderer.js). */
+.dashboard-scouting-staff-table-header {
+  grid-template-columns: 1fr 90px 44px 70px 90px 70px 90px 100px 1fr 110px;
+}
+
+.dashboard-stats-row.dashboard-scouting-staff-row {
+  grid-template-columns: 1fr 90px 44px 70px 90px 70px 90px 100px 1fr 110px;
+}
+
+.dashboard-scouting-sign-btn {
+  width: 100%;
+  padding: 7px 4px;
+  border-radius: 6px;
+  border: 1.5px solid #e8a23e;
+  background: rgba(232, 162, 62, 0.12);
+  color: #f2d778;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-scouting-sign-btn:hover {
+  background: rgba(232, 162, 62, 0.22);
+}
+
+.dashboard-scouting-sign-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.03);
+  color: #6a7189;
+}
+
+/* Runde 123, User-Vorgabe ("wenn man sich keinen Spieler leisten kann, soll
+   trotzdem beim Draufdrücken ein Hinweis kommen, warum es nicht geht"):
+   der Spieler-Tab nutzt für "nicht leistbar" bewusst KEIN natives
+   `disabled` mehr (das blockiert Klick-Events komplett, signScoutingPlayer()
+   konnte seinen eigenen, längst vorhandenen Erklärungs-Dialog dadurch nie
+   erreichen) -- optisch identisch zu :disabled, aber weiterhin klickbar. */
+.dashboard-scouting-sign-btn.is-locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.03);
+  color: #6a7189;
+}
+
+/* ── "Person-Info"-Seite (Runde 118) ───────────────────────────────────────
+   Wiederverwendet die Team-Info-Struktur (.dashboard-team-info-*, Runde 111)
+   fast vollständig -- nur der Jersey-Bereich wird durch einen großen Avatar-
+   Kreis ersetzt, plus eine neue kompakte Kennzahlen-Leiste und optionale
+   Statachsen-Bars. */
+.dashboard-person-info-avatar {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 88px;
+  overflow: hidden;
+}
+
+/* Bug-Fix (live gefunden): #dashboard-person-info-team-logo bekommt über
+   statsRowLogoHtml() ein <img>-Tag (echtes Team-Logo-Asset) ODER einen
+   Fallback-Div -- die wiederverwendete .dashboard-team-info-coach-avatar-
+   Klasse war ursprünglich nur für einen Emoji-TEXT gedacht (Cheftrainer-Feld)
+   und begrenzt ein <img> deshalb nicht, das Logo rendert dadurch in seiner
+   nativen Bildgröße (weit über 56px) und läuft über den gesamten Kartentext.
+   Eigene Größenbegrenzung für genau dieses Element. */
+#dashboard-person-info-team-logo {
+  overflow: hidden;
+}
+
+#dashboard-person-info-team-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dashboard-person-info-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin: 14px 0;
+}
+
+.dashboard-person-info-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dashboard-person-info-fact-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #6a7189;
+}
+
+.dashboard-person-info-fact-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: #e2e8f5;
+}
+
+.dashboard-person-info-team-link {
+  cursor: pointer;
+}
+
+.dashboard-person-info-team-link:hover {
+  color: #f2d778;
+}
+
+.dashboard-person-info-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dashboard-person-info-stat-row {
+  display: grid;
+  grid-template-columns: 46px 1fr 32px;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-person-info-stat-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #9aa1b8;
+}
+
+.dashboard-person-info-stat-track {
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.dashboard-person-info-stat-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6f8bff, #c04fd6);
+  border-radius: 4px;
+}
+
+.dashboard-person-info-stat-value {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #e2e8f5;
+  text-align: right;
+}
+
+/* ── "Kader"-Seite (Runde 119) ────────────────────────────────────────── */
+.dashboard-roster-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 2px 18px;
+}
+
+.dashboard-roster-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-roster-header-logo {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  overflow: hidden;
+}
+
+.dashboard-roster-header-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dashboard-roster-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-roster-header-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: #eef1ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-roster-header-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #9aa1b8;
+  font-weight: 600;
+}
+
+.dashboard-roster-header-rank {
+  color: #f2d778;
+  font-weight: 800;
+}
+
+.dashboard-roster-chem-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.dashboard-roster-chem-item {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-roster-chem-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c7d1f0;
+  margin-bottom: 8px;
+}
+
+.dashboard-roster-chem-track {
+  height: 8px;
+  border-radius: 5px;
+  background: #1c2444;
+  overflow: hidden;
+}
+
+.dashboard-roster-chem-fill {
+  height: 100%;
+  border-radius: 5px;
+}
+
+.dashboard-roster-chem-fill.is-condition { background: linear-gradient(90deg, #4cc27f, #7fe3a8); }
+.dashboard-roster-chem-fill.is-morale { background: linear-gradient(90deg, #e8c23e, #f2d778); }
+.dashboard-roster-chem-fill.is-language { background: linear-gradient(90deg, #4c6fff, #7fa3ff); }
+
+.dashboard-roster-section-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #9aa1b8;
+  text-transform: uppercase;
+}
+
+.dashboard-roster-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.dashboard-roster-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 12px 14px;
+  border-radius: 12px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  text-align: center;
+}
+
+.dashboard-roster-card-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  overflow: hidden;
+}
+
+.dashboard-roster-card-flag {
+  width: 18px;
+  height: 13px;
+  border-radius: 2px;
+  object-fit: cover;
+}
+
+.dashboard-roster-card-info-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #c7d1f0;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.dashboard-roster-card-info-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.dashboard-roster-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #eef1ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.dashboard-roster-card-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.dashboard-roster-card-pill {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.dashboard-roster-card-pill.is-active { color: #7fe3a8; background: rgba(76, 194, 127, 0.14); border: 1px solid rgba(76, 194, 127, 0.35); }
+.dashboard-roster-card-pill.is-bench { color: #9aa1b8; background: rgba(154, 161, 184, 0.14); border: 1px solid rgba(154, 161, 184, 0.3); }
+.dashboard-roster-card-pill.is-happy { color: #f2d778; background: rgba(232, 194, 62, 0.14); border: 1px solid rgba(232, 194, 62, 0.35); }
+.dashboard-roster-card-pill.is-unhappy { color: #e0607a; background: rgba(224, 96, 122, 0.14); border: 1px solid rgba(224, 96, 122, 0.35); }
+
+.dashboard-roster-card-move-btn {
+  margin-top: 4px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #eef1ff;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dashboard-roster-card-move-btn.is-down { color: #e0607a; }
+.dashboard-roster-card-move-btn.is-up { color: #7fe3a8; }
+.dashboard-roster-card-move-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+/* ── Reserve + Unterwegs-Liste (Runde 122) ────────────────────────────── */
+.dashboard-roster-section-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6a7189;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.dashboard-roster-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-roster-pending-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #6a7189;
+  text-transform: uppercase;
+}
+
+.dashboard-roster-pending-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.28);
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+}
+
+.dashboard-roster-pending-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.dashboard-roster-pending-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #c7d1f0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-roster-pending-eta {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #e8a23e;
+  white-space: nowrap;
+}
+
+/* Runde 124: zwei eindeutige Ziel-Buttons statt eines einzigen, automatisch
+   geratenen Pfeils (User-Vorgabe "verschieben zu Sub und/oder zu Kader"). */
+.dashboard-roster-reserve-actions {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.dashboard-roster-reserve-action-btn {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #7fe3a8;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dashboard-roster-reserve-action-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
 }

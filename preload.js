@@ -7,8 +7,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteSave: (slotId) => ipcRenderer.invoke('delete-save', slotId),
   listSaveSlots: () => ipcRenderer.invoke('list-save-slots'),
 
+  selectPortraitImage: () => ipcRenderer.invoke('select-portrait-image'),
+  listPortraitPresets: () => ipcRenderer.invoke('list-portrait-presets'),
+
+  selectTeamLogoImage: () => ipcRenderer.invoke('select-team-logo-image'),
+  listTeamLogoPresets: () => ipcRenderer.invoke('list-team-logo-presets'),
+
+  listManagerTemplates: () => ipcRenderer.invoke('list-manager-templates'),
+  saveManagerTemplate: (character) => ipcRenderer.invoke('save-manager-template', character),
+  deleteManagerTemplate: (id) => ipcRenderer.invoke('delete-manager-template', id),
+
+  isFeedbackReady: () => ipcRenderer.invoke('is-feedback-ready'),
+  sendFeedback: (feedback) => ipcRenderer.invoke('send-feedback', feedback),
+
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
+  applyDisplaySettings: () => ipcRenderer.invoke('apply-display-settings'),
 
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.send('download-update'),
