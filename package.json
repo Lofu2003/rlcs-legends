@@ -1,6 +1,6 @@
 {
   "name": "rlcs-legends",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "RLCS Legends — Draft-Manager-Spiel, abgeleitet von draftrlcs.app",
   "main": "main.js",
   "scripts": {
@@ -20,6 +20,7 @@
   "build": {
     "appId": "com.lofu2003.rlcslegends",
     "productName": "RLCS Legends",
+    "artifactName": "RLCS-Legends-Setup-${version}.${ext}",
     "files": [
       "**/*",
       "!*.md"
