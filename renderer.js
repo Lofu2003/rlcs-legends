@@ -13745,27 +13745,69 @@ function showUpdateCheckStatus(text) {
   el._statusTimeout = setTimeout(() => { el.textContent = ''; }, 4000);
 }
 
+// Download-Zustand + Stillstands-Wächter: falls der Download hängen bleibt,
+// OHNE dass electron-updater je ein 'error'-Event auslöst (z.B. bei einem
+// stillen Netzwerk-Timeout), zeigt ein Client-seitiger Timeout nach 20s ohne
+// jeden Fortschritt trotzdem einen echten Fehler statt für immer "0%".
+let updateDownloadInProgress = false;
+let updateStallTimeout = null;
+let lastUpdateInfo = null;
+
+function armUpdateStallTimeout() {
+  clearTimeout(updateStallTimeout);
+  updateStallTimeout = setTimeout(() => {
+    if (updateDownloadInProgress) showUpdateDownloadError('Der Download reagiert nicht (Zeitüberschreitung).');
+  }, 20000);
+}
+
+function startUpdateDownload() {
+  window.electronAPI.downloadUpdate();
+  updateDownloadInProgress = true;
+  showUpdateModal(
+    'Update wird geladen…',
+    '<div class="update-progress-bar"><div class="update-progress-bar-fill" id="update-progress-fill"></div></div>' +
+    '<div id="update-progress-text">Verbindung wird hergestellt…</div>'
+  );
+  setUpdateModalButtons([]);
+  armUpdateStallTimeout();
+}
+
+function showUpdateDownloadError(message) {
+  clearTimeout(updateStallTimeout);
+  updateDownloadInProgress = false;
+  showUpdateModal('Update fehlgeschlagen', message + ' Prüfe deine Internetverbindung und versuche es erneut.');
+  setUpdateModalButtons([
+    ['Erneut versuchen', true, startUpdateDownload],
+    ['Später', false, hideUpdateModal],
+  ]);
+}
+
 window.electronAPI.onUpdateAvailable((info) => {
+  lastUpdateInfo = info;
   showUpdateModal(
     'Update verfügbar — v' + info.version,
     'Eine neue Version von RLCS Legends ist verfügbar. Jetzt herunterladen und beim nächsten Neustart installieren?'
   );
   setUpdateModalButtons([
-    ['Jetzt aktualisieren', true, () => {
-      window.electronAPI.downloadUpdate();
-      showUpdateModal('Update wird geladen…', '<div id="update-progress-text">0%</div>');
-      setUpdateModalButtons([]);
-    }],
+    ['Jetzt aktualisieren', true, startUpdateDownload],
     ['Später', false, hideUpdateModal],
   ]);
 });
 
 window.electronAPI.onUpdateProgress((pct) => {
-  const el = document.getElementById('update-progress-text');
-  if (el) el.textContent = pct + '%';
+  clearTimeout(updateStallTimeout);
+  const fill = document.getElementById('update-progress-fill');
+  const text = document.getElementById('update-progress-text');
+  if (fill) fill.style.width = pct + '%';
+  if (text) text.textContent = pct + '%';
+  // Solange noch Fortschritt reinkommt, neu bewaffnen -- ein Hänger MITTEN im
+  // Download (nicht nur bei 0%) soll denselben Timeout-Fehler auslösen.
+  armUpdateStallTimeout();
 });
 
 window.electronAPI.onUpdateDownloaded(() => {
+  clearTimeout(updateStallTimeout);
+  updateDownloadInProgress = false;
   showUpdateModal('Update bereit', 'Die neue Version wurde heruntergeladen. Jetzt neu starten, um sie zu installieren?');
   setUpdateModalButtons([
     ['Jetzt neu starten', true, () => window.electronAPI.installUpdate()],
@@ -13774,7 +13816,10 @@ window.electronAPI.onUpdateDownloaded(() => {
 });
 
 window.electronAPI.onUpdateNotAvailable(() => showUpdateCheckStatus('Du hast bereits die neueste Version.'));
-window.electronAPI.onUpdateError(() => showUpdateCheckStatus('Update-Prüfung fehlgeschlagen.'));
+window.electronAPI.onUpdateError((msg) => {
+  if (updateDownloadInProgress) showUpdateDownloadError('Der Download konnte nicht abgeschlossen werden.');
+  else showUpdateCheckStatus('Update-Prüfung fehlgeschlagen.');
+});
 
 async function manualCheckForUpdates() {
   showUpdateCheckStatus('Suche nach Updates…');

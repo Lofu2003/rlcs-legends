@@ -3202,6 +3202,36 @@ body {
   margin-top: 20px;
 }
 
+/* Echte Ladeanimation beim Update-Download (Bug-Fix: vorher nur ein
+   statischer "0%"-Text, sah beim Hängenbleiben ununterscheidbar von einem
+   echten Absturz aus). Der Shimmer läuft durchgehend, damit auch VOR dem
+   ersten echten Fortschritts-Event (Verbindungsaufbau) sichtbar etwas
+   passiert, nicht erst sobald Prozentzahlen eintreffen. */
+.update-progress-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+
+.update-progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  min-width: 6%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #3ecf72, #6f8bff, #3ecf72);
+  background-size: 200% 100%;
+  transition: width 0.35s ease;
+  animation: update-progress-shimmer 1.4s linear infinite;
+}
+
+@keyframes update-progress-shimmer {
+  0% { background-position: 0% 0%; }
+  100% { background-position: -200% 0%; }
+}
+
 /* ── Feedback-Popup ────────────────────────────────────────────────────── */
 .feedback-modal-subtitle {
   margin: 6px 0 16px;

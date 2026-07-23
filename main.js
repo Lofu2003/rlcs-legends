@@ -561,7 +561,14 @@ ipcMain.handle('apply-display-settings', () => {
 // (Button im Hauptmenü) oder automatisch (Start) ausgelöst wurde, wird per
 // isManualCheck getrackt: nur bei manueller Prüfung wird "kein Update
 // verfügbar" auch aktiv gemeldet — sonst würde das jeden Start nerven.
+// isDownloading getrackt separat: ein Download wird IMMER erst durch einen
+// expliziten Nutzer-Klick ausgelöst (nie automatisch, autoDownload ist aus),
+// ein währenddessen auftretender Fehler muss deshalb IMMER gemeldet werden,
+// unabhängig vom (zu diesem Zeitpunkt meist schon wieder falschen)
+// isManualCheck-Stand der VORHERIGEN Prüfung -- sonst bleibt das Update-Modal
+// bei einem echten Download-Fehler stumm bei "0%" hängen (Bug, live gemeldet).
 let isManualCheck = false;
+let isDownloading = false;
 
 function send(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
@@ -569,9 +576,12 @@ function send(channel, payload) {
 
 autoUpdater.on('update-available', (info) => send('update:available', { version: info.version }));
 autoUpdater.on('update-not-available', () => { if (isManualCheck) send('update:not-available'); });
-autoUpdater.on('error', (err) => { if (isManualCheck) send('update:error', String(err)); });
+autoUpdater.on('error', (err) => {
+  if (isManualCheck || isDownloading) send('update:error', String(err));
+  isDownloading = false;
+});
 autoUpdater.on('download-progress', (progress) => send('update:progress', Math.round(progress.percent)));
-autoUpdater.on('update-downloaded', () => send('update:downloaded'));
+autoUpdater.on('update-downloaded', () => { isDownloading = false; send('update:downloaded'); });
 
 ipcMain.handle('check-for-updates', () => {
   if (!app.isPackaged) return { skipped: true };
@@ -580,7 +590,10 @@ ipcMain.handle('check-for-updates', () => {
   return { skipped: false };
 });
 
-ipcMain.on('download-update', () => autoUpdater.downloadUpdate());
+ipcMain.on('download-update', () => {
+  isDownloading = true;
+  autoUpdater.downloadUpdate().catch(() => { isDownloading = false; });
+});
 ipcMain.on('install-update', () => autoUpdater.quitAndInstall());
 
 app.whenReady().then(() => {
