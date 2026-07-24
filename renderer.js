@@ -1068,7 +1068,7 @@ async function randomizeOrgCreateAll() {
 // budget/roster{starters,sub,coach,staff}/strength/matchBonusPct) -- dadurch
 // brauchen goToOrgContract() und confirmOrgAndProceed() keine Sonderfälle
 // für selbst erstellte Orgas.
-const ORG_CREATE_DIFFICULTY_BUDGET = { hard: 10000, normal: 100000, easy: 1000000, casual: 10000000 };
+const ORG_CREATE_DIFFICULTY_BUDGET = { hard: 30000, normal: 100000, easy: 1000000, casual: 10000000 };
 const ORG_CREATE_DIFFICULTY_STAFF_COUNT = { hard: 0, normal: 2, easy: 4, casual: 6 };
 const ORG_CREATE_START_PLAYER_COUNT = 3; // User-Wunsch: 3 Spieler statt vorher 5
 
@@ -1112,7 +1112,7 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
   // 9 Mitarbeiterrollen) -- prozeduraler Fantasiename in mittlerer Stärke
   // (2,5 Sterne), da eine frisch gegründete Org noch kein Prestige hat, an
   // dem sich eine höhere/niedrigere Stufe festmachen ließe.
-  // Bug-Fix (User-Meldung): bei "Schwer" (10K, KEIN "+N Personal"-Bonus,
+  // Bug-Fix (User-Meldung): bei "Schwer" (30K, KEIN "+N Personal"-Bonus,
   // staffCount === 0) bekam die Org bisher TROTZDEM immer einen Coach --
   // die restlichen 9 Stab-Rollen skalieren korrekt mit der Schwierigkeit
   // (siehe staffCount oben), der Coach war die einzige vergessene Ausnahme.
@@ -10550,8 +10550,16 @@ function confirmOrgAndProceed() {
   // Malus aus der Charaktererstellung hatte dadurch NIE eine echte Wirkung
   // im Spiel. Jetzt direkt auf das echte, laufend genutzte assignedOrg.budget
   // angewendet, BEVOR die Finanzen-Aufteilung weiter unten davon abgeleitet wird.
-  const charEffects = computeCharacterEffects(careerCharacter.traits);
-  assignedOrg.budget = Math.round(assignedOrg.budget * charEffects.budgetMultiplier / 1000) * 1000;
+  // Bug-Fix (User-Meldung: "bei Gesamtsaldo 31.000€ nicht 30.000"): eine
+  // selbst erstellte Org (buildCustomOrgFromForm(), erkennbar an .shortname,
+  // die 454 echten Orgas haben nie eins) hat ein BEWUSST exaktes, festes
+  // Startbudget je Schwierigkeitsstufe (z.B. "Schwer" = genau 30.000 €) --
+  // der Trait-Bonus/Malus soll diesen gewählten Schwierigkeitsgrad nicht
+  // verwässern, gilt deshalb nur für die 454 echten Orgas.
+  if (!assignedOrg.shortname) {
+    const charEffects = computeCharacterEffects(careerCharacter.traits);
+    assignedOrg.budget = Math.round(assignedOrg.budget * charEffects.budgetMultiplier / 1000) * 1000;
+  }
 
   // "Echter Startkader" (User-Entscheidung): die Org startet NICHT mit leerem
   // Kader, sondern direkt mit den 3 festen Startern + Sub + Coach aus
