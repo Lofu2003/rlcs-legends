@@ -404,7 +404,17 @@ function generateOrgRoster(org) {
   function rollContractDates() {
     const startOffsetMonths = Math.round(rng() * 24);
     const lengthMonths = Math.round(12 + rng() * 24);
-    const contractStart = addMonthsToDateStr(ROSTER_CAREER_EPOCH, -startOffsetMonths);
+    // Bug-Fix (Audit-Runde): ohne Deckelung konnte startOffsetMonths >
+    // lengthMonths herauskommen -- der Vertrag wäre dann schon VOR
+    // Karrierestart abgelaufen. checkOwnContractsForWarningsAndExpiry()
+    // entfernte die Person dann am ALLERERSTEN Tagfortschritt sofort und OHNE
+    // jede Vorwarnung (maybeWarnOwnContractExpiry() überspringt bereits
+    // abgelaufene Verträge bewusst, siehe deren daysLeft<0-Check) -- rechnerisch
+    // bei ~12,5% aller generierten Personen der Fall, bei 3 Startern also ~33%
+    // Chance auf einen sofort verschwindenden Starter direkt zu Karrierebeginn.
+    // Mindestens 1 Monat Restlaufzeit ab Epoch erzwungen.
+    const safeStartOffsetMonths = Math.min(startOffsetMonths, lengthMonths - 1);
+    const contractStart = addMonthsToDateStr(ROSTER_CAREER_EPOCH, -safeStartOffsetMonths);
     const contractEnd = addMonthsToDateStr(contractStart, lengthMonths);
     return { contractStart, contractEnd };
   }

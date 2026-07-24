@@ -718,6 +718,7 @@
                 <span id="dashboard-home-status-title" class="dashboard-home-status-title"></span>
                 <span id="dashboard-home-status-sub" class="dashboard-home-status-sub"></span>
               </div>
+              <button type="button" id="btn-dashboard-home-season-skip" class="dashboard-season-skip-btn hidden">Rest der Saison überspringen »»</button>
             </div>
 
             <div class="dashboard-home-grid">
@@ -1465,6 +1466,22 @@
                     <option value="5">★ 5</option>
                   </select>
                 </label>
+                <label class="dashboard-scouting-filter-field">
+                  <span>Nationalität</span>
+                  <select id="dashboard-scouting-filter-nation">
+                    <option value="">Alle Nationen</option>
+                  </select>
+                </label>
+                <label class="dashboard-scouting-filter-field">
+                  <span>Alter</span>
+                  <select id="dashboard-scouting-filter-age">
+                    <option value="">Alle</option>
+                    <option value="0-20">Bis 20</option>
+                    <option value="21-25">21-25</option>
+                    <option value="26-30">26-30</option>
+                    <option value="31-99">31+</option>
+                  </select>
+                </label>
               </div>
 
               <div id="dashboard-scouting-players-view" class="dashboard-stats-tab-view">
@@ -1576,89 +1593,6 @@
     </div>
   </div>
 
-  <!-- ── Draft-Screen ──────────────────────────────────────────────────── -->
-  <div id="screen-draft" class="screen hidden">
-    <header class="app-header">
-      <button id="btn-back-to-menu-draft" class="back-btn">← Hauptmenü</button>
-      <h1>RLCS Legends</h1>
-      <p class="subtitle">Draft — 3 Starter, 1 Sub, 2 Reserve, 1 Coach</p>
-      <div id="career-info" class="career-info hidden"></div>
-      <div id="org-panel"></div>
-      <div id="budget-bar"></div>
-      <button id="btn-open-transfers" class="update-check-btn">📋 Transfer-Historie</button>
-      <button id="btn-open-achievements" class="update-check-btn">🏆 Erfolge</button>
-    </header>
-
-    <main>
-      <section id="my-roster"></section>
-      <button id="btn-start-match" class="menu-btn menu-btn-primary match-cta" disabled>
-        Turnier starten (erst 3 Starter draften)
-      </button>
-
-      <h2 class="pool-heading">Spieler-Pool</h2>
-      <section id="player-pool"></section>
-
-      <h2 class="pool-heading">Coach-Pool</h2>
-      <section id="coach-pool"></section>
-    </main>
-  </div>
-
-  <!-- ── Kader-Aufstellung (Drag&Drop: Main/Sub/Reserve/Coach) ────────────── -->
-  <div id="screen-roster" class="screen hidden">
-    <header class="app-header">
-      <button id="btn-back-to-draft-roster" class="back-btn">← Zurück</button>
-      <h1>Kader-Aufstellung</h1>
-      <p class="subtitle">Spieler per Drag &amp; Drop zwischen Main, Sub, Reserve und Coach verschieben — Reserve spielt nie mit</p>
-    </header>
-    <main>
-      <div class="roster-board">
-        <div class="roster-board-group">
-          <h3 class="roster-board-heading">Main <span class="roster-board-hint">(spielt)</span></h3>
-          <div id="roster-board-main" class="roster-board-slots"></div>
-        </div>
-        <div class="roster-board-group">
-          <h3 class="roster-board-heading">Sub <span class="roster-board-hint">(spielt bei Disconnect)</span></h3>
-          <div id="roster-board-sub" class="roster-board-slots"></div>
-        </div>
-        <div class="roster-board-group">
-          <h3 class="roster-board-heading">Reserve <span class="roster-board-hint">(spielt nicht)</span></h3>
-          <div id="roster-board-reserve" class="roster-board-slots"></div>
-        </div>
-        <div class="roster-board-group">
-          <h3 class="roster-board-heading">Coach</h3>
-          <div id="roster-board-coach" class="roster-board-slots"></div>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <!-- ── Transfer-Historie-Screen ─────────────────────────────────────────── -->
-  <div id="screen-transfers" class="screen hidden">
-    <header class="app-header">
-      <button id="btn-back-to-draft-transfers" class="back-btn">← Zurück</button>
-      <h1>Transfer-Historie</h1>
-      <p class="subtitle">Alle Wechsel — deine eigenen und die der Bot-Orgas untereinander</p>
-    </header>
-    <main>
-      <section id="transfer-log-list" class="transfer-log-list"></section>
-    </main>
-  </div>
-
-  <!-- ── Erfolge-Screen ────────────────────────────────────────────────────
-       Nur befüllt, wenn beim Vertrag "CEO kann entlassen werden, Erfolge
-       aktiviert" angehakt war (siehe achievementsEnabled in renderer.js) --
-       spiegelt screen-transfers strukturell 1:1. -->
-  <div id="screen-achievements" class="screen hidden">
-    <header class="app-header">
-      <button id="btn-back-to-draft-achievements" class="back-btn">← Zurück</button>
-      <h1>Erfolge</h1>
-      <p class="subtitle">Nur aktiv, wenn beim Vertrag „Erfolge aktiviert" angehakt wurde</p>
-    </header>
-    <main>
-      <section id="achievements-list" class="achievements-list"></section>
-    </main>
-  </div>
-
   <!-- ── Game-Over-Screen (CEO entlassen) ─────────────────────────────────────
        Nur erreichbar, wenn beim Vertrag "CEO kann entlassen werden" angehakt
        war UND zwei Saisons in Folge mehr Niederlagen als Siege eingefahren
@@ -1674,32 +1608,6 @@
     </div>
   </div>
 
-  <!-- ── Turnier-Screen ────────────────────────────────────────────────── -->
-  <div id="screen-tournament" class="screen hidden">
-    <button id="btn-back-to-menu-tournament" class="back-btn">← Hauptmenü</button>
-    <div class="tournament-wrap">
-      <div class="season-context-row">
-        <div id="season-context" class="season-context"></div>
-        <div class="season-context-buttons">
-          <button id="btn-standings" class="season-guide-btn" title="Punktestand & Platzierungen aller Teams">📊 Tabelle</button>
-          <button id="btn-season-guide" class="season-guide-btn" title="Wie läuft eine Saison ab?">❓ Saison-Ablauf</button>
-        </div>
-      </div>
-      <div id="points-standing" class="points-standing"></div>
-      <h1 id="tournament-title" class="tournament-title">Swiss-Stage — Runde 1 von 3</h1>
-      <div id="rivalry-note" class="rivalry-note hidden"></div>
-
-      <div id="tournament-champion-banner" class="champion-banner hidden"></div>
-
-      <div id="bracket-container" class="bracket-container"></div>
-
-      <div class="tournament-action-row">
-        <button id="btn-tournament-action" class="menu-btn menu-btn-primary tournament-action-btn">Match spielen</button>
-        <button id="btn-quick-sim-round" class="menu-btn tournament-action-btn">Runde schnell simulieren</button>
-        <button id="btn-quick-sim-all" class="menu-btn tournament-action-btn">Turnier sofort simulieren</button>
-      </div>
-    </div>
-  </div>
 
   <!-- ── Match-Screen ──────────────────────────────────────────────────── -->
   <!-- Runde 101, User-Vorgabe ("UI komplett überarbeiten, Orientierung an
@@ -1936,72 +1844,7 @@
     </div>
   </div>
 
-  <!-- ── Punktestand-Tabelle (alle Teams, farbcodiert nach Qualifikationsstatus) ── -->
-  <div id="standings-modal" class="modal-overlay hidden">
-    <div class="modal-box standings-box">
-      <div class="modal-org-title">Punktestand — <span id="standings-context"></span></div>
-      <div class="standings-legend">
-        <span class="standings-legend-item"><span class="standings-dot standings-green"></span> qualifiziert</span>
-        <span class="standings-legend-item"><span class="standings-dot standings-neutral"></span> offen</span>
-        <span class="standings-legend-item"><span class="standings-dot standings-red"></span> ausgeschieden</span>
-      </div>
-      <div id="standings-list" class="standings-list"></div>
-      <button id="btn-standings-close" class="menu-btn menu-btn-primary">Schließen</button>
-    </div>
-  </div>
-
-  <!-- ── Saison-Ablauf-Erklärung (einmalig beim allerersten Turnier-Start,
-       danach jederzeit über "❓ Saison-Ablauf" auf dem Turnier-Screen) ──── -->
-  <div id="season-guide-modal" class="modal-overlay hidden">
-    <div class="modal-box season-guide-box">
-      <div class="modal-org-title">So läuft eine RLCS-Saison ab</div>
-      <div id="season-guide-steps" class="season-guide-steps"></div>
-      <button id="btn-season-guide-close" class="menu-btn menu-btn-primary">Verstanden, los geht's!</button>
-    </div>
-  </div>
-
   <!-- ── Verhandlungs-Popup (Vertragsspieler von Bot-Orgas abwerben) ──────── -->
-  <div id="negotiation-modal" class="modal-overlay hidden">
-    <div class="modal-box negotiation-box">
-      <div id="negotiation-title" class="modal-org-title"></div>
-      <div id="negotiation-subtitle" class="negotiation-subtitle"></div>
-      <div class="negotiation-frustration-row">
-        <span class="negotiation-label" style="margin:0;">Frust-Level der Org</span>
-        <span id="negotiation-attempts-label" class="negotiation-attempts-label"></span>
-      </div>
-      <div class="negotiation-frustration-track">
-        <div id="negotiation-frustration-fill" class="negotiation-frustration-fill"></div>
-      </div>
-      <div id="negotiation-log" class="negotiation-log"></div>
-      <label class="negotiation-label">Angebot (€)</label>
-      <input id="negotiation-offer" type="number" class="negotiation-offer-input" min="0" step="1000" />
-      <label class="negotiation-label">Deine Nachricht an Orga &amp; Spieler</label>
-      <textarea id="negotiation-message" class="negotiation-message-input" rows="2" placeholder="Verhandlungsargument schreiben..."></textarea>
-      <div class="negotiation-buttons">
-        <button id="btn-negotiation-cancel" class="menu-btn">Verhandlung beenden</button>
-        <button id="btn-negotiation-send" class="menu-btn menu-btn-primary">Angebot senden</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Eingehendes Angebot-Popup (Bot-Orgas fragen NACH deinen Spielern) ── -->
-  <div id="incoming-offer-modal" class="modal-overlay hidden">
-    <div class="modal-box negotiation-box">
-      <div id="incoming-offer-title" class="modal-org-title"></div>
-      <div id="incoming-offer-subtitle" class="negotiation-subtitle"></div>
-      <div id="incoming-offer-log" class="negotiation-log"></div>
-      <label class="negotiation-label">Deine Forderung (€) für ein Gegenangebot</label>
-      <input id="incoming-offer-counter" type="number" class="negotiation-offer-input" min="0" step="1000" />
-      <label class="negotiation-label">Deine Nachricht</label>
-      <textarea id="incoming-offer-message" class="negotiation-message-input" rows="2" placeholder="Antwort an die Org schreiben..."></textarea>
-      <div class="negotiation-buttons">
-        <button id="btn-incoming-offer-decline" class="menu-btn menu-btn-danger">Ablehnen</button>
-        <button id="btn-incoming-offer-counter" class="menu-btn">Gegenangebot senden</button>
-        <button id="btn-incoming-offer-accept" class="menu-btn menu-btn-primary">Annehmen</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Hintergrundmusik -- läuft app-weit durch (kein .screen-Kind, wird also
        nie von showScreen()'s .hidden-Toggling betroffen), Lautstärke via
        appSettings.musicVolume gesteuert (renderer.js). -->
@@ -2018,8 +1861,6 @@
   <script src="data/organizations.js"></script>
   <script src="data/bot-teams.js"></script>
   <script src="match.js"></script>
-  <script src="tournament.js"></script>
-  <script src="season.js"></script>
   <script src="sound.js"></script>
   <script src="renderer.js"></script>
 </body>

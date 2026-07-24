@@ -586,7 +586,16 @@ const ORG_COUNTRY_REGION = {
 };
 
 function orgRegion(country) {
-  return country ? (ORG_COUNTRY_REGION[country] || null) : null;
+  // Bug-Fix (Audit-Runde): 6 Orgas sind ohne Liquipedia-Länderangabe
+  // (country: null, siehe Kommentar oben) über die normale Org-Auswahl frei
+  // wählbar -- ohne Fallback landete ihre Region auf null, wodurch sie NIE
+  // einer Turnier-Region zugeordnet wurden. Ergebnis: wählt der Nutzer eine
+  // davon als eigene Org, ist er ab dem ersten Turnier für den Rest der
+  // gesamten Karriere automatisch "ausgeschieden" -- nie qualifizierbar.
+  // country bleibt bewusst null (keine erfundene Nationalität/Flagge), die
+  // Region hier ist reine Spielmechanik, keine Tatsachenbehauptung.
+  if (!country) return 'EU';
+  return ORG_COUNTRY_REGION[country] || null;
 }
 
 // Schwierigkeit als grobe 3-Stufen-Einteilung aus der Stärke abgeleitet --
