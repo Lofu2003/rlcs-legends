@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   applyDisplaySettings: () => ipcRenderer.invoke('apply-display-settings'),
 
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

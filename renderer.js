@@ -14653,6 +14653,18 @@ async function initSettings() {
 }
 initSettings();
 
+// Bug-Fix (Audit): der Hauptmenü-Versionstext war bisher hart in index.html
+// eingetippt und musste bei jedem Release manuell nachgezogen werden --
+// mehrfach veraltet. Liest jetzt live aus package.json (main.js' app.getVersion()).
+async function initMainMenuVersion() {
+  try {
+    const version = await window.electronAPI.getAppVersion();
+    const el = document.getElementById('mainmenu-version');
+    if (el && version) el.textContent = 'v' + version;
+  } catch (e) { /* Anzeige bleibt beim HTML-Fallback-Text, kein kritischer Pfad */ }
+}
+initMainMenuVersion();
+
 function renderSettingsModal() {
   // Musik-Regler zeigt Live-Vorschau (wie der "🔊 Test"-Button beim
   // Sound-Effekte-Regler) -- Hintergrundmusik läuft ja bereits, während

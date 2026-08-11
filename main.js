@@ -379,6 +379,13 @@ function saveSettingsSync(settings) {
 ipcMain.handle('get-settings', () => loadSettingsSync());
 ipcMain.handle('save-settings', (_event, settings) => saveSettingsSync(settings));
 
+// Bug-Fix (Audit): Hauptmenü zeigte bisher einen hart eingetippten
+// Versionstext (index.html), der bei jedem Release manuell nachgezogen
+// werden musste und dabei mehrfach veraltete -- liest jetzt live aus
+// package.json über app.getVersion(), exakt dieselbe Quelle wie der
+// bereits bestehende Discord-Feedback-Versionswert.
+ipcMain.handle('get-app-version', () => app.getVersion());
+
 // ── Fenster-/Anzeigemodus ────────────────────────────────────────────────
 // Electron kann den `frame`-Wert eines BrowserWindow nicht nachträglich
 // ändern (nur bei der Erstellung festlegbar) — deshalb braucht der Wechsel
