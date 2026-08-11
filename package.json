@@ -1,6 +1,6 @@
 {
   "name": "rlcs-legends",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "description": "RLCS Legends — Draft-Manager-Spiel, abgeleitet von draftrlcs.app",
   "main": "main.js",
   "scripts": {
@@ -23,7 +23,12 @@
     "artifactName": "RLCS-Legends-Setup-${version}.${ext}",
     "files": [
       "**/*",
-      "!*.md"
+      "!*.md",
+      "!discord-webhook.local.json",
+      "!KONZEPT.md",
+      "!datenbank-spieler-rlcs-legend-v2.txt",
+      "!rocket_league_spieler_nationalitaeten.txt",
+      "!start.bat"
     ],
     "win": {
       "target": "nsis",

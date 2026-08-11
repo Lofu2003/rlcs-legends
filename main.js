@@ -23,22 +23,69 @@ ipcMain.on('quit-app', () => app.quit());
 
 // Mehrere Speicherstände (Slots) statt einem einzigen Autosave — jeder Slot
 // ist eine eigene JSON-Datei in userData.
+// Bug-Fix (Audit Runde 5): dasselbe Tmp-Datei+renameSync-Muster, das für
+// save-game bereits als Fix etabliert ist (siehe Kommentar dort), gilt genauso
+// für manager-templates.json/settings.json -- ein Prozessabbruch mittendrin
+// hinterließ dort bisher eine abgeschnittene/kaputte JSON-Datei. Gemeinsame
+// Hilfsfunktion statt das Muster dreimal zu duplizieren.
+function atomicWriteFileSync(target, contents) {
+  const tmpPath = target + '.tmp-' + process.pid;
+  fs.writeFileSync(tmpPath, contents);
+  fs.renameSync(tmpPath, target);
+}
+
 const SAVE_SLOT_COUNT = 3;
 const slotPath = (slotId) => path.join(app.getPath('userData'), 'save-slot-' + slotId + '.json');
+// Bug-Fix (Audit Runde 5): slotId floss bisher ungeprüft in slotPath() ein --
+// über die normale UI kommt sie zwar immer aus list-save-slots (feste
+// Ganzzahlen 1-3), aber der Renderer zeigt an mehreren Stellen frei getippte
+// Spielernamen ungesäubert per innerHTML an (Charakter-/Orga-Erstellung,
+// landen 1:1 im Save). Ein darüber eingeschleustes Skript hätte vollen
+// Zugriff auf window.electronAPI und könnte mit einer manipulierten
+// (z.B. "../../../irgendwo") slotId außerhalb von userData schreiben/lesen/
+// löschen. Zusätzliche, billige Absicherung direkt an der Quelle.
+const isValidSlotId = (slotId) => Number.isInteger(slotId) && slotId >= 1 && slotId <= SAVE_SLOT_COUNT;
 
+// Bug-Fix (Audit): schrieb vorher direkt in die Zieldatei -- bricht der
+// Prozess mittendrin ab (Absturz, Stromausfall, Task-Kill), bleibt eine
+// abgeschnittene/kaputte JSON-Datei zurück, die load-game/list-save-slots
+// danach stillschweigend als "existiert nicht" behandelt hätten (siehe
+// unten) -- kompletter, unbemerkter Fortschrittsverlust. Erst in eine
+// temporäre Datei im selben Verzeichnis schreiben, dann atomar per
+// fs.renameSync ersetzen: entweder liegt am Ende die alte ODER die neue,
+// vollständige Version da, nie ein Zwischenzustand.
 ipcMain.handle('save-game', (_event, slotId, data) => {
-  fs.writeFileSync(slotPath(slotId), JSON.stringify(data));
+  if (!isValidSlotId(slotId)) return;
+  const target = slotPath(slotId);
+  const tmpPath = target + '.tmp-' + process.pid;
+  fs.writeFileSync(tmpPath, JSON.stringify(data));
+  fs.renameSync(tmpPath, target);
 });
 
+// Bug-Fix (Audit): ein JSON.parse-Fehler wurde bisher nicht von "Datei
+// existiert nicht" unterschieden -- eine durch einen alten Bug/Absturz
+// beschädigte, aber vorhandene Speicherdatei wurde dadurch identisch zu
+// einem leeren Slot behandelt und konnte anschließend anstandslos
+// überschrieben werden (endgültiger Datenverlust, ohne dass der Spieler
+// je eine Fehlermeldung sah). Jetzt wird zwischen "fehlt" (ENOENT -> null)
+// und "ist da, aber kaputt" (-> { corrupted: true }) unterschieden.
 ipcMain.handle('load-game', (_event, slotId) => {
+  if (!isValidSlotId(slotId)) return null;
+  let raw;
   try {
-    return JSON.parse(fs.readFileSync(slotPath(slotId), 'utf-8'));
+    raw = fs.readFileSync(slotPath(slotId), 'utf-8');
   } catch {
     return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { corrupted: true };
   }
 });
 
 ipcMain.handle('delete-save', (_event, slotId) => {
+  if (!isValidSlotId(slotId)) return;
   try {
     fs.unlinkSync(slotPath(slotId));
   } catch {}
@@ -149,13 +196,13 @@ ipcMain.handle('list-manager-templates', () => readManagerTemplates());
 ipcMain.handle('save-manager-template', (_event, character) => {
   const list = readManagerTemplates();
   list.push({ id: Date.now(), ...character });
-  fs.writeFileSync(MANAGER_TEMPLATES_PATH, JSON.stringify(list));
+  atomicWriteFileSync(MANAGER_TEMPLATES_PATH, JSON.stringify(list));
   return list;
 });
 
 ipcMain.handle('delete-manager-template', (_event, id) => {
   const list = readManagerTemplates().filter((m) => m.id !== id);
-  fs.writeFileSync(MANAGER_TEMPLATES_PATH, JSON.stringify(list));
+  atomicWriteFileSync(MANAGER_TEMPLATES_PATH, JSON.stringify(list));
   return list;
 });
 
@@ -164,8 +211,21 @@ ipcMain.handle('delete-manager-template', (_event, id) => {
 ipcMain.handle('list-save-slots', () => {
   const slots = [];
   for (let i = 1; i <= SAVE_SLOT_COUNT; i++) {
+    let raw;
     try {
-      const data = JSON.parse(fs.readFileSync(slotPath(i), 'utf-8'));
+      raw = fs.readFileSync(slotPath(i), 'utf-8');
+    } catch {
+      slots.push({ slotId: i, exists: false });
+      continue;
+    }
+    // Bug-Fix (Audit): eine vorhandene, aber durch einen Absturz beschädigte
+    // Speicherdatei wurde hier bisher identisch zu "Slot existiert nicht"
+    // behandelt (derselbe catch-Block wie oben) -- der Slot erschien in der
+    // Auswahl als leer und ließ sich anstandslos überschreiben, obwohl noch
+    // echter (nur nicht mehr lesbarer) Fortschritt darunterlag. Jetzt bleibt
+    // er sichtbar und als beschädigt markiert.
+    try {
+      const data = JSON.parse(raw);
       slots.push({
         slotId: i,
         exists: true,
@@ -188,7 +248,7 @@ ipcMain.handle('list-save-slots', () => {
         savedAt: fs.statSync(slotPath(i)).mtime.toISOString(),
       });
     } catch {
-      slots.push({ slotId: i, exists: false });
+      slots.push({ slotId: i, exists: true, corrupted: true, orgName: '?', characterName: 'Beschädigter Speicherstand', firstName: '', playtimeSeconds: 0, savedAt: fs.statSync(slotPath(i)).mtime.toISOString() });
     }
   }
   return slots;
@@ -258,6 +318,7 @@ ipcMain.handle('send-feedback', (_event, feedback) => {
     }
     const req = https.request({
       hostname: webhookUrl.hostname,
+      port: webhookUrl.port || 443,
       path: webhookUrl.pathname + webhookUrl.search,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
@@ -267,6 +328,15 @@ ipcMain.handle('send-feedback', (_event, feedback) => {
       resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode });
     });
     req.on('error', (err) => resolve({ ok: false, error: err.message }));
+    // Bug-Fix (Audit Runde 5): ohne Timeout (anders als das bereits
+    // bestehende 20s-Watchdog-Muster bei den Update-Prüfungen) hängt der
+    // Feedback-Button bei einer toten Verbindung (kein 'error'-Event, einfach
+    // Stille) für immer auf "Wird gesendet…", ohne Fehlermeldung/Retry-
+    // Möglichkeit außer App-Neustart.
+    req.setTimeout(15000, () => {
+      req.destroy();
+      resolve({ ok: false, error: 'Zeitüberschreitung -- keine Antwort vom Server.' });
+    });
     req.write(payload);
     req.end();
   });
@@ -302,7 +372,7 @@ function loadSettingsSync() {
 
 function saveSettingsSync(settings) {
   const merged = { ...DEFAULT_SETTINGS, ...settings };
-  fs.writeFileSync(settingsPath, JSON.stringify(merged));
+  atomicWriteFileSync(settingsPath, JSON.stringify(merged));
   return merged;
 }
 
@@ -326,6 +396,21 @@ let mainWindow = null;
 let mainWindowIsBorderless = false;
 let boundsPersistTimer = null;
 
+// Bug-Fix (Audit Runde 5): gespeicherte windowBounds wurden bisher blind per
+// Object.assign übernommen, ohne Abgleich mit den aktuell angeschlossenen
+// Displays -- wechselt die Monitor-Konfiguration zwischen zwei Sitzungen
+// (externer Monitor abgesteckt, Auflösung geändert), konnte das Fenster
+// komplett außerhalb jedes sichtbaren Bereichs starten (Prozess läuft,
+// Taskleisten-Icon da, aber nichts sichtbar -- kein Wiederherstellungsweg
+// außer manuellem Löschen von settings.json).
+function boundsOverlapAnyDisplay(bounds) {
+  return screen.getAllDisplays().some((d) => {
+    const r = d.bounds;
+    return bounds.x < r.x + r.width && bounds.x + bounds.width > r.x
+      && bounds.y < r.y + r.height && bounds.y + bounds.height > r.y;
+  });
+}
+
 function windowCreateOptionsFor(settings) {
   const isBorderless = settings.displayMode === 'borderless';
   const opts = {
@@ -342,7 +427,7 @@ function windowCreateOptionsFor(settings) {
   if (isBorderless) {
     const bounds = screen.getPrimaryDisplay().bounds;
     Object.assign(opts, { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, resizable: false, fullscreenable: false });
-  } else if (settings.rememberWindowBounds && settings.windowBounds) {
+  } else if (settings.rememberWindowBounds && settings.windowBounds && boundsOverlapAnyDisplay(settings.windowBounds)) {
     Object.assign(opts, settings.windowBounds);
   } else {
     const preset = WINDOW_SIZE_PRESETS[settings.windowSize] || WINDOW_SIZE_PRESETS['1280x800'];
@@ -569,6 +654,14 @@ ipcMain.handle('apply-display-settings', () => {
 // bei einem echten Download-Fehler stumm bei "0%" hängen (Bug, live gemeldet).
 let isManualCheck = false;
 let isDownloading = false;
+// Bug-Fix (Audit): weder der Button noch der IPC-Handler verhinderten
+// bisher, dass zwei checkForUpdates()-Aufrufe auf derselben autoUpdater-
+// Instanz gleichzeitig liefen (z.B. manueller Klick kurz nach der stillen
+// Prüfung beim App-Start) -- welches der später eintreffenden Events zu
+// welcher Anfrage gehörte, ließ sich am gemeinsamen isManualCheck-Flag nicht
+// mehr sicher unterscheiden. isCheckInProgress lässt eine zweite Prüfung
+// erst gar nicht starten, solange eine läuft.
+let isCheckInProgress = false;
 
 function send(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
@@ -583,24 +676,75 @@ autoUpdater.on('error', (err) => {
 autoUpdater.on('download-progress', (progress) => send('update:progress', Math.round(progress.percent)));
 autoUpdater.on('update-downloaded', () => { isDownloading = false; send('update:downloaded'); });
 
+// Bug-Fix (Audit, Regressions-Fund): autoUpdater.checkForUpdates() kann bei
+// einem stillen Netzwerkproblem (DNS-/Proxy-Hänger) theoretisch nie settlen
+// -- ohne dieses Sicherheitsnetz (Watchdog, spiegelt den bereits
+// bestehenden 20s-Stillstands-Timeout auf der Download-Seite) würde
+// isCheckInProgress dann für den Rest der Session hängen bleiben, jede
+// weitere Prüfung (auch nach erneutem manuellem Klick) sofort abweisen,
+// ohne dass der Nutzer je einen echten Fehler oder Erfolg sieht.
+// Bug-Fix (Audit, Regressions-Fund Runde 3): der Watchdog-Timer lag in EINER
+// gemeinsamen Variable. Traf eine neue Prüfung ein während eine ältere noch
+// (verspätet) offen war, überschrieb beginUpdateCheck() den Timer der alten
+// Prüfung. Löste die alte Prüfung danach ihr .finally() aus, rief sie
+// endUpdateCheck() auf und löschte damit den Timer der NEUEN Prüfung --
+// deren Sicherheitsnetz war weg, und isCheckInProgress wurde fälschlich
+// zurückgesetzt, obwohl die neue Prüfung noch lief (eine dritte, überlappende
+// Prüfung wäre dann wieder möglich gewesen). Ein Token pro Anfrage (analog zu
+// loadStateRequestId im Renderer) lässt nur die zuletzt gestartete Prüfung
+// ihren eigenen Watchdog/Abschluss tatsächlich wirksam werden.
+let checkInProgressWatchdog = null;
+let updateCheckRequestId = 0;
+function beginUpdateCheck() {
+  const requestId = ++updateCheckRequestId;
+  isCheckInProgress = true;
+  clearTimeout(checkInProgressWatchdog);
+  checkInProgressWatchdog = setTimeout(() => {
+    if (requestId === updateCheckRequestId) isCheckInProgress = false;
+  }, 20000);
+  return requestId;
+}
+function endUpdateCheck(requestId) {
+  if (requestId !== updateCheckRequestId) return;
+  clearTimeout(checkInProgressWatchdog);
+  isCheckInProgress = false;
+}
+
 ipcMain.handle('check-for-updates', () => {
-  if (!app.isPackaged) return { skipped: true };
+  if (!app.isPackaged) return { skipped: true, reason: 'dev' };
+  if (isCheckInProgress) return { skipped: true, reason: 'busy' };
   isManualCheck = true;
-  autoUpdater.checkForUpdates().finally(() => { isManualCheck = false; });
+  const requestId = beginUpdateCheck();
+  autoUpdater.checkForUpdates().finally(() => { isManualCheck = false; endUpdateCheck(requestId); });
   return { skipped: false };
 });
 
+// Bug-Fix (Audit): der .catch() setzte bisher nur isDownloading zurück, ohne
+// selbst etwas an den Renderer zu senden -- ob der Nutzer informiert wurde,
+// hing komplett davon ab, dass electron-updater beim selben Fehler ZUSÄTZLICH
+// noch ein separates 'error'-Event auslöst. Ist das bei einem bestimmten
+// Fehlerpfad nicht der Fall, sah der Nutzer bis zu 20s lang (bis der
+// clientseitige Stillstands-Timeout greift) unnötig "Verbindung wird
+// hergestellt…" bei einem eigentlich längst bekannten sofortigen Fehlschlag.
 ipcMain.on('download-update', () => {
   isDownloading = true;
-  autoUpdater.downloadUpdate().catch(() => { isDownloading = false; });
+  autoUpdater.downloadUpdate().catch((err) => {
+    isDownloading = false;
+    send('update:error', String(err));
+  });
 });
 ipcMain.on('install-update', () => autoUpdater.quitAndInstall());
 
 app.whenReady().then(() => {
   createWindow();
   // Stille Prüfung beim Start — respektiert die "Automatisch nach Updates
-  // suchen"-Einstellung (Standard: an).
-  if (app.isPackaged && loadSettingsSync().autoCheckUpdates) autoUpdater.checkForUpdates();
+  // suchen"-Einstellung (Standard: an). isCheckInProgress mitgeführt, damit
+  // ein manueller Klick kurz nach dem Start (siehe check-for-updates-Handler)
+  // nicht mit dieser Prüfung überlappt.
+  if (app.isPackaged && loadSettingsSync().autoCheckUpdates) {
+    const requestId = beginUpdateCheck();
+    autoUpdater.checkForUpdates().finally(() => { endUpdateCheck(requestId); });
+  }
 });
 
 app.on('window-all-closed', () => {

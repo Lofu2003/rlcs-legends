@@ -7,7 +7,7 @@ body {
   color: #e2e8f5;
   overflow-x: auto; /* Turnier-Bracket kann breiter als der Viewport werden —
                         dann soll die SEITE selbst scrollen, kein verschachteltes
-                        Scroll-Fenster (siehe .bracket-container) */
+                        Scroll-Fenster (siehe .bracket-tree, Bug-Fix Audit) */
 }
 
 .screen.hidden { display: none; }
@@ -138,224 +138,6 @@ body {
   line-height: 1.6;
   color: #4a5580;
   letter-spacing: 0.2px;
-}
-
-/* ── Turnier-Screen ────────────────────────────────────────────────────── */
-#screen-tournament {
-  position: relative;
-  min-height: 100vh;
-  /* Bewusst KEIN display:flex + align-items/justify-content:center mehr —
-     zentrierter Flex-Inhalt, der breiter/höher als der Viewport wird, lässt
-     sich zur Hälfte nicht mehr erreichen (negativer Scroll-Bereich). Normaler
-     Blockfluss von oben nach unten lässt Überlauf stattdessen ganz normal nach
-     rechts/unten wachsen — dorthin kann die Seite ganz normal scrollen. */
-  background: radial-gradient(circle at 50% 15%, #1c2650 0%, #0d1220 60%);
-  padding: 40px 20px;
-  text-align: center;
-}
-
-.tournament-wrap {
-  max-width: 1600px;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.tournament-title {
-  font-size: 24px;
-  font-weight: 800;
-  color: #ffffff;
-  margin: 0 0 8px;
-}
-
-.rivalry-note {
-  margin: 0 0 16px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #ff9d3d;
-}
-
-.season-context-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.season-context {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: #6f8bff;
-}
-
-.season-guide-btn {
-  margin-bottom: 6px;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #b3bede;
-  background: #171f3d;
-  border: 1px solid #2a3660;
-  border-radius: 20px;
-  cursor: pointer;
-}
-
-.season-guide-btn:hover {
-  color: #ffffff;
-  border-color: #6f8bff;
-}
-
-/* .modal-box.XXX-box (statt nur .XXX-box) nötig: beide Klassen landen auf
-   demselben Element und haben gleiche Spezifität — ohne den Doppel-Klassen-
-   Selektor würde die spätere Quellposition von .modal-box (max-width:420px)
-   diese Regel sonst überschreiben, egal wo diese Regel im Stylesheet steht. */
-.modal-box.season-guide-box {
-  max-width: 560px;
-  text-align: left;
-}
-
-.season-guide-steps {
-  margin: 14px 0 20px;
-}
-
-.season-guide-step {
-  display: flex;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid #232c4d;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #b3bede;
-}
-
-.season-guide-step:last-child {
-  border-bottom: none;
-}
-
-.season-guide-step-icon {
-  flex: none;
-  font-size: 20px;
-}
-
-.season-guide-step strong {
-  color: #ffffff;
-}
-
-.season-guide-footnote {
-  margin-top: 10px;
-  font-size: 13px;
-  color: #8b98bd;
-  font-style: italic;
-}
-
-.season-context-buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.points-standing {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #b3bede;
-}
-
-.points-standing .points-standing-value {
-  color: #ffd873;
-  font-weight: 800;
-}
-
-/* ── Punktestand-Tabelle ───────────────────────────────────────────────── */
-/* .modal-box.standings-box nötig — siehe Kommentar bei .modal-box.season-guide-box. */
-.modal-box.standings-box {
-  max-width: 640px;
-  width: 100%;
-  text-align: left;
-}
-
-.standings-legend {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin: 4px 0 14px;
-  font-size: 12px;
-  color: #8b98bd;
-}
-
-.standings-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.standings-dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-}
-
-.standings-dot.standings-green, .standings-row.standings-green .standings-status-dot { background: #22c55e; }
-.standings-dot.standings-neutral, .standings-row.standings-neutral .standings-status-dot { background: #6f8bff; }
-.standings-dot.standings-red, .standings-row.standings-red .standings-status-dot { background: #ef4444; }
-
-.standings-list {
-  max-height: 56vh;
-  overflow-y: auto;
-  border: 1px solid #232c4d;
-  border-radius: 10px;
-}
-
-.standings-row {
-  display: grid;
-  grid-template-columns: 34px 1fr 70px 24px;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  font-size: 13px;
-  border-bottom: 1px solid #1a2340;
-}
-
-.standings-row:last-child { border-bottom: none; }
-
-.standings-row.is-player {
-  background: rgba(255, 216, 115, 0.08);
-}
-
-.standings-rank {
-  font-weight: 800;
-  color: #8b98bd;
-}
-
-.standings-name {
-  color: #d8e0f7;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.standings-row.is-player .standings-name {
-  color: #ffd873;
-  font-weight: 800;
-}
-
-.standings-points {
-  text-align: right;
-  font-weight: 700;
-  color: #b3bede;
-}
-
-.standings-status-dot {
-  justify-self: center;
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
 }
 
 /* ── Einstellungen (Sidebar, wie #screen-slots -- User-Wunsch: "im selben
@@ -588,192 +370,7 @@ body {
   margin-top: 0;
 }
 
-.champion-banner {
-  padding: 16px;
-  margin-bottom: 20px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #3a2c0c, #2a1f0a);
-  border: 1px solid #ffd873;
-  color: #ffd873;
-  font-size: 20px;
-  font-weight: 800;
-}
-
-.bracket-container {
-  /* Kein eigenes overflow/Scroll-Fenster mehr — bei zu breitem Inhalt wächst
-     die SVG ganz normal nach rechts über diese Box hinaus, die SEITE selbst
-     scrollt dann (siehe body { overflow-x: auto }). */
-  margin-bottom: 20px;
-  padding: 16px 12px;
-  background: linear-gradient(160deg, #0a1120 0%, #080f1d 100%);
-  border: 1px solid #1a2748;
-  border-radius: 14px;
-}
-
-/* ── Doppel-K.O.-Bracket (Open Qualifier) ─────────────────────────────────── */
-.bracket-delim-wrap {
-  max-width: 900px;
-  margin: 0 auto;
-  text-align: left;
-}
-
-.bracket-delim-group {
-  margin-bottom: 20px;
-}
-
-.bracket-delim-group-title {
-  font-size: 13px;
-  font-weight: 800;
-  color: #6f8bff;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin-bottom: 10px;
-}
-
-.bracket-delim-matches {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 8px;
-}
-
-.bracket-delim-match,
-.bracket-gsl-match {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #10152a;
-  border: 1px solid #1e2a52;
-  font-size: 12.5px;
-}
-
-.bracket-delim-match.is-played,
-.bracket-gsl-match.is-played {
-  border-color: #2e6b47;
-}
-
-.delim-team {
-  flex: 1;
-  color: #b3bede;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.delim-team.is-winner {
-  color: #ffffff;
-  font-weight: 800;
-}
-
-.delim-score {
-  flex-shrink: 0;
-  font-weight: 800;
-  color: #ffd873;
-  min-width: 42px;
-  text-align: center;
-}
-
-.bracket-delim-eliminated {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #ff8a6a;
-  font-weight: 700;
-}
-
-/* ── GSL-Mini-Gruppen ──────────────────────────────────────────────────────── */
-.bracket-gsl-wrap {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
-  max-width: 900px;
-  margin: 0 auto;
-  text-align: left;
-}
-
-.bracket-gsl-group {
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: #10152a;
-  border: 1px solid #1e2a52;
-}
-
-.bracket-gsl-group-title {
-  font-size: 14px;
-  font-weight: 800;
-  color: #ffd873;
-  margin-bottom: 10px;
-}
-
-.bracket-gsl-match {
-  margin-bottom: 6px;
-  flex-wrap: wrap;
-}
-
-.gsl-match-label {
-  flex-basis: 100%;
-  font-size: 10px;
-  font-weight: 700;
-  color: #6f8bff;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.bracket-gsl-result {
-  margin-top: 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #6fe89a;
-}
-
-/* ── Info-/Übergangsbildschirme zwischen Events ───────────────────────────── */
-.season-info-box {
-  max-width: 640px;
-  margin: 20px auto;
-  padding: 24px 28px;
-  border-radius: 14px;
-  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
-  border: 1px solid #2a3660;
-  text-align: left;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #b3bede;
-}
-
-.season-info-box h2 {
-  margin: 0 0 12px;
-  font-size: 19px;
-  color: #ffd873;
-}
-
-.season-info-box .season-info-line {
-  margin: 4px 0;
-}
-
-.season-info-box .season-info-highlight {
-  color: #ffffff;
-  font-weight: 700;
-}
-
-.tournament-action-row {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.tournament-action-btn {
-  width: 260px;
-}
-
 /* ── Match-Simulation & Text-Ticker ──────────────────────────────────────── */
-.match-cta {
-  display: block;
-  width: 100%;
-  max-width: 420px;
-  margin: 18px auto 6px;
-}
-
 /* Runde 101: Match-Bildschirm komplett neu (Orientierung an einem CS:GO-
    Esport-Overlay -- Team A immer blau/links, Team B immer orange/rechts,
    Ticker mittig als "Feed" zwischen beiden Kadern, s. Kopfkommentar an
@@ -1884,10 +1481,18 @@ body {
 .org-mode-cards {
   display: flex;
   gap: 40px;
+  /* Bug-Fix (Audit Runde 4, CSS-Agent): zwei feste 380px-Karten + 40px Gap
+     ergeben 800px Mindestbreite ohne Sicherheitsnetz -- jeder andere
+     vergleichbare fixbreite Container im File (.mode-select-wrap,
+     .settings-sidebar, .slots-sidebar, .org-contract-paper) führt konsequent
+     ein max-width/flex-wrap-Sicherheitsnetz mit, hier fehlte es. */
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .org-mode-card {
   width: 380px;
+  max-width: 90vw;
   padding: 48px 34px;
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(17, 23, 46, 0.75), rgba(11, 15, 28, 0.75));
@@ -1925,11 +1530,6 @@ body {
   box-shadow: 0 16px 40px rgba(62, 207, 114, 0.35);
 }
 
-.org-mode-card-disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .org-mode-icon {
   font-size: 72px;
   margin-bottom: 28px;
@@ -1951,16 +1551,6 @@ body {
   line-height: 1.6;
   color: #9aa6c9;
   margin: 0;
-}
-
-.org-mode-badge {
-  margin-top: 22px;
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: #6a76a0;
 }
 
 /* ── Eigene Organisation erstellen ─────────────────────────────────────────
@@ -2144,28 +1734,6 @@ body {
 .org-create-submit-btn {
   padding: 12px 26px;
   font-size: 14px;
-}
-
-.corner-back-btn {
-  position: absolute;
-  left: 24px;
-  bottom: 24px;
-  padding: 12px 22px;
-  border-radius: 10px;
-  background: #2a1420;
-  border: 1px solid #5a2a38;
-  color: #ff9fb0;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.3px;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
-}
-
-.corner-back-btn:hover {
-  background: #3a1c26;
-  border-color: #6b2f3a;
-  transform: translateY(-2px);
 }
 
 /* ── Org-Auswahlmenü (Listen-UI, orientiert an einer Referenz-Vorlage:
@@ -2753,6 +2321,41 @@ body {
   z-index: 10;
 }
 
+/* Bug-Fix (Audit Runde 7): eigener, höherer z-index als .modal-overlay (10) --
+   soll auch sichtbar sein, falls der Schnellvorlauf technisch mit einem noch
+   nicht ganz geschlossenen Popup überlappt. */
+.fast-forward-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 18, 0.82);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 20;
+}
+
+.fast-forward-spinner {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 4px solid #2a3660;
+  border-top-color: #3ecf72;
+  animation: fast-forward-spin 0.8s linear infinite;
+}
+
+@keyframes fast-forward-spin {
+  to { transform: rotate(360deg); }
+}
+
+.fast-forward-text {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #b3bede;
+}
+
 .modal-box {
   background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
   border: 1px solid #2a3660;
@@ -3121,11 +2724,6 @@ body {
   transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
-.menu-btn-icon {
-  font-size: 15px;
-  line-height: 1;
-}
-
 .menu-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   background: #1e2a52;
@@ -3403,146 +3001,6 @@ body {
   transition: width 0.25s ease, background 0.25s ease;
 }
 
-/* ── Transfer-Historie ─────────────────────────────────────────────────── */
-.transfer-log-list {
-  max-width: 720px;
-  margin: 24px auto 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 20px;
-}
-
-.transfer-season-heading {
-  margin: 18px 0 4px;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.4px;
-  color: #6f8bff;
-}
-
-.transfer-season-heading:first-child {
-  margin-top: 0;
-}
-
-.transfer-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
-  border: 1px solid #2a3660;
-  font-size: 13px;
-}
-
-.transfer-row-from,
-.transfer-row-to {
-  font-weight: 700;
-  color: #c7d1f0;
-}
-
-.transfer-row-player {
-  color: #ffd873;
-  font-weight: 700;
-}
-
-.transfer-row-arrow {
-  color: #5a6690;
-}
-
-.transfer-row-price {
-  margin-left: auto;
-  color: #8fe7a8;
-  font-weight: 700;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.transfer-log-empty {
-  color: #5a6690;
-  font-size: 13px;
-  text-align: center;
-  margin-top: 30px;
-}
-
-/* ── Kader-Aufstellung (Drag&Drop) ─────────────────────────────────────── */
-.roster-board {
-  max-width: 900px;
-  margin: 24px auto 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 26px;
-  padding: 0 20px;
-}
-
-.roster-board-heading {
-  margin: 0 0 10px;
-  font-size: 14px;
-  color: #8fa0cc;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-
-.roster-board-hint {
-  text-transform: none;
-  letter-spacing: 0;
-  color: #4a5788;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.roster-board-slots {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-}
-
-.roster-board-slot {
-  border-radius: 10px;
-  padding: 14px 10px;
-  text-align: center;
-  min-height: 60px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-
-.roster-board-slot.empty {
-  border: 1px dashed #2a3660;
-  color: #4a5788;
-  font-size: 12px;
-}
-
-.roster-board-slot.filled {
-  background: linear-gradient(160deg, #17301f 0%, #10152a 100%);
-  border: 1px solid #2e6b47;
-  cursor: grab;
-}
-
-.roster-board-slot.filled:active {
-  cursor: grabbing;
-}
-
-.roster-board-slot.drag-over {
-  border-color: #7fa3ff;
-  box-shadow: 0 0 0 2px rgba(127, 163, 255, 0.4);
-}
-
-.roster-board-slot-rating {
-  font-size: 15px;
-  font-weight: 800;
-  color: #ffffff;
-}
-
-.roster-board-slot-name {
-  font-size: 12px;
-  font-weight: 700;
-  color: #c7d1f0;
-}
-
 .update-modal-buttons .menu-btn {
   margin-top: 0;
   flex: 1;
@@ -3627,8 +3085,9 @@ body {
    position:absolute) -- vorher lag der Button als Geschwister-Element
    außerhalb von .slots-sidebar, wurde aber von dessen höherem z-index
    optisch verdeckt/unklickbar, weil die Sidebar dieselbe Bildschirmecke
-   überlappte. Gleiche Farbgebung wie .corner-back-btn (an anderer Stelle
-   im Spiel), nur im normalen Fluss statt frei positioniert. */
+   überlappte. (Bug-Fix Audit Runde 4: Kommentar verglich hier bisher mit
+   .corner-back-btn -- die Klasse war längst tot/entfernt, Vergleich
+   ersatzlos gestrichen.) */
 .slots-back-btn {
   margin-top: auto;
   padding: 12px 22px;
@@ -3710,6 +3169,15 @@ body {
 .slot-card:hover {
   transform: translateY(-2px);
   background: #1e2a52;
+}
+
+.slot-card-corrupted {
+  border-color: #7a3030;
+  background: #241a1a;
+}
+
+.slot-card-corrupted:hover {
+  background: #2e2020;
 }
 
 .slot-card-logo {
@@ -3929,20 +3397,6 @@ img.slot-card-avatar {
 
 .slot-delete-btn:hover { color: #ff8080; }
 
-.app-header {
-  position: relative;
-  padding: 20px 28px 10px;
-  border-bottom: 1px solid #253055;
-}
-
-.career-info {
-  margin-top: 6px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #ffd873;
-  letter-spacing: 0.3px;
-}
-
 .back-btn {
   position: absolute;
   top: 18px;
@@ -3962,290 +3416,14 @@ img.slot-card-avatar {
   color: #ffffff;
 }
 
-.app-header h1 {
-  margin: 0;
-  font-size: 26px;
-  letter-spacing: 0.5px;
-}
-
-.subtitle {
-  margin: 4px 0 0;
-  color: #7c8bb5;
-  font-size: 14px;
-}
-
-/* ── Org-Panel ─────────────────────────────────────────────────────────── */
-.org-panel {
-  margin-top: 14px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: #171f3d;
-  border: 1px solid #2a3660;
-  max-width: 480px;
-}
-
-.org-title {
-  font-weight: 800;
-  color: #ffd873;
-  font-size: 14px;
-  margin-bottom: 4px;
-}
-
 .org-line {
   font-size: 12px;
   line-height: 1.5;
   color: #9aa6c9;
 }
 
-/* ── Budget-Leiste ─────────────────────────────────────────────────────── */
-#budget-bar {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.budget-chip {
-  padding: 6px 14px;
-  border-radius: 8px;
-  background: #171f3d;
-  border: 1px solid #2a3660;
-  font-size: 13px;
-  font-weight: 700;
-  color: #c7d1f0;
-}
-
-.budget-remaining { color: #8fe7a8; }
-.budget-over { color: #ff8a8a; border-color: #6b2f3a; }
-
 main {
   padding: 24px 28px 40px;
-}
-
-.pool-heading {
-  margin: 28px 0 14px;
-  font-size: 15px;
-  color: #8fa0cc;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-}
-
-/* ── Coach-Karten — violetter Akzent zur Unterscheidung von Spielern ──── */
-.coach-card { border-color: #5a4a8f; }
-.coach-card.is-drafted { border-color: #9f7fe8; box-shadow: 0 6px 20px rgba(159, 127, 232, 0.3); }
-.coach-card .card-rating { color: #b79cf2; }
-
-/* ── Mein Kader ────────────────────────────────────────────────────────── */
-.roster-heading {
-  margin: 0 0 12px;
-  font-size: 15px;
-  color: #8fa0cc;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-}
-
-.roster-slots {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 28px;
-}
-
-.roster-slot {
-  border-radius: 10px;
-  padding: 12px;
-  text-align: center;
-  font-size: 13px;
-  min-height: 44px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.roster-slot.empty {
-  border: 1px dashed #2a3660;
-  color: #4a5788;
-}
-
-.roster-slot.filled {
-  background: linear-gradient(160deg, #17301f 0%, #10152a 100%);
-  border: 1px solid #2e6b47;
-}
-
-.slot-name {
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.slot-price {
-  color: #8fe7a8;
-  font-size: 11px;
-}
-
-/* ── Spieler-Karten-Raster ─────────────────────────────────────────────── */
-.player-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 18px;
-}
-
-.player-card {
-  position: relative;
-  border-radius: 14px;
-  padding: 16px 16px 14px;
-  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
-  border: 1px solid #2a3660;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
-  cursor: pointer;
-  user-select: none;
-}
-
-.player-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
-}
-
-.player-card.is-drafted {
-  border-color: #3ecf72;
-  box-shadow: 0 6px 20px rgba(62, 207, 114, 0.28);
-}
-
-.player-card.is-locked {
-  cursor: not-allowed;
-  opacity: 0.35;
-}
-
-.player-card.is-locked:hover {
-  transform: none;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-}
-
-.drafted-badge {
-  position: absolute;
-  top: -9px;
-  right: 12px;
-  background: #1d5c37;
-  color: #b7f5c9;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.4px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid #3ecf72;
-}
-
-/* Spieler unter Vertrag bei einer Bot-Org — ausgegraut, aber (anders als
-   is-locked) weiter anklickbar: öffnet die Verhandlung statt direktem Draft. */
-.player-card.is-contracted {
-  filter: grayscale(0.8);
-  opacity: 0.55;
-}
-
-.player-card.is-contracted:hover {
-  opacity: 0.8;
-  transform: translateY(-4px);
-}
-
-.contract-badge {
-  position: absolute;
-  top: -9px;
-  left: 12px;
-  right: 12px;
-  background: #4a3414;
-  color: #ffc98a;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.2px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid #8a5a1e;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Karten-Tier-Rahmen — visuelle Seltenheitsstufen wie bei Sammelkarten */
-.tier-bronze  { border-color: #7a5230; }
-.tier-silver  { border-color: #9aa7c2; }
-.tier-gold    { border-color: #d4af37; box-shadow: 0 6px 18px rgba(212, 175, 55, 0.18); }
-.tier-diamond { border-color: #6fd6e8; box-shadow: 0 6px 20px rgba(111, 214, 232, 0.25); }
-
-.card-top {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.card-price {
-  display: inline-block;
-  margin: 8px 0 12px;
-  padding: 3px 9px;
-  border-radius: 6px;
-  background: #1b2647;
-  color: #8fe7a8;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
-
-.card-rating {
-  font-size: 30px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.tier-bronze  .card-rating { color: #c98a4b; }
-.tier-silver  .card-rating { color: #c4cee6; }
-.tier-gold    .card-rating { color: #f1cd5a; }
-.tier-diamond .card-rating { color: #8ee9f7; }
-
-.card-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.card-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 10px;
-  border-top: 1px solid #232c52;
-}
-
-.stat-row {
-  display: grid;
-  grid-template-columns: 34px 1fr 26px;
-  align-items: center;
-  gap: 8px;
-}
-
-.stat-tag {
-  font-size: 11px;
-  font-weight: 700;
-  color: #7c8bb5;
-  letter-spacing: 0.5px;
-}
-
-.stat-bar-track {
-  height: 6px;
-  border-radius: 4px;
-  background: #1c2444;
-  overflow: hidden;
-}
-
-.stat-bar-fill {
-  height: 100%;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #4c6fff, #7fa3ff);
-}
-
-.stat-value {
-  font-size: 12px;
-  font-weight: 600;
-  color: #c7d1f0;
-  text-align: right;
 }
 
 /* ── Vertrags-Screen (Gründungsvereinbarung) ───────────────────────────────
@@ -4505,53 +3683,7 @@ main {
 }
 
 /* ── Erfolge (Achievements) ────────────────────────────────────────────────
-   Spiegelt .transfer-log-list/.transfer-row strukturell -- eigene Karten
-   statt Zeilen, da hier zusätzlich ein Schloss/Pokal-Icon + Beschreibung
-   pro Eintrag gebraucht wird. */
-.achievements-list {
-  max-width: 720px;
-  margin: 24px auto 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 20px;
-}
-
-.achievement-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-  border-radius: 10px;
-  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
-  border: 1px solid #2a3660;
-  opacity: 0.55;
-}
-
-.achievement-card.is-unlocked {
-  opacity: 1;
-  border-color: #3ecf72;
-  background: linear-gradient(160deg, rgba(62, 207, 114, 0.14) 0%, #10152a 70%);
-}
-
-.achievement-card-icon {
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.achievement-card-title {
-  font-size: 13.5px;
-  font-weight: 800;
-  color: #e8edfa;
-}
-
-.achievement-card-desc {
-  font-size: 12px;
-  color: #8fa0cc;
-  margin-top: 2px;
-}
-
-/* Kurzzeitiges Popup oben rechts beim Freischalten -- eigenständiges,
+   Kurzzeitiges Popup oben rechts beim Freischalten -- eigenständiges,
    selbst-verschwindendes Element statt eines blockierenden Modals (bewusst
    anders als die eingehenden Bot-Angebote, die eine Reaktion erfordern). */
 .achievement-toast {
@@ -4568,7 +3700,7 @@ main {
   background: linear-gradient(160deg, #182142 0%, #0c1226 100%);
   border: 1px solid #3ecf72;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  transition: right 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: right 0.4s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s ease;
 }
 
 .achievement-toast.is-visible {
@@ -4692,7 +3824,19 @@ main {
 
 .dashboard-topbar {
   position: relative;
-  z-index: 1;
+  /* Bug-Fix (Shop-Runde, per Live-Test gefunden): z-index:1 reichte NICHT, um
+     das absolut positionierte Warenkorb-Dropdown (siehe .dashboard-cart-panel)
+     zuverlässig über den Seiteninhalt zu heben -- .dashboard-shop-card ist
+     selbst position:relative (für den Sperr-Overlay .dashboard-shop-lock-
+     overlay, z-index:1), und keiner der dazwischenliegenden Container
+     (.dashboard-main/.dashboard-shop-panel/-grid) bildet einen eigenen
+     Stacking-Context, wodurch dieser Karten-z-index bis zur gemeinsamen
+     .dashboard-body-Ebene (z-index:1) durchschlägt und dort per DOM-Reihenfolge
+     (später im DOM = .dashboard-main) mit dem Header gleichzieht. z-index:3
+     schafft eindeutigen Abstand, bleibt aber klar unter allen bewusst höheren
+     Overlays im Spiel (Slots-Sidebar/Org-Popup 4-6, echte Modals 10,
+     Schnellvorlauf 20, Achievement-Toast 999).*/
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: 22px;
@@ -4933,7 +4077,7 @@ main {
 /* Kategorien, die noch nicht spielbar sind (Shop, Basecamp, Strategien,
    Nachrichten, Statistiken, Runde 42) -- bleiben klickbar (zeigen den
    Sperr-Hinweis im Hauptbereich), aber optisch klar als "noch gesperrt"
-   erkennbar, ähnlich .org-mode-card-disabled. */
+   erkennbar. */
 .dashboard-sidebar-item.is-locked {
   opacity: 0.6;
 }
@@ -4971,6 +4115,163 @@ main {
   align-items: center;
   justify-content: center;
   box-shadow: 0 0 8px rgba(224, 92, 92, 0.5);
+}
+
+/* ── Warenkorb (Header-Widget, siehe Shop weiter unten) ─────────────────── */
+.dashboard-cart-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dashboard-cart-btn {
+  position: relative;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #2a2f45;
+  color: #d7dcf2;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+
+.dashboard-cart-btn:hover {
+  background: #383f5c;
+  transform: translateY(-1px);
+}
+
+.dashboard-cart-icon {
+  width: 19px;
+  height: 19px;
+}
+
+.dashboard-cart-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  margin-left: 0;
+}
+
+.dashboard-cart-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 320px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(160deg, #171f3d 0%, #10152a 100%);
+  border: 1px solid #2a3660;
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  z-index: 6;
+  padding: 16px;
+}
+
+.dashboard-cart-panel-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #9aa1b8;
+  margin-bottom: 10px;
+}
+
+.dashboard-cart-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 240px;
+}
+
+.dashboard-cart-item {
+  display: grid;
+  grid-template-columns: 26px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-cart-item-emoji {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.dashboard-cart-item-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f5;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-cart-item-price {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #9aa1b8;
+  white-space: nowrap;
+}
+
+.dashboard-cart-item-remove {
+  border: none;
+  background: none;
+  color: #6a7189;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.dashboard-cart-item-remove:hover {
+  color: #e05c5c;
+}
+
+.dashboard-cart-empty {
+  padding: 30px 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6a7189;
+}
+
+.dashboard-cart-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-cart-total {
+  font-size: 13px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.dashboard-cart-footer-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.dashboard-cart-footer-btns .menu-btn {
+  flex: 1;
+  padding: 9px 10px;
+  font-size: 12.5px;
+}
+
+.dashboard-cart-checkout-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .dashboard-main {
@@ -5645,6 +4946,1177 @@ main {
   color: #6a7189;
   letter-spacing: 0.4px;
   text-transform: uppercase;
+}
+
+/* ── Shop ─────────────────────────────────────────────────────────────────
+   Wiederverwendete Bausteine statt neuer Designregeln: Karten-Optik lehnt sich
+   an .dashboard-sponsor-card an (gleiche Radien/Border/Hover-Glow), Tabs an
+   .dashboard-sponsors-tier-btn, Pagination an .dashboard-sponsors-page-btn,
+   Lock-Optik an .dashboard-scouting-sign-btn.is-locked/.dashboard-sponsor-card-
+   status-dot.is-locked (rot = gesperrt, gleiche Farbsprache im ganzen Spiel). */
+.dashboard-shop-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.dashboard-shop-tabs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.dashboard-shop-tab {
+  border: none;
+  background: none;
+  color: #8a91a8;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding-bottom: 4px;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.dashboard-shop-tab:hover {
+  color: #d7dcf2;
+}
+
+.dashboard-shop-tab.is-active {
+  color: #e8a23e;
+  border-bottom-color: #e8a23e;
+}
+
+.dashboard-shop-tab-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dashboard-shop-basecamp-status {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9aa1b8;
+  letter-spacing: 0.3px;
+}
+
+.dashboard-shop-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+.dashboard-shop-empty {
+  padding: 60px 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a7189;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.dashboard-shop-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.dashboard-shop-card:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.dashboard-shop-card.is-equipped {
+  border-color: #3ecf72;
+  background: rgba(62, 207, 114, 0.07);
+}
+
+.dashboard-shop-card.is-locked {
+  opacity: 0.55;
+}
+
+.dashboard-shop-card.is-locked:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.dashboard-shop-lock-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dashboard-shop-card-image {
+  height: 74px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+}
+
+.dashboard-shop-card-stars {
+  font-size: 12px;
+}
+
+.dashboard-shop-card-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #e2e8f5;
+  line-height: 1.25;
+  min-height: 2.4em;
+}
+
+.dashboard-shop-card-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 18px;
+}
+
+.dashboard-shop-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.dashboard-shop-stat-label {
+  color: #9aa1b8;
+}
+
+.dashboard-shop-stat-bonus {
+  color: #3ecf72;
+  font-weight: 800;
+}
+
+.dashboard-shop-card-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dashboard-shop-card-price {
+  font-size: 13px;
+  font-weight: 800;
+  color: #f2f4f8;
+  white-space: nowrap;
+}
+
+.dashboard-shop-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-shop-locked-hint {
+  font-size: 10px;
+  font-weight: 800;
+  color: #e05c5c;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  line-height: 1.3;
+}
+
+.dashboard-shop-status-hint {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #3ecf72;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.dashboard-shop-buy-btn, .dashboard-shop-equip-btn {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1.5px solid #e8a23e;
+  background: rgba(232, 162, 62, 0.12);
+  color: #f2d778;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+}
+
+.dashboard-shop-buy-btn:hover, .dashboard-shop-equip-btn:hover {
+  background: rgba(232, 162, 62, 0.22);
+}
+
+.dashboard-shop-buy-btn.is-in-cart {
+  border-color: #4f8cf7;
+  background: rgba(79, 140, 247, 0.15);
+  color: #bcd2ff;
+}
+
+.dashboard-shop-equip-btn.is-equipped {
+  border-color: #3ecf72;
+  background: rgba(62, 207, 114, 0.15);
+  color: #b6f2cb;
+}
+
+.dashboard-shop-fav-btn {
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.03);
+  color: #8a91a8;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.dashboard-shop-fav-btn:hover {
+  border-color: #e05c5c;
+  color: #ff9fb0;
+}
+
+.dashboard-shop-fav-btn.is-fav {
+  border-color: #e05c5c;
+  background: rgba(224, 92, 92, 0.15);
+  color: #ff6b81;
+}
+
+.dashboard-shop-pagination {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.dashboard-shop-page-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: #9aa1b8;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-shop-page-btn.is-active {
+  color: #f2f4f8;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-shop-page-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Basecamp ─────────────────────────────────────────────────────────────
+   Wiederverwendete Bausteine: Tabs = .dashboard-shop-tab (siehe oben), Karten-
+   Optik = .dashboard-shop-card-Familie, Sperr-/Erfolgsfarben identisch zum
+   restlichen Spiel (#3ecf72 grün, #e05c5c rot, #e8a23e gelb/orange). */
+.dashboard-basecamp-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.dashboard-basecamp-columns {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+}
+
+.dashboard-basecamp-left {
+  flex: 0 0 51%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dashboard-basecamp-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-basecamp-hero {
+  position: relative;
+  height: 260px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.dashboard-basecamp-hero:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.dashboard-basecamp-hero-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 16px 22px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(5, 8, 18, 0) 0%, rgba(5, 8, 18, 0.85) 70%);
+}
+
+.dashboard-basecamp-hero-stars {
+  font-size: 18px;
+}
+
+.dashboard-basecamp-hero-type {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  color: #e8a23e;
+  text-transform: uppercase;
+}
+
+.dashboard-basecamp-hero-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-basecamp-hero-name {
+  font-size: 22px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.dashboard-basecamp-hero-open-icon {
+  font-size: 14px;
+  color: #9aa1b8;
+}
+
+.dashboard-basecamp-equip-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.dashboard-basecamp-equip-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 10px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.dashboard-basecamp-equip-card:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.dashboard-basecamp-equip-card.is-empty {
+  opacity: 0.6;
+}
+
+.dashboard-basecamp-equip-card-image {
+  width: 100%;
+  height: 52px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.dashboard-basecamp-equip-card-image-empty {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.dashboard-basecamp-equip-card-stars {
+  font-size: 10px;
+}
+
+.dashboard-basecamp-equip-card-category {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #8a91a8;
+}
+
+.dashboard-basecamp-equip-card-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f5;
+  line-height: 1.25;
+}
+
+.dashboard-basecamp-equip-card-empty-hint {
+  font-size: 10px;
+  font-weight: 700;
+  color: #565c72;
+}
+
+.dashboard-basecamp-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #f2f4f8;
+}
+
+.dashboard-basecamp-bonus-panel {
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 14px 16px;
+}
+
+.dashboard-basecamp-bonus-columns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.dashboard-basecamp-bonus-col-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: #e8a23e;
+  margin-bottom: 6px;
+}
+
+.dashboard-basecamp-bonus-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 11.5px;
+}
+
+.dashboard-basecamp-bonus-row:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.dashboard-basecamp-bonus-label {
+  color: #c3c9dc;
+}
+
+.dashboard-basecamp-bonus-value {
+  font-weight: 800;
+  color: #8a91a8;
+}
+
+.dashboard-basecamp-bonus-value.is-positive {
+  color: #3ecf72;
+}
+
+.dashboard-basecamp-bonus-row-chem {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 8px;
+}
+
+.dashboard-basecamp-inventory {
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 6px 10px;
+  overflow-x: auto;
+}
+
+.dashboard-basecamp-inv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.dashboard-basecamp-inv-table th {
+  text-align: left;
+  padding: 8px 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #8a91a8;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-basecamp-inv-table td {
+  padding: 7px 8px;
+  color: #e2e8f5;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dashboard-basecamp-inv-table tr:last-child td {
+  border-bottom: none;
+}
+
+.dashboard-basecamp-inv-table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dashboard-basecamp-inv-unsellable {
+  color: #565c72;
+}
+
+.dashboard-basecamp-sell-btn {
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1.5px solid #3ecf72;
+  background: rgba(62, 207, 114, 0.1);
+  color: #b6f2cb;
+  font-size: 10.5px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dashboard-basecamp-sell-btn:hover {
+  background: rgba(62, 207, 114, 0.2);
+}
+
+/* ── Strategien ───────────────────────────────────────────────────────────
+   Wiederverwendet: .dashboard-shop-tab (Haupt-Tabs), .menu-btn/-primary/-danger
+   (Buttons), .settings-volume-slider-Muster (Regler, accent-color statt neuem
+   Custom-Slider-Design), Erfolgs-/Warnfarben #3ecf72/#e05c5c, Akzentgelb #e8a23e. */
+.dashboard-tactics-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.dashboard-tactics-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.dashboard-tactics-subtab.hidden {
+  display: none;
+}
+
+.dashboard-tactics-category-nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.dashboard-tactics-cat-btn {
+  border: none;
+  background: none;
+  color: #8a91a8;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  padding-bottom: 4px;
+  border-bottom: 2px solid transparent;
+}
+
+.dashboard-tactics-cat-btn:hover {
+  color: #d7dcf2;
+}
+
+.dashboard-tactics-cat-btn.is-active {
+  color: #e8a23e;
+  border-bottom-color: #e8a23e;
+}
+
+.dashboard-tactics-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.dashboard-tactics-strip-card {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.dashboard-tactics-strip-card:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.dashboard-tactics-strip-card.is-selected {
+  border-color: #e8a23e;
+  background: rgba(232, 162, 62, 0.08);
+}
+
+.dashboard-tactics-strip-card.is-active-strategy {
+  border-color: #3ecf72;
+}
+
+.dashboard-tactics-strip-emoji {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.dashboard-tactics-strip-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f5;
+}
+
+.dashboard-tactics-strip-active-badge {
+  font-size: 9px;
+  font-weight: 800;
+  color: #3ecf72;
+  letter-spacing: 0.3px;
+}
+
+.dashboard-tactics-columns {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+}
+
+.dashboard-tactics-arena-col {
+  flex: 0 0 44%;
+  min-width: 0;
+}
+
+.dashboard-tactics-detail-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-tactics-arena {
+  position: relative;
+  height: 420px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  background: linear-gradient(160deg, var(--tactics-arena-tint, #2a3660) 0%, #10152a 75%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard-tactics-field-svg {
+  width: 74%;
+  height: 90%;
+}
+
+.dashboard-tactics-arena-arrows {
+  position: absolute;
+  inset: 0;
+}
+
+.dashboard-tactics-arrow {
+  position: absolute;
+  font-weight: 800;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.5));
+}
+
+.dashboard-tactics-arena-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 18px 16px 20px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(5, 8, 18, 0) 0%, rgba(5, 8, 18, 0.88) 65%);
+}
+
+.dashboard-tactics-arena-category {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  color: #e8a23e;
+  text-transform: uppercase;
+}
+
+.dashboard-tactics-arena-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: #f2f4f8;
+  letter-spacing: 0.4px;
+}
+
+.dashboard-tactics-arena-desc {
+  font-size: 11.5px;
+  color: #9aa1b8;
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+.dashboard-tactics-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dashboard-tactics-detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dashboard-tactics-detail-name {
+  font-size: 19px;
+  font-weight: 800;
+  color: #f2f4f8;
+}
+
+.dashboard-tactics-detail-active-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #3ecf72;
+  letter-spacing: 0.3px;
+}
+
+.dashboard-tactics-detail-category {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #e8a23e;
+}
+
+.dashboard-tactics-detail-playstyle {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: #9aa1b8;
+  line-height: 1.4;
+}
+
+.dashboard-tactics-detail-section {
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 12px 14px;
+}
+
+.dashboard-tactics-detail-section-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: #f2f4f8;
+  margin-bottom: 8px;
+}
+
+.dashboard-tactics-detail-section-hint {
+  font-weight: 600;
+  color: #6a7189;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.dashboard-tactics-detail-section-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.dashboard-tactics-modifier-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 14px;
+}
+
+.dashboard-tactics-modifier-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 4px;
+  font-size: 11px;
+}
+
+.dashboard-tactics-modifier-label {
+  color: #c3c9dc;
+}
+
+.dashboard-tactics-modifier-value {
+  font-weight: 800;
+  color: #8a91a8;
+  white-space: nowrap;
+}
+
+.dashboard-tactics-modifier-value.is-positive {
+  color: #3ecf72;
+}
+
+.dashboard-tactics-modifier-value.is-negative {
+  color: #e05c5c;
+}
+
+.dashboard-tactics-modifier-delta {
+  font-size: 9.5px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.dashboard-tactics-modifier-delta.is-positive {
+  color: #3ecf72;
+}
+
+.dashboard-tactics-modifier-delta.is-negative {
+  color: #e05c5c;
+}
+
+.dashboard-tactics-risk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-tactics-risk-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  margin-right: 3px;
+}
+
+.dashboard-tactics-risk-dot.is-filled {
+  background: #e05c5c;
+  box-shadow: 0 0 6px rgba(224, 92, 92, 0.5);
+}
+
+.dashboard-tactics-risk-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #9aa1b8;
+  letter-spacing: 0.4px;
+}
+
+.dashboard-tactics-effectiveness-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #e2e8f5;
+}
+
+.dashboard-tactics-effectiveness-value.is-positive {
+  color: #3ecf72;
+}
+
+.dashboard-tactics-effectiveness-value.is-negative {
+  color: #e05c5c;
+}
+
+.dashboard-tactics-req-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboard-tactics-req-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 28px;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-tactics-req-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #9aa1b8;
+}
+
+.dashboard-tactics-req-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.dashboard-tactics-req-fill {
+  height: 100%;
+  background: #3ecf72;
+  border-radius: 3px;
+}
+
+.dashboard-tactics-req-fill.is-warning {
+  background: #e8a23e;
+}
+
+.dashboard-tactics-req-value {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #3ecf72;
+  text-align: right;
+}
+
+.dashboard-tactics-req-value.is-warning {
+  color: #e8a23e;
+}
+
+.dashboard-tactics-pros-list, .dashboard-tactics-cons-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.dashboard-tactics-pros-list li {
+  color: #b6f2cb;
+}
+
+.dashboard-tactics-cons-list li {
+  color: #f2c6c6;
+}
+
+.dashboard-tactics-recommendation {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(232, 162, 62, 0.08);
+  border: 1px solid rgba(232, 162, 62, 0.25);
+  font-size: 11.5px;
+  color: #f2d778;
+  line-height: 1.4;
+}
+
+.dashboard-tactics-activate-btn {
+  width: 100%;
+}
+
+/* Allround-Taktik / Taktik-Ersteller Regler -- natives <input type="range">
+   wie schon bei Einstellungen (.settings-volume-slider) / Finanzen
+   (.dashboard-finance-alloc-slider), kein neues Custom-Slider-Widget.
+   Bug-Fix (User-Meldung "liegt alles übereinander"): .dashboard-tactics-
+   allround-panel enthielt bisher DREI direkte Flex-Row-Kinder (Regler-Spalte,
+   Vorschau-Spalte, Aktivieren-Button) -- der Button hat .dashboard-tactics-
+   activate-btn { width:100% }, was als Flex-Basis in einer ROW seine
+   bevorzugte Breite auf die volle Panel-Breite hochtrieb und die beiden
+   flex:1-Spalten daneben auf ~0px zusammendrückte (mit Playwright/
+   elementFromPoint nachgewiesen). Fix: .dashboard-tactics-allround-panel ist
+   jetzt eine COLUMN (Zeile mit den 2 Spalten + darunter der Button auf
+   eigener volle-Breite-Zeile) -- die eigentliche 2-Spalten-Zeile liegt in der
+   neuen .dashboard-tactics-allround-columns. */
+.dashboard-tactics-allround-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.dashboard-tactics-allround-intro {
+  margin: 0;
+  font-size: 12px;
+  color: #9aa1b8;
+  line-height: 1.4;
+}
+
+.dashboard-tactics-allround-columns,
+.dashboard-tactics-ersteller-panel {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.dashboard-tactics-allround-sliders,
+.dashboard-tactics-ersteller-form {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dashboard-tactics-allround-preview {
+  flex: 1;
+  min-width: 0;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 14px 16px;
+  align-self: stretch;
+}
+
+/* Jeder Regler bekommt eine eigene Karte (statt frei schwebendem Text) --
+   klare visuelle Trennung, deutlich lesbarer als die vorherige reine
+   Textliste. */
+.dashboard-tactics-slider-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-tactics-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dashboard-tactics-slider-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f5;
+}
+
+.dashboard-tactics-slider-value {
+  color: #e8a23e;
+  font-weight: 800;
+}
+
+.dashboard-tactics-slider {
+  width: 100%;
+  accent-color: #3ecf72;
+  cursor: pointer;
+}
+
+.dashboard-tactics-slider-endpoints {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 700;
+  color: #6a7189;
+  letter-spacing: 0.4px;
+}
+
+.dashboard-tactics-ersteller-name-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboard-tactics-ersteller-name-row label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9aa1b8;
+}
+
+.dashboard-tactics-ersteller-name-input {
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #2a3660;
+  background: #10152a;
+  color: #e2e8f5;
+  font-size: 13px;
+}
+
+.dashboard-tactics-ersteller-list-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-tactics-ersteller-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-tactics-ersteller-card {
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 12px 14px;
+}
+
+.dashboard-tactics-ersteller-card.is-active-strategy {
+  border-color: #3ecf72;
+  background: rgba(62, 207, 114, 0.07);
+}
+
+.dashboard-tactics-ersteller-card-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #f2f4f8;
+  margin-bottom: 4px;
+}
+
+.dashboard-tactics-ersteller-card-stats {
+  font-size: 10.5px;
+  color: #9aa1b8;
+  margin-bottom: 10px;
+}
+
+.dashboard-tactics-ersteller-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dashboard-tactics-ersteller-card-actions .menu-btn {
+  flex: 1;
+  padding: 7px 10px;
+  font-size: 11.5px;
+}
+
+.dashboard-tactics-ersteller-empty {
+  padding: 40px 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6a7189;
 }
 
 .dashboard-sponsors-jersey-col {
@@ -6587,14 +7059,6 @@ main {
   color: #7fe8a8;
 }
 
-.dashboard-tournament-detail-stub {
-  padding: 60px 0;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: #6a7189;
-}
-
 /* ── Turnier-Detail Swiss/Playoff-Stages (Runde 47/48/49) ────────────────── */
 .dashboard-tournament-stage-list {
   display: flex;
@@ -7076,7 +7540,12 @@ main {
   display: flex;
   align-items: stretch;
   gap: 56px;
-  overflow-x: auto;
+  /* Bug-Fix (Audit): overflow-x:auto erzeugte hier ein VERSCHACHTELTES
+     Scroll-Fenster -- widerspricht der an anderer Stelle dokumentierten
+     Absicht (siehe body{overflow-x:auto} oben im File): bei zu breitem
+     Bracket soll die SEITE selbst scrollen, nicht ein Innen-Container.
+     Entfernt, damit breite Einzel-K.o.-Bäume (Worlds-Playoffs, LCQ) sich
+     konsistent zu allen anderen Turnier-Ansichten verhalten. */
   padding: 4px 4px 12px;
 }
 
@@ -8593,28 +9062,19 @@ main {
   color: #7fe3a8;
 }
 
-/* Runde 121: Sperr-Hinweis oben auf dem Personal-Tab (User-Vorgabe "Personal
-   soll erstmal gesperrt sein und Hinweistext dass ein späteres Update dazu
-   kommt") -- dieselbe Rot/Sperr-Farbsprache wie .dashboard-sponsor-*-status-dot.is-locked. */
-.dashboard-scouting-locked-banner {
-  margin-bottom: 12px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: rgba(224, 92, 92, 0.12);
-  border: 1px solid rgba(224, 92, 92, 0.35);
-  color: #e8a3a3;
-  font-size: 12.5px;
-  font-weight: 700;
-}
-
-/* "Personal"-Tab (Runde 117) -- eine Spalte mehr als "Spieler" (AKTION-Button
-   für die tatsächliche Verpflichtung, siehe signStaffMember() in renderer.js). */
+/* Bug-Fix (Audit): der alte Sperr-Banner-Stil (Runde 121, "Personal soll
+   erstmal gesperrt sein") ist mit dem zugehörigen HTML-Banner entfernt worden
+   -- die Klasse selbst bleibt hier bewusst NICHT stehen, siehe index.html-
+   Kommentar am Personal-Tab.
+   GEHALT-Spalte ergänzt (Personal zahlt jetzt laufendes Gehalt wie Spieler,
+   siehe totalMonthlySalaryCommitment()) -- eine Spalte mehr als vorher, plus
+   die schon bestehende zusätzliche AKTION-Spalte gegenüber "Spieler". */
 .dashboard-scouting-staff-table-header {
-  grid-template-columns: 1fr 90px 44px 70px 90px 70px 90px 100px 1fr 110px;
+  grid-template-columns: 1fr 90px 44px 70px 90px 70px 90px 100px 100px 1fr 110px;
 }
 
 .dashboard-stats-row.dashboard-scouting-staff-row {
-  grid-template-columns: 1fr 90px 44px 70px 90px 70px 90px 100px 1fr 110px;
+  grid-template-columns: 1fr 90px 44px 70px 90px 70px 90px 100px 100px 1fr 110px;
 }
 
 .dashboard-scouting-sign-btn {
@@ -8737,9 +9197,18 @@ main {
 
 .dashboard-person-info-stat-row {
   display: grid;
-  grid-template-columns: 46px 1fr 32px;
+  grid-template-columns: 46px 1fr 52px;
   align-items: center;
   gap: 10px;
+}
+
+/* Bug-Fix (gefunden bei der Trainings-Seite, betraf aber schon vorher die
+   Personal-Detailseite): die 46px-Spalte ist für kurze Stat-Kürzel (MEC/GS/
+   SPD...) gedacht -- die vollen Personal-Attributnamen (STAFF_ATTRIBUTE_LABELS,
+   z.B. "Fitness-Wissen"/"Reaktionsschnelligkeit") brachen darin unschön um.
+   Breitere Label-Spalte für jede Stelle, die volle Wörter statt Kürzel zeigt. */
+.dashboard-person-info-stat-row.is-wide-label {
+  grid-template-columns: 118px 1fr 52px;
 }
 
 .dashboard-person-info-stat-label {
@@ -8766,6 +9235,37 @@ main {
   font-weight: 800;
   color: #e2e8f5;
   text-align: right;
+  white-space: nowrap;
+}
+
+/* Shop-Ausrüstungsbonus auf Spielerwerten -- gleiche Erfolgsfarbe wie
+   .dashboard-shop-stat-bonus weiter unten, damit "positiv" im ganzen Spiel
+   dieselbe Bedeutung hat. */
+.dashboard-person-info-stat-equip-bonus {
+  color: #3ecf72;
+  font-weight: 800;
+}
+
+/* Team-Zustand-Zeile auf der Person-Info-Seite (Personal-Seite) -- gleiche
+   Bausteine wie .dashboard-person-info-stat-row, aber mit vierter Spalte für
+   die Glücklich/Unzufrieden-Pille (.dashboard-roster-card-pill, weiter unten
+   bei der Kader-Seite definiert, hier direkt wiederverwendet). */
+.dashboard-person-info-team-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.dashboard-person-info-status-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 32px auto;
+  align-items: center;
+  gap: 10px;
+}
+.dashboard-person-info-status-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #9aa1b8;
 }
 
 /* ── "Kader"-Seite (Runde 119) ────────────────────────────────────────── */
@@ -8953,6 +9453,13 @@ main {
   max-width: 100%;
 }
 
+.dashboard-roster-card-meta {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #8a91a8;
+  white-space: nowrap;
+}
+
 .dashboard-roster-card-pills {
   display: flex;
   gap: 6px;
@@ -9088,4 +9595,761 @@ main {
 
 .dashboard-roster-card-sell-btn:hover {
   background: rgba(224, 96, 122, 0.22);
+}
+
+/* ── Personal-Seite -- baut auf den .dashboard-roster-card-*-Bausteinen oben
+   auf (1:1 wie Kader, siehe User-Vorgabe), nur Ergänzungen für den leeren
+   Slot-Zustand (gekündigte, noch nicht neu besetzte Kategorie). */
+.dashboard-staff-card {
+  cursor: default;
+}
+
+.dashboard-staff-card.is-empty {
+  cursor: pointer;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(10, 11, 13, 0.22);
+  opacity: 0.75;
+  transition: opacity 0.12s ease, border-color 0.12s ease;
+}
+
+.dashboard-staff-card.is-empty:hover {
+  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.dashboard-staff-card-avatar-empty {
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  color: #565c72;
+  font-size: 22px;
+}
+
+.dashboard-staff-empty-hint {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6a7189;
+}
+
+/* ── Trainings-Seite -- baut auf denselben .dashboard-roster-*-Bausteinen wie
+   Kader/Personal auf (Header/Karten-Grid identisch); neu sind nur die 4er-
+   Übersichtsleiste, die Coach-Zusammenfassungskarte und die Trainingsfokus-
+   Steuerung je Karte. */
+.dashboard-training-summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.dashboard-training-summary-item {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-training-summary-fill {
+  height: 100%;
+  border-radius: 5px;
+}
+.dashboard-training-summary-fill.is-activity { background: linear-gradient(90deg, #4c6fff, #7fa3ff); }
+.dashboard-training-summary-fill.is-quality { background: linear-gradient(90deg, #4cc27f, #7fe3a8); }
+.dashboard-training-summary-fill.is-morale { background: linear-gradient(90deg, #e8c23e, #f2d778); }
+.dashboard-training-summary-fill.is-capacity { background: linear-gradient(90deg, #c04fd6, #e07fee); }
+
+.dashboard-training-coach-card {
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-training-coach-card.is-empty {
+  cursor: pointer;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.16);
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: opacity 0.12s ease, border-color 0.12s ease;
+}
+
+.dashboard-training-coach-card.is-empty:hover {
+  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.dashboard-training-coach-card-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.dashboard-training-coach-card-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-training-coach-goto-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #c7d1f0;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dashboard-training-coach-goto-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.dashboard-training-coach-card-attrs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-training-player-card {
+  gap: 10px;
+}
+
+.dashboard-training-mode-toggle {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.dashboard-training-mode-btn {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #9aa1b8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dashboard-training-mode-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.dashboard-training-mode-btn.is-active {
+  color: #7fe3a8;
+  background: rgba(76, 194, 127, 0.14);
+  border: 1px solid rgba(76, 194, 127, 0.35);
+}
+
+.dashboard-training-category-select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #1a1d27;
+  color: #e2e8f5;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-training-reason {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #8a91a8;
+  line-height: 1.4;
+}
+
+.dashboard-training-reason-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+/* Hervorhebung der gerade fokussierten Trainingskategorie -- selbe Akzentfarbe
+   wie .dashboard-roster-card-pill.is-active, damit "aktiv/im Fokus" im
+   ganzen Spiel dieselbe Bedeutung hat. */
+.dashboard-person-info-stat-row.is-training-focus .dashboard-person-info-stat-label {
+  color: #7fe3a8;
+}
+
+/* ── "Nachrichten"-Seite ──────────────────────────────────────────────────
+   Kontaktliste links + Chat rechts -- dieselben dunklen Panel-/Karten-Töne
+   (rgba(10,11,13,0.42) Hintergrund, rgba(255,255,255,0.09) Rahmen) wie
+   Kader/Personal/Training oben, kein eigenes visuelles Vokabular. */
+.dashboard-messages-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 16px;
+  padding: 4px 2px 18px;
+}
+
+.dashboard-messages-contacts {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.dashboard-messages-contacts-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-messages-search-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dashboard-messages-filter-row {
+  display: flex;
+  gap: 6px;
+}
+
+.dashboard-messages-filter-btn {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #9aa1b8;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+}
+.dashboard-messages-filter-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.dashboard-messages-filter-btn.is-active {
+  color: #7fe3a8;
+  background: rgba(76, 194, 127, 0.14);
+  border: 1px solid rgba(76, 194, 127, 0.35);
+}
+
+.dashboard-messages-contact-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.dashboard-messages-contact-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  cursor: pointer;
+  text-align: left;
+}
+.dashboard-messages-contact-row:hover { border-color: rgba(255, 255, 255, 0.22); }
+.dashboard-messages-contact-row.is-selected {
+  border-color: rgba(232, 162, 62, 0.5);
+  background: rgba(232, 162, 62, 0.08);
+}
+
+.dashboard-messages-contact-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.dashboard-messages-status-dot {
+  position: absolute;
+  left: 40px;
+  top: 34px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid #14161c;
+  box-shadow: 0 0 5px currentColor;
+}
+.dashboard-messages-status-dot.is-happy { background: #3ecf72; color: #3ecf72; }
+.dashboard-messages-status-dot.is-neutral { background: #e8c23e; color: #e8c23e; }
+.dashboard-messages-status-dot.is-unhappy { background: #e08a3e; color: #e08a3e; }
+.dashboard-messages-status-dot.is-critical { background: #e05c5c; color: #e05c5c; }
+
+.dashboard-messages-contact-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dashboard-messages-contact-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-messages-contact-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #eef1ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-messages-contact-critical {
+  color: #e0607a;
+  font-size: 12px;
+}
+
+.dashboard-messages-contact-role {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7c8bb5;
+}
+
+.dashboard-messages-contact-preview {
+  font-size: 11px;
+  color: #8a91a8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-messages-unread-badge {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #e05c5c;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 8px rgba(224, 92, 92, 0.5);
+}
+
+.dashboard-messages-chat {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.dashboard-messages-chat-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7c8bb5;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  padding: 20px;
+}
+
+.dashboard-messages-chat-active {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-messages-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-messages-chat-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-messages-chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+}
+
+.dashboard-messages-chat-empty-log {
+  margin: auto;
+  color: #7c8bb5;
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.dashboard-messages-bubble {
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.dashboard-messages-bubble.is-manager {
+  align-self: flex-end;
+  background: rgba(232, 162, 62, 0.16);
+  border: 1px solid rgba(232, 162, 62, 0.35);
+  color: #f2e6cf;
+  border-bottom-right-radius: 3px;
+}
+
+.dashboard-messages-bubble.is-npc {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f5;
+  border-bottom-left-radius: 3px;
+}
+
+.dashboard-messages-bubble-date {
+  margin-top: 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #7c8bb5;
+  opacity: 0.8;
+}
+
+.dashboard-messages-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 18px 10px;
+}
+
+.dashboard-messages-quick-btn {
+  padding: 6px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #c7d1f0;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dashboard-messages-quick-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+.dashboard-messages-compose {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  padding: 12px 18px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-messages-input {
+  flex: 1;
+}
+
+.dashboard-messages-compose .menu-btn {
+  flex-shrink: 0;
+  padding: 10px 18px;
+}
+
+/* Postsystem -- visuell an .dashboard-messages-* angelehnt (gleiche Panel-
+   Hintergründe/-Ränder/-Farbtöne), Ordnerliste links statt Kontaktliste,
+   Nachrichtenliste + Detailansicht rechts statt Chat. */
+.dashboard-post-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 16px;
+  padding: 4px 2px 18px;
+}
+
+.dashboard-post-folders {
+  width: 220px;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dashboard-post-folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboard-post-folder-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(10, 11, 13, 0.42);
+  color: #c7d1f0;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+.dashboard-post-folder-btn:hover { border-color: rgba(255, 255, 255, 0.22); }
+.dashboard-post-folder-btn.is-active {
+  color: #7fe3a8;
+  background: rgba(76, 194, 127, 0.14);
+  border-color: rgba(76, 194, 127, 0.35);
+}
+
+.dashboard-post-folder-count {
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #c7d1f0;
+  font-size: 10.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dashboard-post-folder-btn.is-active .dashboard-post-folder-count {
+  background: rgba(76, 194, 127, 0.25);
+  color: #7fe3a8;
+}
+.dashboard-post-folder-count.is-urgent {
+  background: rgba(224, 92, 92, 0.25);
+  color: #ff9d9d;
+}
+
+.dashboard-post-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: rgba(10, 11, 13, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.dashboard-post-list-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-post-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-post-list-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #eef1ff;
+}
+
+.dashboard-post-mark-all-btn {
+  padding: 6px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #c7d1f0;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dashboard-post-mark-all-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+.dashboard-post-message-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+}
+
+.dashboard-post-empty {
+  margin: auto;
+  color: #7c8bb5;
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.dashboard-post-message-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 14px 11px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-left: 3px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  text-align: left;
+}
+.dashboard-post-message-row:hover { border-color: rgba(255, 255, 255, 0.22); }
+.dashboard-post-message-row.is-unread { background: rgba(255, 255, 255, 0.07); }
+.dashboard-post-message-row.is-priority-high { border-left-color: #e08a3e; }
+.dashboard-post-message-row.is-priority-critical { border-left-color: #e05c5c; }
+
+.dashboard-post-message-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.dashboard-post-message-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dashboard-post-message-subject-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-post-message-subject {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #c7d1f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dashboard-post-message-row.is-unread .dashboard-post-message-subject { font-weight: 800; color: #eef1ff; }
+
+.dashboard-post-unread-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e05c5c;
+  box-shadow: 0 0 5px rgba(224, 92, 92, 0.7);
+}
+
+.dashboard-post-message-sender {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7c8bb5;
+}
+
+.dashboard-post-message-preview {
+  font-size: 11px;
+  color: #8a91a8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-post-message-date {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #7c8bb5;
+  white-space: nowrap;
+}
+
+.dashboard-post-detail-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 20px;
+}
+
+.dashboard-post-back-btn {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #c7d1f0;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dashboard-post-back-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+.dashboard-post-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dashboard-post-detail-category {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #7fe3a8;
+}
+.dashboard-post-detail-category.is-priority-critical { color: #ff9d9d; }
+.dashboard-post-detail-category.is-priority-high { color: #f0b872; }
+
+.dashboard-post-detail-subject {
+  font-size: 18px;
+  font-weight: 800;
+  color: #eef1ff;
+}
+
+.dashboard-post-detail-meta {
+  display: flex;
+  gap: 18px;
+  font-size: 11.5px;
+  color: #7c8bb5;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dashboard-post-detail-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e2e8f5;
+  white-space: pre-line;
+}
+
+.dashboard-post-detail-action-note {
+  font-size: 11.5px;
+  color: #7c8bb5;
+  font-style: italic;
 }

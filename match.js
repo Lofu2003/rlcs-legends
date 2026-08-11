@@ -36,8 +36,19 @@ function compressStat(val) {
   return MATCH_SIM_STAT_BASELINE + (val - MATCH_SIM_STAT_BASELINE) * MATCH_SIM_STAT_COMPRESSION;
 }
 
+// Bug-Fix (Audit): boostMgmt ist einer der 6 generierten/entwickelbaren
+// Spieler-Stats (ROSTER_STAT_KEYS, data/org-rosters.js) und fließt voll ins
+// Overall (Sterne-Bewertung, Marktwert, Org-Gesamtstärke) ein -- floss aber
+// bisher in KEINE der drei Chance-Funktionen dieser Datei ein, obwohl ein
+// renderer.js-Kommentar (Spieler-Entwicklung) das genaue Gegenteil behauptet.
+// Ein Spieler mit hohem boostMgmt wirkte dadurch stärker (höheres Overall),
+// performte in echten Matches aber nicht besser -- reine Statistik-
+// Verzerrung. Boost-Management passt inhaltlich am ehesten zur Fähigkeit,
+// überhaupt konsequent an 50/50-Bälle heranzukommen, daher hier eingehängt
+// (mit moderatem Gewicht, die bestehende Rangfolge mechanics>speed>gameSense
+// bleibt erhalten, Summe weiterhin 1.0).
 function duelStat(p) {
-  return p.mechanics * 0.5 + p.speed * 0.3 + p.gameSense * 0.2;
+  return p.mechanics * 0.4 + p.speed * 0.25 + p.gameSense * 0.2 + p.boostMgmt * 0.15;
 }
 
 function resolveDuel(attValRaw, defValRaw) {
@@ -192,14 +203,20 @@ function simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, tea
  *
  * myOptions:
  *   - coach:             Coach-Objekt oder null — Team-A-Bonus/-Malus auf alle Duelle
- *   - sub:               Sub-Spieler-Objekt oder null — Wechsel zur Spielhälfte (nur Team A)
+ *   - sub:               Sub-Spieler-Objekt oder null — Wechsel zur Spielhälfte für Team A
  *   - orgMatchBonusPct:  Bonus/Malus (Prozentpunkte, z.B. +4.4 oder -7.2) aus der
  *                        zugewiesenen Organisation für Team A — kombiniert sich mit dem Coach-Bonus
- *   - coachB/orgMatchBonusPctB: dasselbe, aber für Team B (Runde 119, Team-Chemie
- *                        -- die eigene, gedraftete Org kann in simulateBotSeries()
- *                        positionell sowohl Team A als auch Team B sein, siehe
- *                        ownIsA dort). Beide defaulten auf 0 -- bestehende
- *                        Aufrufe ohne diese Felder verhalten sich exakt wie zuvor.
+ *   - coachB/subB/orgMatchBonusPctB: dieselben drei Felder, aber für Team B
+ *                        (Runde 119, Team-Chemie -- die eigene, gedraftete Org
+ *                        kann in simulateBotSeries() positionell sowohl Team A
+ *                        als auch Team B sein, siehe ownIsA dort). Alle
+ *                        defaulten auf 0/null -- bestehende Aufrufe ohne diese
+ *                        Felder verhalten sich exakt wie zuvor.
+ *   Bug-Fix (Audit): subB fehlte bislang komplett -- der Sub-Disconnect kam
+ *   dadurch NIE zum Einsatz, sobald die eigene Org positionell Team B war
+ *   (per Zufall bei rund der Hälfte der eigenen Matches der Fall), obwohl der
+ *   Spieler durchgängig einen Sub im Kader hatte. Team A und B werden jetzt
+ *   symmetrisch behandelt, exakt wie beim Coach-Bonus.
  */
 function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
   myOptions = myOptions || {};
@@ -215,7 +232,9 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
   const events = [];
 
   let activeTeamA = teamA.slice();
-  let subDone = !myOptions.sub;
+  let activeTeamB = teamB.slice();
+  let subDoneA = !myOptions.sub;
+  let subDoneB = !myOptions.subB;
 
   while (clock > 0) {
     const step = 14 + Math.random() * 18; // 14-32 Spiel-Sekunden pro Ereignis
@@ -225,12 +244,15 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
     // Sub kommt nicht mehr zu einem festen Zeitpunkt, sondern nur, wenn ein
     // Spieler "disconnected" — realistischer (Subs sind im echten Spiel reine
     // Notfall-Ersatzspieler) und unvorhersehbar. Kann auch gar nicht passieren.
-    if (!subDone && Math.random() < DISCONNECT_CHANCE_PER_EVENT) {
+    // Beide Seiten werden unabhängig voneinander geprüft (in der Praxis hat
+    // aber immer nur eine Seite -- die eigene Org -- überhaupt einen Sub
+    // gesetzt, siehe myOptions-Doku oben).
+    if (!subDoneA && Math.random() < DISCONNECT_CHANCE_PER_EVENT) {
       const outIdx = Math.floor(Math.random() * activeTeamA.length);
       const outPlayer = activeTeamA[outIdx];
       activeTeamA = activeTeamA.slice();
       activeTeamA[outIdx] = myOptions.sub;
-      subDone = true;
+      subDoneA = true;
       events.push({
         time: timeStr, stepSeconds: step, type: 'sub',
         msg: 'DISCONNECT! ' + outPlayer.name + ' (' + nameA + ') verliert die Verbindung — '
@@ -240,9 +262,24 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
       });
       continue;
     }
+    if (!subDoneB && Math.random() < DISCONNECT_CHANCE_PER_EVENT) {
+      const outIdx = Math.floor(Math.random() * activeTeamB.length);
+      const outPlayer = activeTeamB[outIdx];
+      activeTeamB = activeTeamB.slice();
+      activeTeamB[outIdx] = myOptions.subB;
+      subDoneB = true;
+      events.push({
+        time: timeStr, stepSeconds: step, type: 'sub',
+        msg: 'DISCONNECT! ' + outPlayer.name + ' (' + nameB + ') verliert die Verbindung — '
+          + myOptions.subB.name + ' kommt sofort ins Spiel!',
+        team: 'B', player: myOptions.subB.name, subOutName: outPlayer.name,
+        subInPlayer: myOptions.subB,
+      });
+      continue;
+    }
 
     const isLateGame = clock <= LATE_GAME_THRESHOLD_SECONDS;
-    const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, teamBBonusPct, isLateGame);
+    const result = simulatePossession(activeTeamA, activeTeamB, nameA, nameB, teamABonusPct, teamBBonusPct, isLateGame);
     if (result.scoringTeam === 'A') scoreA++;
     else if (result.scoringTeam === 'B') scoreB++;
     if (result.scoringTeam) result.msg += '  (' + scoreA + ':' + scoreB + ')';
@@ -264,7 +301,7 @@ function simulateMatch(teamA, teamB, nameA, nameB, myOptions) {
       otSeconds += step;
       const timeStr = '+' + formatClock(otSeconds);
 
-      const result = simulatePossession(activeTeamA, teamB, nameA, nameB, teamABonusPct, teamBBonusPct, true);
+      const result = simulatePossession(activeTeamA, activeTeamB, nameA, nameB, teamABonusPct, teamBBonusPct, true);
       if (result.scoringTeam === 'A') { scoreA++; decided = true; }
       else if (result.scoringTeam === 'B') { scoreB++; decided = true; }
       if (result.scoringTeam) result.msg += '  (' + scoreA + ':' + scoreB + ')';

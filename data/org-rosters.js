@@ -1,7 +1,7 @@
 // Feste Start-Kader pro Org (User-Wunsch: "echter Startkader" statt freiem
 // Draft aus dem leeren Nichts — siehe confirmOrgAndProceed() in renderer.js).
 // Jede Org bekommt DETERMINISTISCH (per Org-Namen geseedet, kein Math.random())
-// 3 Starter + 1 Sub + 1 Coach + 9 Team-Mitarbeiter zugewiesen — bei jedem
+// 3 Starter + 1 Sub + 1 Coach + 8 Team-Mitarbeiter zugewiesen — bei jedem
 // Programmstart exakt dieselben Personen für dieselbe Org ("feste" Zuordnung,
 // keine Zufalls-Neuwürfelung). Namen sind frei erfunden (wie schon die
 // Bot-Rollenspieler in bot-teams.js und die Zufalls-Charakternamen in
@@ -14,13 +14,64 @@
 // (das generateOrgRoster() beim Aufbau von ORGANIZATIONS aufruft) — siehe
 // <script>-Reihenfolge in index.html.
 
-// Die 9 Mitarbeiter-Rollen OHNE Geschäftsführer (der ist immer der selbst
+// Die 8 Mitarbeiter-Rollen OHNE Geschäftsführer (der ist immer der selbst
 // erstellte Charakter des Spielers, siehe renderer.js ORG_PREVIEW_STAFF_ROLES/
 // renderOrgPreview) — einzige Quelle der Wahrheit für diese Liste.
+// Bug-Fix/Zusammenlegung (User-Meldung: "Coach und Trainer sind dasselbe,
+// eines davon entfernen"): 'Trainer' war früher eine eigene der 9 Rollen hier
+// (4 Attribute fitness/trainingsplanung/motivation/geduld, eigener
+// Entwicklungsbonus). User-Entscheidung: Coach bleibt (eigener Slot, echte
+// Statachsen über rollPlayer(), war schon für den Match-Bonus zuständig) --
+// Trainer entfällt komplett, sein Entwicklungsbonus wandert zu Coach (siehe
+// coachDevelopmentBonusPct() in renderer.js, vorher trainerDevelopmentBonusPct()).
 const ORG_ROSTER_STAFF_ROLES = [
-  'Trainer', 'Scout', 'Analyst', 'Finanzvorstand', 'Anwalt',
+  'Scout', 'Analyst', 'Finanzvorstand', 'Anwalt',
   'Event-Manager', 'PR-Manager', 'Psychologe', 'Physiotherapeut',
 ];
+
+// Personal-Seite (Runde: "Personal"-Dashboard): jede der 8 Rollen bekommt ihre
+// EIGENEN, thematisch passenden Fähigkeits-Attribute statt der 6 Spieler-
+// Statachsen (mechanics/gameSense/... würden für einen Anwalt keinen Sinn
+// ergeben) -- analog zu STAT_LABELS/PLAYER_STAT_KEYS bei Spielern, aber
+// rollenspezifisch. "Coach" (roster.coach) ist NICHT hier drin -- der wird
+// weiterhin über rollPlayer() erzeugt und hat schon echte Statachsen (siehe
+// resolvePersonByIdentity() in renderer.js, Rolle 'Coach' wird dort separat
+// behandelt). Werte 45-95, gleiche Skala wie Spieler-Stats.
+const STAFF_ROLE_ATTRIBUTES = {
+  'Scout': ['talentgespuer', 'netzwerk', 'datenanalyse', 'verhandlung'],
+  'Analyst': ['datenanalyse', 'gegnervorbereitung', 'praezision', 'kommunikation'],
+  'Finanzvorstand': ['verhandlung', 'budgetplanung', 'risikomanagement', 'marktkenntnis'],
+  'Anwalt': ['vertragswissen', 'verhandlung', 'diskretion', 'reaktionsschnelligkeit'],
+  'Event-Manager': ['organisation', 'kreativitaet', 'netzwerk', 'stressresistenz'],
+  'PR-Manager': ['kommunikation', 'kreativitaet', 'netzwerk', 'krisenmanagement'],
+  'Psychologe': ['empathie', 'kommunikation', 'erfahrung', 'diskretion'],
+  'Physiotherapeut': ['medizinwissen', 'praezision', 'erfahrung', 'geduld'],
+};
+const STAFF_ATTRIBUTE_LABELS = {
+  geduld: 'Geduld',
+  talentgespuer: 'Talentgespür', netzwerk: 'Netzwerk', datenanalyse: 'Datenanalyse', verhandlung: 'Verhandlungsgeschick',
+  gegnervorbereitung: 'Gegner-Vorbereitung', praezision: 'Präzision', kommunikation: 'Kommunikation',
+  budgetplanung: 'Budgetplanung', risikomanagement: 'Risikomanagement', marktkenntnis: 'Marktkenntnis',
+  vertragswissen: 'Vertragswissen', diskretion: 'Diskretion', reaktionsschnelligkeit: 'Reaktionsschnelligkeit',
+  organisation: 'Organisation', kreativitaet: 'Kreativität', stressresistenz: 'Stressresistenz',
+  krisenmanagement: 'Krisenmanagement', empathie: 'Empathie', erfahrung: 'Erfahrung', medizinwissen: 'Medizinwissen',
+};
+
+// Streut die rollenspezifischen Attribute um targetOverall (gleiches Prinzip
+// wie rollPlayer()s Statachsen-Streuung um targetOverall, nur mit größerer
+// Spanne ±8 statt ±4, da hier nur 4 statt 6 Achsen gemittelt werden). rng ist
+// austauschbar (echte Org-Generierung nutzt die deterministische Seed-Funktion,
+// Bot-Ersatz/Free-Agent-Hydration nutzen Math.random, siehe Aufrufstellen).
+function generateStaffAttributes(role, targetOverall, rng) {
+  const keys = STAFF_ROLE_ATTRIBUTES[role];
+  if (!keys) return {};
+  const attrs = {};
+  keys.forEach((key) => {
+    const v = targetOverall + (rng() * 2 - 1) * 8;
+    attrs[key] = Math.max(45, Math.min(95, Math.round(v)));
+  });
+  return attrs;
+}
 
 const ROSTER_NICK_PREFIXES = [
   'Ruby', 'Shadow', 'Nova', 'Frost', 'Blaze', 'Zero', 'Volt', 'Echo', 'Phantom', 'Apex',
@@ -48,9 +99,9 @@ const ROSTER_STAFF_LAST_NAMES = [
 // Echte/verifizierte Spieler- und Team-Mitarbeiter-Namen pro Org, aus der
 // vom User bereitgestellten Datenbank (datenbank-spieler-rlcs-legend-v2.txt)
 // -- ersetzt die zuvor rein zufällig erzeugten Fantasienamen für Starter/Coach/
-// die 7 in der Datenbank vorhandenen Mitarbeiter-Rollen. "Trainer" und "Analyst"
-// kommen in der Datenbank NICHT vor -- bleiben für diese beiden Rollen weiterhin
-// prozedural generiert (siehe generateOrgRoster() unten). Sub-Spieler (4.
+// die 7 in der Datenbank vorhandenen Mitarbeiter-Rollen. "Analyst" kommt in
+// der Datenbank NICHT vor -- bleibt für diese Rolle weiterhin prozedural
+// generiert (siehe generateOrgRoster() unten). Sub-Spieler (4.
 // Kaderspieler) hat ebenfalls kein DB-Äquivalent (nur 3 "Spieler" pro Team in
 // der Datenbank) und bleibt daher auch weiterhin prozedural generiert.
 // Geschäftsführer aus der Datenbank wird bewusst NICHT übernommen -- diese Rolle
@@ -62,7 +113,7 @@ const ORG_REAL_ROSTER_NAMES = {
   "77Blocks": { players: ["Caard", "Sypical", "Dread"], coach: "Satthew", staff: { "Finanzvorstand": "Lucas Müller", "PR-Manager": "Skyler Anderson", "Psychologe": "Jamie Lopez", "Scout": "Chris Smith", "Anwalt": "Morgan Miller", "Event-Manager": "Arthur Hernandez", "Physiotherapeut": "Casey Silva" } },
   "BS+COMPETITION": { players: ["Retals", "Archie", "kaka"], coach: "Chrome", staff: { "Finanzvorstand": "Chris Lopez", "PR-Manager": "Dominik Garcia", "Psychologe": "Lucas Dupont", "Scout": "Sven Davis", "Anwalt": "Alex Dupont", "Event-Manager": "Gabriel Thomas", "Physiotherapeut": "Skyler Thomas" } },
   "BTF Esports": { players: ["BeastMode", "MajicBear", "Caard"], coach: "Chrome", staff: { "Finanzvorstand": "Arthur Johnson", "PR-Manager": "Ryan Taylor", "Psychologe": "Sam Garcia", "Scout": "Robin Wilson", "Anwalt": "Alex Miller", "Event-Manager": "Gabriel Thomas", "Physiotherapeut": "Taylor Lopez" } },
-  "Bonk!": { players: ["Retals", "Superlachie", "Atow"], coach: "Fireburner", staff: { "Finanzvorstand": "Casey Müller", "PR-Manager": "Casey Müller", "Psychologe": "Sven Davis", "Scout": "Chris Johnson", "Anwalt": "Arthur Williams", "Event-Manager": "David Gonzalez", "Physiotherapeut": "Jamie Davis" } },
+  "Bonk!": { players: ["Retals", "Superlachie", "Atow"], coach: "Fireburner", staff: { "Finanzvorstand": "Casey Müller", "PR-Manager": "Taylor Brown", "Psychologe": "Sven Davis", "Scout": "Chris Johnson", "Anwalt": "Arthur Williams", "Event-Manager": "David Gonzalez", "Physiotherapeut": "Jamie Davis" } },
   "Canterbury-Bankstown Bulldogs": { players: ["carca", "kamz", "Satthew"], coach: "Sizz", staff: { "Finanzvorstand": "Jordan Davis", "PR-Manager": "Dominik Martinez", "Psychologe": "David Müller", "Scout": "Marc Thomas", "Anwalt": "Chris Lopez", "Event-Manager": "Marc Lopez", "Physiotherapeut": "Taylor Hernandez" } },
   "Chiefs Esports Club": { players: ["Metsanauris", "Torsos", "carca"], coach: "Ferra", staff: { "Finanzvorstand": "Dominik Jones", "PR-Manager": "Jamie Martinez", "Psychologe": "Arthur Rodriguez", "Scout": "Skyler Rodriguez", "Anwalt": "Lucas Silva", "Event-Manager": "Robin Brown", "Physiotherapeut": "Robin Hernandez" } },
   "Cloud9": { players: ["Torsos", "Metsanauris", "kamz"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Jones", "PR-Manager": "Jordan Smith", "Psychologe": "Ryan Smith", "Scout": "Casey Johnson", "Anwalt": "Chris Thomas", "Event-Manager": "Lucas Garcia", "Physiotherapeut": "Morgan Taylor" } },
@@ -75,9 +126,9 @@ const ORG_REAL_ROSTER_NAMES = {
   "Enisorail": { players: ["Markydooda", "CaioTG1", "Hntr"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Rodriguez", "PR-Manager": "Casey Silva", "Psychologe": "Skyler Brown", "Scout": "Pierre Johnson", "Anwalt": "Morgan Gonzalez", "Event-Manager": "Gabriel Thomas", "Physiotherapeut": "Gabriel Taylor" } },
   "Envy": { players: ["Rizzo", "carca", "ayyjayy"], coach: "Ferra", staff: { "Finanzvorstand": "Jamie Brown", "PR-Manager": "Robin Gonzalez", "Psychologe": "Arthur Garcia", "Scout": "Chris Thomas", "Anwalt": "Dominik Rodriguez", "Event-Manager": "Jamie Müller", "Physiotherapeut": "Sam Rodriguez" } },
   "Evil Geniuses": { players: ["crr", "Firstkiller", "N1tro"], coach: "RawGregory", staff: { "Finanzvorstand": "Morgan Lopez", "PR-Manager": "Morgan Johnson", "Psychologe": "Lucas Müller", "Scout": "Ryan Müller", "Anwalt": "Jordan Davis", "Event-Manager": "Marc Martinez", "Physiotherapeut": "Skyler Müller" } },
-  "FIZ6 Gaming": { players: ["Caard", "hockser", "caleb"], coach: "Chrome", staff: { "Finanzvorstand": "Francis Wilson", "PR-Manager": "Jamie Lopez", "Psychologe": "Jordan Müller", "Scout": "Jamie Dupont", "Anwalt": "Pierre Taylor", "Event-Manager": "Lucas Thomas", "Physiotherapeut": "Lucas Thomas" } },
+  "FIZ6 Gaming": { players: ["Caard", "hockser", "caleb"], coach: "Chrome", staff: { "Finanzvorstand": "Francis Wilson", "PR-Manager": "Jamie Lopez", "Psychologe": "Jordan Müller", "Scout": "Jamie Dupont", "Anwalt": "Pierre Taylor", "Event-Manager": "Lucas Thomas", "Physiotherapeut": "Casey Wilson" } },
   "FURIA": { players: ["yanxnz", "Lostt", "Drufinho"], coach: "Kairos", staff: { "Finanzvorstand": "Roberto Silva", "PR-Manager": "Camila Souza", "Psychologe": "Dr. Fernando Costa", "Scout": "Lucas Oliveira", "Anwalt": "Santos & Partners", "Event-Manager": "Beatriz Lima", "Physiotherapeut": "Ricardo Mendes" } },
-  "FUT Esports": { players: ["Superlachie", "Rizzo", "hockser"], coach: "Sizz", staff: { "Finanzvorstand": "Chris Jones", "PR-Manager": "Sam Davis", "Psychologe": "Gabriel Anderson", "Scout": "Gabriel Jones", "Anwalt": "Sam Müller", "Event-Manager": "Sam Müller", "Physiotherapeut": "Sam Wilson" } },
+  "FUT Esports": { players: ["Superlachie", "Rizzo", "hockser"], coach: "Sizz", staff: { "Finanzvorstand": "Chris Jones", "PR-Manager": "Sam Davis", "Psychologe": "Gabriel Anderson", "Scout": "Gabriel Jones", "Anwalt": "Sam Müller", "Event-Manager": "Robin Davis", "Physiotherapeut": "Sam Wilson" } },
   "Five Fears": { players: ["Fever", "Firstkiller", "Cheese"], coach: "Eversax", staff: { "Finanzvorstand": "Arthur Davis", "PR-Manager": "Chris Garcia", "Psychologe": "Gabriel Garcia", "Scout": "Chris Taylor", "Anwalt": "Francis Davis", "Event-Manager": "Pierre Wilson", "Physiotherapeut": "Dominik Thomas" } },
   "FlipSid3 Tactics": { players: ["Satthew", "Comm", "AppJack"], coach: "Sizz", staff: { "Finanzvorstand": "Morgan Johnson", "PR-Manager": "Francis Martinez", "Psychologe": "Dominik Martinez", "Scout": "Arthur Johnson", "Anwalt": "Chris Williams", "Event-Manager": "Marc Johnson", "Physiotherapeut": "Alex Smith" } },
   "G2 Esports": { players: ["Acronik", "Atow", "Oaly"], coach: "Fireburner", staff: { "Finanzvorstand": "David Rodriguez", "PR-Manager": "Robin Davis", "Psychologe": "Morgan Davis", "Scout": "David Miller", "Anwalt": "Arthur Müller", "Event-Manager": "Sam Davis", "Physiotherapeut": "Robin Silva" } },
@@ -114,7 +165,7 @@ const ORG_REAL_ROSTER_NAMES = {
   "OpTic Gaming": { players: ["N1tro", "Kuxir97", "Metsanauris"], coach: "RawGregory", staff: { "Finanzvorstand": "Alex Williams", "PR-Manager": "Marc Martinez", "Psychologe": "Skyler Garcia", "Scout": "Ryan Taylor", "Anwalt": "David Brown", "Event-Manager": "Taylor Dupont", "Physiotherapeut": "Morgan Lopez" } },
   "Overlooked": { players: ["Maestro", "N1tro", "Cheese"], coach: "Sizz", staff: { "Finanzvorstand": "Francis Brown", "PR-Manager": "Lucas Jones", "Psychologe": "Chris Rodriguez", "Scout": "Jordan Martinez", "Anwalt": "Ryan Silva", "Event-Manager": "Sam Brown", "Physiotherapeut": "Jordan Davis" } },
   "PSG Esports": { players: ["Retals", "Superlachie", "crr"], coach: "Chrome", staff: { "Finanzvorstand": "Marc Davis", "PR-Manager": "Dominik Silva", "Psychologe": "Taylor Gonzalez", "Scout": "Casey Smith", "Anwalt": "Dominik Jones", "Event-Manager": "Skyler Davis", "Physiotherapeut": "Gabriel Thomas" } },
-  "PWR": { players: ["caleb", "Atow", "Comm"], coach: "Satthew", staff: { "Finanzvorstand": "Sam Jones", "PR-Manager": "Jamie Williams", "Psychologe": "Arthur Miller", "Scout": "Arthur Miller", "Anwalt": "Taylor Garcia", "Event-Manager": "Chris Anderson", "Physiotherapeut": "Skyler Miller" } },
+  "PWR": { players: ["caleb", "Atow", "Comm"], coach: "Satthew", staff: { "Finanzvorstand": "Sam Jones", "PR-Manager": "Jamie Williams", "Psychologe": "Arthur Miller", "Scout": "Morgan Silva", "Anwalt": "Taylor Garcia", "Event-Manager": "Chris Anderson", "Physiotherapeut": "Skyler Miller" } },
   "Pioneers": { players: ["hockser", "Amphis", "kaka"], coach: "Fireburner", staff: { "Finanzvorstand": "Taylor Johnson", "PR-Manager": "Dominik Johnson", "Psychologe": "Sam Hernandez", "Scout": "Robin Anderson", "Anwalt": "Sven Müller", "Event-Manager": "Sven Martinez", "Physiotherapeut": "Gabriel Martinez" } },
   "R8 Esports": { players: ["Bananahead", "Evoh", "Sypical"], coach: "Eversax", staff: { "Finanzvorstand": "Chris Hernandez", "PR-Manager": "Sven Hernandez", "Psychologe": "Jordan Silva", "Scout": "Dominik Davis", "Anwalt": "Casey Brown", "Event-Manager": "Arthur Lopez", "Physiotherapeut": "Sven Williams" } },
   "Renegades": { players: ["Allushin", "reysbull", "gReazymeister"], coach: "Chrome", staff: { "Finanzvorstand": "Skyler Müller", "PR-Manager": "Dominik Rodriguez", "Psychologe": "Alex Johnson", "Scout": "Jordan Johnson", "Anwalt": "Casey Rodriguez", "Event-Manager": "Dominik Thomas", "Physiotherapeut": "Pierre Johnson" } },
@@ -154,6 +205,13 @@ const ORG_REAL_ROSTER_NAMES = {
 // Nation wie bisher. "Oski" hatte in der Quelle eine Doppel-Nationalität
 // ("Polen / Großbritannien") -- da das Datenmodell nur ein Land pro Spieler
 // kennt, wurde die zuerst genannte (Polen) übernommen.
+// Bug-Fix (Audit Runde 4, Datendateien-Agent): "LJ" (Shopify Rebellion) und
+// "Lj" (Infamous/Jungle Juicers/Virtus.pro) bezeichnen denselben Spieler,
+// aber der Lookup unten (rollPlayer(), case-sensitive) fand nur die
+// Großschreibung -- die drei zuletzt genannten Orgs bekamen dadurch für ihn
+// bisher eine zufällige statt der recherchierten echten Nationalität. Beide
+// Schreibweisen jetzt als eigener Key hinterlegt, statt den Lookup selbst
+// case-insensitive zu machen (kleinerer, risikoärmerer Fix).
 const REAL_PLAYER_NATIONS = {
   "2Piece": "US", "Acronik": "PT", "Ahmad": "SA", "Allushin": "CA", "Amphis": "AU",
   "AppJack": "GB", "Archie": "GB", "Arsenal": "US", "Atow": "BE", "ayyjayy": "US",
@@ -163,11 +221,11 @@ const REAL_PLAYER_NATIONS = {
   "Evoh": "US", "ExoTiiK": "FR", "EyeIgnite": "GB", "Ferra": "FR", "Fever": "AU",
   "Firstkiller": "US", "GarrettG": "US", "gReazymeister": "NO", "Hntr": "AU", "hockser": "US",
   "JKnaps": "CA", "Joreuz": "NL", "Joyo": "GB", "Justin": "US", "kaka": "AU",
-  "kamz": "NZ", "Kuxir97": "IT", "Kv1": "BR", "LJ": "US", "Lostt": "BR",
+  "kamz": "NZ", "Kuxir97": "IT", "LJ": "US", "Lj": "US", "Lostt": "BR",
   "M1k3rules": "GB", "Maestro": "DK", "MajicBear": "US", "Markydooda": "GB", "Metsanauris": "FI",
   "Mist": "US", "N1tro": "US", "noly": "GB", "Oaly": "NL", "Oski": "PL",
   "Paarth": "US", "Remkoe": "NL", "Retals": "US", "reysbull": "CL", "Rise": "GB",
-  "Rizzo": "US", "Rw9": "SA", "Rxii": "ES", "Satthew": "US", "Scream": "FR",
+  "Rizzo": "US", "Rw9": "SA", "Satthew": "US", "Scream": "FR",
   "stizzy": "ES", "Superlachie": "AU", "Sypical": "US", "Torsos": "NZ", "Trk511": "SA",
   "Turo": "US", "vatira": "FR", "yanxnz": "BR", "zen": "FR",
 };
@@ -219,8 +277,15 @@ const ROSTER_STAT_KEYS = ['mechanics', 'gameSense', 'speed', 'shooting', 'defend
 // 0-5-Sterne-Darstellung (0.5er-Schritte) aus dem Overall-Wert (~45-95er
 // Spanne) -- dieselbe Formel-Idee wie orgStarRating() in organizations.js,
 // nur auf die Spieler/Mitarbeiter-Overall-Spanne skaliert statt auf 0-100.
+// Bug-Fix (User-Meldung: "bei potential steht noch nan"): Math.max/Math.min
+// geben bei JEDEM NaN-Argument selbst NaN zurück (JS-Spezifikum) -- ein
+// undefined/NaN `overall` (z.B. eine Person mit unvollständigen Daten) machte
+// bisher JEDE nachgelagerte Sterne-/Potenzial-Anzeige (npcStarRating() UND
+// darauf aufbauend scoutingPotentialStars()) unbrauchbar, statt einen
+// erkennbaren, klaren Wert zu zeigen.
 function npcStarRating(overall) {
-  return Math.max(0.5, Math.min(5, Math.round(((overall - 45) / 50) * 5 * 2) / 2));
+  const safeOverall = (typeof overall === 'number' && !Number.isNaN(overall)) ? overall : 45;
+  return Math.max(0.5, Math.min(5, Math.round(((safeOverall - 45) / 50) * 5 * 2) / 2));
 }
 
 // Kehrwert von npcStarRating() -- rechnet eine GEWÜNSCHTE Sterne-Bewertung
@@ -236,7 +301,7 @@ function starsToOverall(stars) {
 // Org-Bewertung ergibt sich danach als Durchschnitt ihres Kaders (siehe
 // computeOrgStrengthFromRoster() unten). Zwei getrennte "Ziehungs-Beutel":
 // Spieler-Beutel (3 Starter + Sub -- Sub zählt hier als Spieler-Rolle, braucht
-// wie die Starter volle Match-Stats) und Mitarbeiter-Beutel (Coach + 9
+// wie die Starter volle Match-Stats) und Mitarbeiter-Beutel (Coach + 8
 // Team-Mitarbeiter-Rollen), damit beide Kategorien für sich GLEICHMÄSSIG
 // verteilt sind, nicht nur insgesamt.
 //
@@ -244,9 +309,9 @@ function starsToOverall(stars) {
 // Sterne-Stufen gemischt (Fisher-Yates) und dann einzeln abgearbeitet -- so
 // enthält jede Zehnerrunde garantiert genau eine 0,5-, eine 1-, ..., eine
 // 5-Sterne-Ziehung, ohne dass die Gesamtzahl der Ziehungen im Voraus bekannt
-// sein muss (bei 87 Orgas x 9 Mitarbeiterrollen = 870 Ziehungen geht exakt
-// glatt auf: 87 pro Stufe; bei 87 x 4 Spieler-Rollen = 348 Ziehungen bleiben
-// nur 2 der 10 Stufen einmal seltener, der Rest ist exakt gleich oft).
+// sein muss (bei 87 Orgas x 8 Mitarbeiterrollen = 696 Ziehungen bleiben nur
+// 4 der 10 Stufen einmal seltener, der Rest ist exakt gleich oft; bei 87 x 4
+// Spieler-Rollen = 348 Ziehungen bleiben nur 2 der 10 Stufen einmal seltener).
 const STAR_TIERS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 function makeShuffledBagPicker(seed, tiers) {
   const rng = mulberry32(seed);
@@ -318,27 +383,42 @@ function rollStarsAround(center, spread, rng) {
   return clampToStarTier(center + (rng() * 2 - 1) * spread);
 }
 
-// Org-Bewertung (0-100, dieselbe Skala, die orgStarRating()/orgDifficulty()/
-// computeMatchBonusPct() in organizations.js schon vorher erwarteten) ergibt
-// sich jetzt als Durchschnitt der Sterne-Bewertungen des GESAMTEN Kaders (3
-// Starter + Sub + Coach + 9 Mitarbeiter = 14 Personen) -- "Vitality 5 Sterne,
+// Org-Bewertung (0-100, dieselbe Skala, die orgStarRating()/orgDifficulty()
+// in organizations.js schon vorher erwarteten) ergibt sich jetzt als
+// Durchschnitt der Sterne-Bewertungen des GESAMTEN Kaders (3
+// Starter + Sub + Coach + 8 Mitarbeiter = 13 Personen) -- "Vitality 5 Sterne,
 // weil 5-Sterne-Spieler und 4-5-Sterne-Staff", nicht umgekehrt.
 function computeOrgStrengthFromRoster(roster) {
   // .filter(Boolean) -- bei den 87 festen Orgas ist .sub immer gesetzt, bei
   // selbst erstellten Orgas (Organisation erstellen, siehe renderer.js
   // buildCustomOrgFromForm()) kann .sub aber bewusst null sein (kein 4.
   // Spieler in der Free-Agent-Auffüllung).
-  const people = [...roster.starters, roster.sub, roster.coach, ...roster.staff].filter(Boolean);
+  // Personal-Seite: gekündigtes Personal wird NICHT aus dem Array entfernt
+  // (sonst müssten alle .find((s) => s.role === X)-Aufrufe im Projekt gegen
+  // Lücken abgesichert werden), sondern durch { role, vacant: true }
+  // ersetzt -- .filter(Boolean) allein würde dieses Objekt fälschlich als
+  // besetzt zählen (p.overall wäre undefined -> NaN in der Mittelwertbildung,
+  // Stärke der GESAMTEN Org würde NaN). !p.vacant schließt diese Plätze
+  // korrekt aus der Stärke-Berechnung aus (kein Personal in der Rolle = kein
+  // Beitrag zur Org-Stärke).
+  const people = [...roster.starters, roster.sub, roster.coach, ...roster.staff].filter((p) => p && !p.vacant);
+  // Bug-Fix (Audit): eine komplett leere Org (Schwierigkeit "Schwer" + "Mit
+  // Free Agents auffüllen" deaktiviert bei "Organisation erstellen") hat
+  // people.length === 0 -- die Division ergab bisher 0/0 = NaN, was als
+  // org.strength gespeichert wurde und u.a. "Stärke NaN" im UI anzeigte und
+  // sponsorWillBeAccepted() (jeder Vergleich mit NaN ist immer false) dauerhaft
+  // JEDEN Sponsor ablehnen ließ, solange der Kader leer war.
+  if (people.length === 0) return 0;
   const avgStars = people.reduce((sum, p) => sum + npcStarRating(p.overall), 0) / people.length;
   return Math.round((avgStars / 5) * 100);
 }
 
 // Baut den festen Kader einer Org: 3 Starter + 1 Sub + 1 Coach (alle mit den
 // echten match.js-Statachsen, damit sie normal ins Turnier einsteigen können)
-// + 9 Team-Mitarbeiter (nur Overall/Sterne, keine Match-Stats nötig -- die
+// + 8 Team-Mitarbeiter (nur Overall/Sterne, keine Match-Stats nötig -- die
 // spielen nie mit, siehe Team-Mitarbeiter-Sektion im Org-Vorschau-Panel).
 // Namen: wo die Datenbank (ORG_REAL_ROSTER_NAMES) eine echte Person für diese
-// Org+Rolle kennt, wird die verwendet -- sonst (Sub, Trainer, Analyst, oder
+// Org+Rolle kennt, wird die verwendet -- sonst (Sub, Analyst, oder
 // Orgas ohne DB-Eintrag) bleibt es bei der prozeduralen Fantasienamen-Vergabe.
 function generateOrgRoster(org) {
   const rng = mulberry32(hashString(org.name));
@@ -441,14 +521,24 @@ function generateOrgRoster(org) {
     };
   }
 
-  function rollStaff(stars, realName) {
-    const overall = starsToOverall(stars);
+  function rollStaff(stars, realName, role) {
+    const targetOverall = starsToOverall(stars);
+    const attrs = generateStaffAttributes(role, targetOverall, rng);
+    // Overall wird -- genau wie bei rollPlayer() -- aus dem tatsächlichen
+    // Durchschnitt der (gestreuten) Attribute abgeleitet, nicht 1:1 aus
+    // targetOverall übernommen, damit "overall" (Sterne-Anzeige, Org-Stärke,
+    // Marktwert) konsistent zu den angezeigten Einzelwerten bleibt.
+    const attrKeys = Object.keys(attrs);
+    const overall = attrKeys.length > 0
+      ? Math.round(attrKeys.reduce((sum, k) => sum + attrs[k], 0) / attrKeys.length)
+      : targetOverall;
     return {
       name: realName || uniqueStaffName(),
       country: pickNation(),
       avatarId: pickAvatarId(),
       age: pickStaffAge(),
       ...rollContractDates(),
+      ...attrs,
       overall,
     };
   }
@@ -462,7 +552,7 @@ function generateOrgRoster(org) {
   const coach = rollPlayer(rollStarsAround(orgTier, staffSpread, rng), realNames && realNames.coach);
   const staff = ORG_ROSTER_STAFF_ROLES.map((role) => ({
     role,
-    ...rollStaff(rollStarsAround(orgTier, staffSpread, rng), realNames && realNames.staff[role]),
+    ...rollStaff(rollStarsAround(orgTier, staffSpread, rng), realNames && realNames.staff[role], role),
   }));
 
   // Runde 122, User-Vorgabe: "Reserve"-Kategorie -- separate Sammelstelle für
@@ -488,7 +578,7 @@ function generateOrgRoster(org) {
 // dadurch realistisch "jetzt", nicht am festen Karriere-Startanker.
 function rollReplacementPerson(centerStars, role, contractDateAnchor) {
   const stars = clampToStarTier(centerStars + (Math.random() * 2 - 1) * 1.2);
-  const overall = starsToOverall(stars);
+  const targetOverall = starsToOverall(stars);
   const nations = CHARACTER_NATIONS.map((n) => n.code);
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const isCoachRole = role === 'Coach';
@@ -498,7 +588,27 @@ function rollReplacementPerson(centerStars, role, contractDateAnchor) {
   const age = isCoachRole ? Math.round(17 + Math.random() * 15) : Math.round(24 + Math.random() * 31);
   const contractStart = contractDateAnchor;
   const contractEnd = addMonthsToDateStr(contractStart, Math.round(12 + Math.random() * 24));
-  return { name, country: pick(nations), avatarId: pick(CHARACTER_AVATARS).id, age, overall, contractStart, contractEnd };
+  // Bug-Fix (Personal-Seite, per Live-Test gefunden): ein abgeworbener Coach
+  // bekam bisher WEDER die 6 Spieler-Statachsen (rollPlayer()) NOCH
+  // rollenspezifische Attribute -- die Person-Info-Seite hätte für einen
+  // ersetzten Coach danach gar keine Statachsen mehr angezeigt (hasStats-
+  // Check schlägt fehl). Jetzt genau wie beim initialen Kaderaufbau: Coach
+  // bekommt ROSTER_STAT_KEYS um targetOverall gestreut, die 8 echten
+  // Personal-Rollen bekommen ihre STAFF_ROLE_ATTRIBUTES -- Overall wird aus
+  // den tatsächlichen Werten abgeleitet (konsistent mit rollStaff()/rollPlayer()).
+  let extra = {};
+  let overall = targetOverall;
+  if (isCoachRole) {
+    ROSTER_STAT_KEYS.forEach((key) => {
+      extra[key] = Math.max(45, Math.min(95, Math.round(targetOverall + (Math.random() * 2 - 1) * 4)));
+    });
+    overall = Math.round(ROSTER_STAT_KEYS.reduce((sum, k) => sum + extra[k], 0) / ROSTER_STAT_KEYS.length);
+  } else if (STAFF_ROLE_ATTRIBUTES[role]) {
+    extra = generateStaffAttributes(role, targetOverall, Math.random);
+    const keys = Object.keys(extra);
+    overall = keys.length > 0 ? Math.round(keys.reduce((sum, k) => sum + extra[k], 0) / keys.length) : targetOverall;
+  }
+  return { name, country: pick(nations), avatarId: pick(CHARACTER_AVATARS).id, age, ...extra, overall, contractStart, contractEnd };
 }
 
 // ── Freie Agenten (Runde 120, User-Vorgabe: "bei scouting sollen auch die
@@ -511,12 +621,20 @@ function rollReplacementPerson(centerStars, role, contractDateAnchor) {
 // (`if (entry.country) return` -- In-Place-Cache), damit dieselbe Person bei
 // wiederholten Scouting-Re-Renders (Suche/Filter/Pagination) stabil bleibt,
 // statt bei jedem Aufruf neu zu würfeln.
-function hydrateFreeAgentIdentity(entry, isPlayerAgeRange) {
+function hydrateFreeAgentIdentity(entry, isPlayerAgeRange, role) {
   if (!entry.country) {
     const nations = CHARACTER_NATIONS.map((n) => n.code);
     entry.country = nations[Math.floor(Math.random() * nations.length)];
     entry.avatarId = CHARACTER_AVATARS[Math.floor(Math.random() * CHARACTER_AVATARS.length)].id;
     entry.age = isPlayerAgeRange ? Math.round(17 + Math.random() * 15) : Math.round(24 + Math.random() * 31);
+    // Personal-Seite: freie Mitarbeiter-Agenten (FREE_AGENT_STAFF, data/free-agents.js)
+    // haben nur `name`/`overall` (handkuratierte, feste Werte) -- Attribute
+    // werden UM das bestehende `overall` gestreut, `overall` selbst bleibt
+    // bewusst unangetastet (kuratierte Datenverteilung soll nicht verschoben
+    // werden, anders als beim prozeduralen Org-Kader-Aufbau).
+    if (role && STAFF_ROLE_ATTRIBUTES[role]) {
+      Object.assign(entry, generateStaffAttributes(role, entry.overall, Math.random));
+    }
   }
   return entry;
 }
@@ -526,7 +644,7 @@ function freeAgentPlayerPool() {
 }
 
 function freeAgentStaffPool(role) {
-  return (FREE_AGENT_STAFF[role] || []).map((p) => hydrateFreeAgentIdentity(p, false));
+  return (FREE_AGENT_STAFF[role] || []).map((p) => hydrateFreeAgentIdentity(p, false, role));
 }
 
 // Verwandelt einen Pool-Eintrag beim tatsächlichen Verpflichten in eine

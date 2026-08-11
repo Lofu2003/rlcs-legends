@@ -606,6 +606,24 @@
           <div id="dashboard-region-badge" class="dashboard-region-badge">🌍 REGION: <span id="dashboard-region-value">–</span></div>
           <h1 id="dashboard-page-title" class="dashboard-page-title">Startseite</h1>
         </div>
+        <div id="dashboard-cart-wrap" class="dashboard-cart-wrap">
+          <button id="btn-dashboard-cart" type="button" class="dashboard-cart-btn" title="Warenkorb">
+            <svg class="dashboard-cart-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2l2.4 11.2A2 2 0 0 0 9.4 17h7.2a2 2 0 0 0 2-1.6L20 7H6"/></svg>
+            <span id="dashboard-cart-count" class="dashboard-sidebar-badge dashboard-cart-count hidden"></span>
+          </button>
+          <div id="dashboard-cart-panel" class="dashboard-cart-panel hidden">
+            <div class="dashboard-cart-panel-title">Warenkorb</div>
+            <div id="dashboard-cart-items" class="dashboard-cart-items"></div>
+            <div id="dashboard-cart-empty" class="dashboard-cart-empty hidden">Der Warenkorb ist leer.</div>
+            <div class="dashboard-cart-footer">
+              <span id="dashboard-cart-total" class="dashboard-cart-total"></span>
+              <div class="dashboard-cart-footer-btns">
+                <button id="btn-dashboard-cart-clear" type="button" class="menu-btn dashboard-cart-clear-btn">Leeren</button>
+                <button id="btn-dashboard-cart-checkout" type="button" class="menu-btn menu-btn-primary dashboard-cart-checkout-btn">Kaufen</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="dashboard-date-block">
           <div class="dashboard-date-text">
             <span id="dashboard-date-weekday" class="dashboard-date-weekday"></span>
@@ -622,34 +640,32 @@
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h5v-5h2v5h5v-9"/></svg>
             <span>Startseite</span>
           </button>
-          <button type="button" class="dashboard-sidebar-item is-locked" data-page="post">
+          <button type="button" class="dashboard-sidebar-item" data-page="post">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>
             <span>Post</span>
-            <span class="dashboard-sidebar-lock-badge">🔒</span>
+            <span id="dashboard-sidebar-badge-post" class="dashboard-sidebar-badge hidden"></span>
           </button>
-          <button type="button" class="dashboard-sidebar-item is-locked" data-page="messages">
+          <button type="button" class="dashboard-sidebar-item" data-page="messages">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4V5Z"/></svg>
             <span>Nachrichten</span>
-            <span class="dashboard-sidebar-lock-badge">🔒</span>
+            <span id="dashboard-sidebar-badge-messages" class="dashboard-sidebar-badge hidden"></span>
           </button>
           <button type="button" class="dashboard-sidebar-item" data-page="roster">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M4 20c0-3 2.5-5 5-5s5 2 5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 20c.2-2.3 1.7-4 3.6-4.4"/></svg>
             <span>Kader</span>
           </button>
-          <button type="button" class="dashboard-sidebar-item is-locked" data-page="staff">
+          <button type="button" class="dashboard-sidebar-item" data-page="staff">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>
             <span>Personal</span>
-            <span class="dashboard-sidebar-lock-badge">🔒</span>
           </button>
-          <button type="button" class="dashboard-sidebar-item is-locked" data-page="training">
+          <button type="button" class="dashboard-sidebar-item" data-page="training">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4M21 10v4M6 8v8M18 8v8M6 12h12"/></svg>
             <span>Training</span>
-            <span class="dashboard-sidebar-lock-badge">🔒</span>
+            <span id="dashboard-sidebar-badge-training" class="dashboard-sidebar-badge hidden"></span>
           </button>
-          <button type="button" class="dashboard-sidebar-item is-locked" data-page="tactics">
+          <button type="button" class="dashboard-sidebar-item" data-page="tactics">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M8 11h8M8 15h5"/></svg>
             <span>Strategien</span>
-            <span class="dashboard-sidebar-lock-badge">🔒</span>
           </button>
           <button type="button" class="dashboard-sidebar-item" data-page="scouting">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
@@ -667,15 +683,13 @@
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>
             <span>Statistiken</span>
           </button>
-          <button type="button" class="dashboard-sidebar-item is-locked" data-page="basecamp">
+          <button type="button" class="dashboard-sidebar-item" data-page="basecamp">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 12 5l8 15Z"/><path d="M9 20l3-6 3 6"/></svg>
             <span>Basecamp</span>
-            <span class="dashboard-sidebar-lock-badge">🔒</span>
           </button>
-          <button type="button" class="dashboard-sidebar-item is-locked" data-page="shop">
+          <button type="button" class="dashboard-sidebar-item" data-page="shop">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2l2.4 11.2A2 2 0 0 0 9.4 17h7.2a2 2 0 0 0 2-1.6L20 7H6"/></svg>
             <span>Shop</span>
-            <span class="dashboard-sidebar-lock-badge">🔒</span>
           </button>
           <button type="button" class="dashboard-sidebar-item" data-page="sponsors">
             <svg class="dashboard-sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"/><path d="M9 13.5 7 21l5-3 5 3-2-7.5"/></svg>
@@ -1004,6 +1018,139 @@
                 </svg>
                 <div id="dashboard-sponsors-jersey-logo" class="dashboard-sponsors-jersey-logo"></div>
               </div>
+            </div>
+          </div>
+
+          <!-- Shop: Peripherie-/Basecamp-Ausrüstung, die als Team-weiter (nicht
+               spieler-individueller) Statbonus wirkt -- siehe Kommentar bei
+               equipmentStatBonuses()/equipmentMatchBonusPct() in renderer.js für
+               die Begründung (kein Pro-Spieler-Ausrüstungskonzept existiert
+               irgendwo sonst im Spiel, roster ist teamweit). Datenbasis:
+               data/shop-items.js. -->
+          <div id="dashboard-page-shop" class="dashboard-shop-panel hidden">
+            <div id="dashboard-shop-tabs" class="dashboard-shop-tabs">
+              <button type="button" class="dashboard-shop-tab is-active" data-shop-tab="all">Alle</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="basecamp">Basecamp</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="tastaturen">Tastaturen</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="maeuse">Mäuse</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="mauspads">Mauspads</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="kopfhoerer">Kopfhörer</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="pcs">PCs</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="monitore">Monitore</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="tische">Tische</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="stuehle">Stühle</button>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="getraenke">Getränke</button>
+              <span class="dashboard-shop-tab-divider"></span>
+              <button type="button" class="dashboard-shop-tab" data-shop-tab="favoriten">★ Favoriten</button>
+            </div>
+            <div id="dashboard-shop-basecamp-status" class="dashboard-shop-basecamp-status"></div>
+            <div id="dashboard-shop-grid" class="dashboard-shop-grid"></div>
+            <div id="dashboard-shop-empty" class="dashboard-shop-empty hidden">Keine Produkte in dieser Kategorie.</div>
+            <div id="dashboard-shop-pagination" class="dashboard-shop-pagination"></div>
+          </div>
+
+          <!-- Basecamp-Übersicht: Hero-Darstellung des aktuellen Basecamp-Levels
+               + 3x3-Ausrüstungs-Grid links, Gesamtboni + Inventar-Tabelle rechts.
+               Kategorie-Tabs verlinken bewusst in den bestehenden Shop (data-page
+               "shop" + Kategorie-Filter) statt eine zweite Kauf-/Filter-UI zu
+               bauen -- siehe renderDashboardBasecampPanel() in renderer.js. -->
+          <div id="dashboard-page-basecamp" class="dashboard-basecamp-panel hidden">
+            <div id="dashboard-basecamp-tabs" class="dashboard-shop-tabs">
+              <button type="button" class="dashboard-shop-tab is-active" data-basecamp-tab="overview">Übersicht</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="basecamp">Basecamp</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="tastaturen">Tastaturen</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="maeuse">Mäuse</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="mauspads">Mauspads</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="kopfhoerer">Kopfhörer</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="pcs">PCs</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="monitore">Monitore</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="tische">Tische</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="stuehle">Stühle</button>
+              <button type="button" class="dashboard-shop-tab" data-basecamp-tab="getraenke">Getränke</button>
+            </div>
+
+            <div class="dashboard-basecamp-columns">
+              <div class="dashboard-basecamp-left">
+                <div id="dashboard-basecamp-hero" class="dashboard-basecamp-hero" title="Zum Basecamp-Ausbau im Shop">
+                  <div class="dashboard-basecamp-hero-overlay">
+                    <div id="dashboard-basecamp-hero-stars" class="dashboard-basecamp-hero-stars"></div>
+                    <div id="dashboard-basecamp-hero-type" class="dashboard-basecamp-hero-type"></div>
+                    <div class="dashboard-basecamp-hero-name-row">
+                      <span id="dashboard-basecamp-hero-name" class="dashboard-basecamp-hero-name"></span>
+                      <span class="dashboard-basecamp-hero-open-icon">↗</span>
+                    </div>
+                  </div>
+                </div>
+                <div id="dashboard-basecamp-equip-grid" class="dashboard-basecamp-equip-grid"></div>
+              </div>
+
+              <div class="dashboard-basecamp-right">
+                <h3 class="dashboard-basecamp-section-title">» Gesamtboni</h3>
+                <div id="dashboard-basecamp-bonus-panel" class="dashboard-basecamp-bonus-panel"></div>
+                <h3 class="dashboard-basecamp-section-title">» Ausrüstung</h3>
+                <div id="dashboard-basecamp-inventory" class="dashboard-basecamp-inventory"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Strategien: Rocket-League-passende Spielstile (KEINE CS-Bombsite-
+               Taktiken) mit echter Match-Wirkung über den bestehenden
+               orgMatchBonusPct-Kanal -- siehe computeActiveStrategyMatchBonusPct()
+               in renderer.js. Datenbasis: data/strategies.js. 3 Unter-Tabs:
+               Presets (Strategien), freie Regler-Taktik (Allround-Taktik) und
+               eigene gespeicherte Taktiken (Taktik-Ersteller). -->
+          <div id="dashboard-page-tactics" class="dashboard-tactics-panel hidden">
+            <h2 class="dashboard-tactics-title">Strategien und Taktiken</h2>
+            <div id="dashboard-tactics-main-tabs" class="dashboard-shop-tabs">
+              <button type="button" class="dashboard-shop-tab is-active" data-tactics-main-tab="strategien">Strategien</button>
+              <button type="button" class="dashboard-shop-tab" data-tactics-main-tab="allround">Allround-Taktik</button>
+              <button type="button" class="dashboard-shop-tab" data-tactics-main-tab="ersteller">Taktik-Ersteller</button>
+            </div>
+
+            <div id="dashboard-tactics-strategien-tab" class="dashboard-tactics-subtab">
+              <div id="dashboard-tactics-category-nav" class="dashboard-tactics-category-nav">
+                <button type="button" class="dashboard-tactics-cat-btn is-active" data-tactics-cat="all">ALLE</button>
+                <button type="button" class="dashboard-tactics-cat-btn" data-tactics-cat="offensiv">OFFENSIV</button>
+                <button type="button" class="dashboard-tactics-cat-btn" data-tactics-cat="defensiv">DEFENSIV</button>
+                <button type="button" class="dashboard-tactics-cat-btn" data-tactics-cat="balanciert">BALANCIERT</button>
+                <button type="button" class="dashboard-tactics-cat-btn" data-tactics-cat="konter">KONTER</button>
+                <button type="button" class="dashboard-tactics-cat-btn" data-tactics-cat="ballbesitz">BALLBESITZ</button>
+                <button type="button" class="dashboard-tactics-cat-btn" data-tactics-cat="pressing">PRESSING</button>
+              </div>
+
+              <div id="dashboard-tactics-strip" class="dashboard-tactics-strip"></div>
+
+              <div class="dashboard-tactics-columns">
+                <div class="dashboard-tactics-arena-col">
+                  <div id="dashboard-tactics-arena" class="dashboard-tactics-arena">
+                    <svg class="dashboard-tactics-field-svg" viewBox="0 0 200 280" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="4" y="4" width="192" height="272" rx="10" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="2"/>
+                      <line x1="4" y1="140" x2="196" y2="140" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+                      <circle cx="100" cy="140" r="28" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+                      <rect x="58" y="4" width="84" height="24" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="1.5"/>
+                      <rect x="58" y="252" width="84" height="24" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="1.5"/>
+                      <circle cx="100" cy="140" r="4" fill="rgba(255,255,255,0.3)"/>
+                    </svg>
+                    <div id="dashboard-tactics-arena-arrows" class="dashboard-tactics-arena-arrows"></div>
+                    <div class="dashboard-tactics-arena-overlay">
+                      <div id="dashboard-tactics-arena-name" class="dashboard-tactics-arena-name"></div>
+                      <div id="dashboard-tactics-arena-category" class="dashboard-tactics-arena-category"></div>
+                      <div id="dashboard-tactics-arena-desc" class="dashboard-tactics-arena-desc"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="dashboard-tactics-detail-col">
+                  <div id="dashboard-tactics-detail" class="dashboard-tactics-detail"></div>
+                </div>
+              </div>
+            </div>
+
+            <div id="dashboard-tactics-allround-tab" class="dashboard-tactics-subtab hidden">
+              <div id="dashboard-tactics-allround-panel" class="dashboard-tactics-allround-panel"></div>
+            </div>
+
+            <div id="dashboard-tactics-ersteller-tab" class="dashboard-tactics-subtab hidden">
+              <div id="dashboard-tactics-ersteller-panel" class="dashboard-tactics-ersteller-panel"></div>
             </div>
           </div>
 
@@ -1340,11 +1487,45 @@
                     <span id="dashboard-person-info-role" class="dashboard-team-info-coach-role"></span>
                     <div id="dashboard-person-info-team-name" class="dashboard-team-info-coach-name dashboard-person-info-team-link"></div>
                   </div>
+                  <!-- Nachrichtensystem: nur sichtbar, wenn die Person zum EIGENEN
+                       Kader gehört (siehe renderPersonInfoPanel()). -->
+                  <button type="button" id="dashboard-person-info-message-btn" class="dashboard-training-coach-goto-btn hidden">💬 Nachricht</button>
                 </div>
 
                 <div id="dashboard-person-info-stats-section" class="hidden">
                   <div class="dashboard-tournaments-breadcrumb">» Statachsen</div>
                   <div id="dashboard-person-info-stats" class="dashboard-person-info-stats"></div>
+                </div>
+
+                <!-- Team-Zustand -- gilt einheitlich für JEDE Person dieser Org
+                     (Spieler UND Personal, kein Pro-Person-Wert vorhanden), siehe
+                     Kommentar in renderPersonInfoPanel(). -->
+                <div class="dashboard-tournaments-breadcrumb">» Team-Zustand</div>
+                <div class="dashboard-person-info-team-status">
+                  <div class="dashboard-person-info-status-row">
+                    <span class="dashboard-person-info-status-label">Gesundheit</span>
+                    <div class="dashboard-person-info-stat-track"><div id="dashboard-person-info-condition-fill" class="dashboard-person-info-stat-fill"></div></div>
+                    <span id="dashboard-person-info-condition-value" class="dashboard-person-info-stat-value"></span>
+                    <span id="dashboard-person-info-condition-pill" class="dashboard-roster-card-pill"></span>
+                  </div>
+                  <div class="dashboard-person-info-status-row">
+                    <span class="dashboard-person-info-status-label">Moral</span>
+                    <div class="dashboard-person-info-stat-track"><div id="dashboard-person-info-morale-fill" class="dashboard-person-info-stat-fill"></div></div>
+                    <span id="dashboard-person-info-morale-value" class="dashboard-person-info-stat-value"></span>
+                    <span id="dashboard-person-info-morale-pill" class="dashboard-roster-card-pill"></span>
+                  </div>
+                </div>
+
+                <!-- Training (neu) -- nur bei echten Spielern MIT playerDevelopment-
+                     Eintrag sichtbar, siehe renderPersonInfoPanel()-Kommentar. Rein
+                     lesend (Modus/Kategorie ändern passiert auf der Trainings-Seite). -->
+                <div id="dashboard-person-info-training-card" class="hidden">
+                  <div class="dashboard-tournaments-breadcrumb">» Training</div>
+                  <div class="dashboard-training-reason-row">
+                    <span class="dashboard-roster-card-pill is-active" id="dashboard-person-info-training-mode"></span>
+                    <span id="dashboard-person-info-training-reason" class="dashboard-training-reason"></span>
+                  </div>
+                  <div id="dashboard-person-info-training-categories" class="dashboard-person-info-stats"></div>
                 </div>
               </div>
 
@@ -1504,14 +1685,15 @@
                 <div id="dashboard-scouting-pagination" class="dashboard-stats-pagination"></div>
               </div>
 
-              <!-- "Personal"-Tab (Runde 117: Verpflichten-Mechanik gebaut; Runde 121,
-                   User-Vorgabe: "Personal soll erstmal gesperrt sein" -- Gehaltssystem
-                   existiert bisher nur für Spieler, Personal-Käufe bleiben deshalb
-                   vorerst deaktiviert. Tabelle bleibt sichtbar (Übersicht/Scouting
-                   funktioniert weiter), nur der Verpflichten-Button ist gesperrt,
-                   siehe scoutingStaffRowHtml() in renderer.js. -->
+              <!-- "Personal"-Tab: Verpflichten-Mechanik voll funktional seit der
+                   Personal-Seite (siehe scoutingStaffRowHtml()/signStaffMember() in
+                   renderer.js). Bug-Fix (Audit): der alte "🔒 kommt später"-Banner
+                   aus der Zeit VOR der Personal-Seite war hier vergessen worden und
+                   stand permanent (nirgends im JS referenziert/versteckt) über einer
+                   längst funktionierenden Tabelle -- entfernt. GEHALT-Spalte ergänzt
+                   (Personal zahlt jetzt dieselbe laufende Gehaltsformel wie Spieler,
+                   siehe totalMonthlySalaryCommitment()), analog zur Spieler-Tabelle. -->
               <div id="dashboard-scouting-staff-view" class="dashboard-stats-tab-view hidden">
-                <div class="dashboard-scouting-locked-banner">🔒 Personal-Verpflichtungen kommen in einem späteren Update.</div>
                 <div class="dashboard-stats-table-wrap">
                   <div class="dashboard-stats-table-header dashboard-scouting-staff-table-header">
                     <span>SPITZNAME</span>
@@ -1522,6 +1704,7 @@
                     <span class="dashboard-stats-col-num">POTENZIAL</span>
                     <span>VERTRAGSENDE</span>
                     <span class="dashboard-stats-col-num">TRANSFERWERT</span>
+                    <span class="dashboard-stats-col-num">GEHALT</span>
                     <span>TEAM</span>
                     <span></span>
                   </div>
@@ -1586,6 +1769,158 @@
               <div class="dashboard-roster-section-title">Reserve <span id="dashboard-roster-reserve-count" class="dashboard-roster-section-count"></span></div>
               <div id="dashboard-roster-reserve" class="dashboard-roster-cards"></div>
               <div id="dashboard-roster-pending" class="dashboard-roster-pending-list"></div>
+            </div>
+          </div>
+
+          <!-- Personal: 1:1 nach dem Vorbild der Kader-Seite oben (gleiche Header-/
+               Chemie-Zeile/Karten-Bausteine, dashboard-roster-*-Klassen wiederverwendet)
+               -- ABER kein Sub/Reserve, stattdessen genau 1 Slot je Kategorie (Coach +
+               die 8 ORG_ROSTER_STAFF_ROLES aus data/org-rosters.js). Rendering/Logik
+               siehe renderDashboardPersonalPanel() in renderer.js. -->
+          <div id="dashboard-page-staff" class="dashboard-stats-panel hidden">
+            <div class="dashboard-roster-main">
+              <div class="dashboard-roster-header">
+                <div id="dashboard-staff-header-logo" class="dashboard-roster-header-logo"></div>
+                <img id="dashboard-staff-header-flag" class="dashboard-team-info-flag" alt="">
+                <div class="dashboard-roster-header-text">
+                  <div id="dashboard-staff-header-name" class="dashboard-roster-header-name"></div>
+                  <div class="dashboard-roster-header-meta-row">
+                    <span id="dashboard-staff-header-rank" class="dashboard-roster-header-rank"></span>
+                    <span id="dashboard-staff-header-points"></span>
+                    <span id="dashboard-staff-header-stars" class="dashboard-tournament-stars"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="dashboard-roster-chem-row">
+                <div class="dashboard-roster-chem-item">
+                  <div class="dashboard-roster-chem-label"><span>Physischer Zustand</span><span id="dashboard-staff-chem-condition-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-staff-chem-condition-fill" class="dashboard-roster-chem-fill is-condition"></div></div>
+                </div>
+                <div class="dashboard-roster-chem-item">
+                  <div class="dashboard-roster-chem-label"><span>Moral</span><span id="dashboard-staff-chem-morale-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-staff-chem-morale-fill" class="dashboard-roster-chem-fill is-morale"></div></div>
+                </div>
+                <div class="dashboard-roster-chem-item">
+                  <div class="dashboard-roster-chem-label"><span>Sprachliche Verständigung</span><span id="dashboard-staff-chem-language-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-staff-chem-language-fill" class="dashboard-roster-chem-fill is-language"></div></div>
+                </div>
+              </div>
+
+              <div class="dashboard-roster-section-title">Personal</div>
+              <div id="dashboard-staff-cards" class="dashboard-roster-cards dashboard-staff-cards"></div>
+            </div>
+          </div>
+
+          <!-- Training: folgt demselben Header-/Karten-Aufbau wie Kader/Personal
+               oben (dashboard-roster-*-Klassen wiederverwendet), erweitert um
+               eine 4er-Übersichtsleiste, eine Coach-Zusammenfassungskarte und
+               je Spieler eine Trainingsfokus-Steuerung + Fortschrittsbalken.
+               Coach/Trainer wurden zusammengelegt (User-Entscheidung: Coach
+               bleibt) -- der eigene Trainer-Personal-Slot ist entfernt, Coach
+               übernimmt Match- UND Entwicklungsbonus. Rendering/Logik siehe
+               renderDashboardTrainingPanel() in renderer.js. -->
+          <div id="dashboard-page-training" class="dashboard-stats-panel hidden">
+            <div class="dashboard-roster-main">
+              <div class="dashboard-roster-header">
+                <div id="dashboard-training-header-logo" class="dashboard-roster-header-logo"></div>
+                <img id="dashboard-training-header-flag" class="dashboard-team-info-flag" alt="">
+                <div class="dashboard-roster-header-text">
+                  <div id="dashboard-training-header-name" class="dashboard-roster-header-name"></div>
+                  <div class="dashboard-roster-header-meta-row">
+                    <span id="dashboard-training-header-rank" class="dashboard-roster-header-rank"></span>
+                    <span id="dashboard-training-header-points"></span>
+                    <span id="dashboard-training-header-stars" class="dashboard-tournament-stars"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="dashboard-training-summary-row">
+                <div class="dashboard-training-summary-item">
+                  <div class="dashboard-roster-chem-label"><span>Trainingsaktivität</span><span id="dashboard-training-summary-activity-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-training-summary-activity-fill" class="dashboard-training-summary-fill is-activity"></div></div>
+                </div>
+                <div class="dashboard-training-summary-item">
+                  <div class="dashboard-roster-chem-label"><span>Trainingsqualität</span><span id="dashboard-training-summary-quality-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-training-summary-quality-fill" class="dashboard-training-summary-fill is-quality"></div></div>
+                </div>
+                <div class="dashboard-training-summary-item">
+                  <div class="dashboard-roster-chem-label"><span>Moral</span><span id="dashboard-training-summary-morale-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-training-summary-morale-fill" class="dashboard-training-summary-fill is-morale"></div></div>
+                </div>
+                <div class="dashboard-training-summary-item">
+                  <div class="dashboard-roster-chem-label"><span>Coach-Auslastung</span><span id="dashboard-training-summary-capacity-value"></span></div>
+                  <div class="dashboard-roster-chem-track"><div id="dashboard-training-summary-capacity-fill" class="dashboard-training-summary-fill is-capacity"></div></div>
+                </div>
+              </div>
+
+              <div class="dashboard-roster-section-title">Coach</div>
+              <div id="dashboard-training-coach-card"></div>
+
+              <div class="dashboard-roster-section-title">Spieler-Training</div>
+              <div id="dashboard-training-cards" class="dashboard-roster-cards dashboard-training-cards"></div>
+            </div>
+          </div>
+
+          <!-- Nachrichten: Kontaktliste links (eigener Kader: Spieler + Personal +
+               Coach) + Chat rechts. Rendering/Logik siehe
+               renderDashboardMessagesPanel() in renderer.js. -->
+          <div id="dashboard-page-messages" class="dashboard-stats-panel hidden">
+            <div class="dashboard-messages-layout">
+              <div class="dashboard-messages-contacts">
+                <div class="dashboard-messages-contacts-header">
+                  <input type="text" id="dashboard-messages-search" class="dashboard-stats-search-input dashboard-messages-search-input" placeholder="Kontakt suchen...">
+                  <div class="dashboard-messages-filter-row">
+                    <button type="button" class="dashboard-messages-filter-btn is-active" data-messages-filter="all">Alle</button>
+                    <button type="button" class="dashboard-messages-filter-btn" data-messages-filter="players">Spieler</button>
+                    <button type="button" class="dashboard-messages-filter-btn" data-messages-filter="staff">Personal</button>
+                  </div>
+                </div>
+                <div id="dashboard-messages-contact-list" class="dashboard-messages-contact-list"></div>
+              </div>
+              <div class="dashboard-messages-chat">
+                <div id="dashboard-messages-chat-empty" class="dashboard-messages-chat-empty">Wähle links eine Person aus, um ein Gespräch zu beginnen.</div>
+                <div id="dashboard-messages-chat-active" class="dashboard-messages-chat-active hidden">
+                  <div class="dashboard-messages-chat-header">
+                    <div id="dashboard-messages-chat-avatar" class="dashboard-roster-card-avatar"></div>
+                    <div class="dashboard-messages-chat-header-text">
+                      <div id="dashboard-messages-chat-name" class="dashboard-roster-card-name"></div>
+                      <div id="dashboard-messages-chat-meta" class="dashboard-roster-card-meta"></div>
+                    </div>
+                    <span id="dashboard-messages-chat-status" class="dashboard-roster-card-pill"></span>
+                  </div>
+                  <div id="dashboard-messages-chat-log" class="dashboard-messages-chat-log"></div>
+                  <div id="dashboard-messages-quick-actions" class="dashboard-messages-quick-actions"></div>
+                  <div class="dashboard-messages-compose">
+                    <textarea id="dashboard-messages-input" class="negotiation-message-input dashboard-messages-input" rows="2" maxlength="500" placeholder="Nachricht schreiben..."></textarea>
+                    <button type="button" id="btn-dashboard-messages-send" class="menu-btn menu-btn-primary">Senden</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Post: Ordnerliste links (Status-/Kategorie-Filter mit Live-Zähler) +
+               Nachrichtenliste/Detailansicht rechts. Rendering/Logik siehe
+               renderDashboardPostPanel() in renderer.js. -->
+          <div id="dashboard-page-post" class="dashboard-stats-panel hidden">
+            <div class="dashboard-post-layout">
+              <div class="dashboard-post-folders">
+                <div id="dashboard-post-folder-list" class="dashboard-post-folder-list"></div>
+              </div>
+              <div class="dashboard-post-main">
+                <div id="dashboard-post-list-view" class="dashboard-post-list-view">
+                  <div class="dashboard-post-list-header">
+                    <div id="dashboard-post-list-title" class="dashboard-post-list-title">Alle</div>
+                    <button type="button" id="btn-dashboard-post-mark-all-read" class="dashboard-post-mark-all-btn">Alle als gelesen markieren</button>
+                  </div>
+                  <div id="dashboard-post-message-list" class="dashboard-post-message-list"></div>
+                </div>
+                <div id="dashboard-post-detail-view" class="dashboard-post-detail-view hidden">
+                  <button type="button" id="btn-dashboard-post-back" class="dashboard-post-back-btn">← Zurück zur Liste</button>
+                  <div id="dashboard-post-detail-content" class="dashboard-post-detail-content"></div>
+                </div>
+              </div>
             </div>
           </div>
         </main>
@@ -1732,6 +2067,20 @@
     </div>
   </div>
 
+  <!-- ── Schnellvorlauf-Ladeanzeige (Bug-Fix Audit Runde 7) ───────────────────
+       fastForwardToNextEventDay()/skipRestOfSeasonToTransferWindow() können an
+       Tagen mit vielen aufgelösten Turnieren mehrere Sekunden synchron
+       blockieren (gemessen, kein DOM in der Simulationsschleife selbst -- reines
+       Volumen). Ohne jedes Feedback wirkte das wie ein Absturz/eingefrorenes
+       Fenster. Dieser Overlay wird VOR dem Start kurz eingeblendet (zwei
+       requestAnimationFrame-Ticks, damit Chromium ihn wirklich noch malt, bevor
+       der blockierende Teil beginnt) -- behebt die Blockade selbst nicht, macht
+       aber aus "scheint abgestürzt" ein sichtbares "lädt". -->
+  <div id="fast-forward-overlay" class="fast-forward-overlay hidden">
+    <div class="fast-forward-spinner"></div>
+    <div class="fast-forward-text">Simuliere…</div>
+  </div>
+
   <!-- ── Einstellungen (Hauptmenü) ─────────────────────────────────────────── -->
   <!-- ── Einstellungen ──────────────────────────────────────────────────────
        Teilt sich die Atmosphäre (#app-atmosphere) mit Hauptmenü/Slot-Auswahl
@@ -1844,7 +2193,6 @@
     </div>
   </div>
 
-  <!-- ── Verhandlungs-Popup (Vertragsspieler von Bot-Orgas abwerben) ──────── -->
   <!-- Hintergrundmusik -- läuft app-weit durch (kein .screen-Kind, wird also
        nie von showScreen()'s .hidden-Toggling betroffen), Lautstärke via
        appSettings.musicVolume gesteuert (renderer.js). -->
@@ -1854,6 +2202,8 @@
   <script src="data/test-coaches.js"></script>
   <script src="data/free-agents.js"></script>
   <script src="data/sponsors.js"></script>
+  <script src="data/shop-items.js"></script>
+  <script src="data/strategies.js"></script>
   <script src="data/tournament-calendar.js"></script>
   <script src="data/pricing.js"></script>
   <script src="data/character-traits.js"></script>

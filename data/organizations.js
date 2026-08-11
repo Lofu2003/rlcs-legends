@@ -26,8 +26,6 @@
 // Reserve-Spieler/Verstärkungen -- garantiert für JEDE Org ein positives
 // "Verbleibend" beim Kaderstart (User-Wunsch: "echter Startkader" statt
 // freiem Draft, siehe confirmOrgAndProceed() in renderer.js).
-// Match-Bonus: (Stärke - 84) * 0.4 Prozentpunkte (unverändert, jetzt aber
-// stärkeabhängig von der aus dem Kader berechneten Stärke).
 const ORG_BUDGET_HEADROOM = 1.4;
 
 function computeOrgBudget(roster) {
@@ -35,10 +33,6 @@ function computeOrgBudget(roster) {
     + calculatePrice(roster.sub.overall)
     + calculatePrice(roster.coach.overall);
   return Math.round((rosterValue * ORG_BUDGET_HEADROOM) / 10000) * 10000;
-}
-
-function computeMatchBonusPct(strength) {
-  return Math.round((strength - 84) * 0.4 * 10) / 10;
 }
 
 // name + country (echter Firmensitz, per Websuche gegen Liquipedia/Wikipedia/
@@ -624,6 +618,14 @@ function orgStarRating(strength) {
 // tatsächlich 5 Sterne (fast durchgängig starke Spieler/Mitarbeiter) oder 1
 // Stern (fast durchgängig schwache) erreichen, statt sich (bei komplett
 // unabhängiger Personen-Ziehung) statistisch immer nur um die Mitte einzupendeln.
+// Bug-Fix (Audit Runde 4, Datendateien-Agent): jede Org bekam hier bisher
+// zusätzlich ein `matchBonusPct` (computeMatchBonusPct(strength), inzwischen
+// entfernt) -- das wurde aber NIRGENDS im Projekt gelesen (die tatsächlich in
+// die Matchsimulation einfließende, gleichnamige `matchBonusPct` kommt aus
+// einer komplett anderen Quelle, computeCharacterEffects() in
+// character-traits.js, siehe renderer.js teamChemistryBonusPct()-Aufrufer).
+// Toter Code mit irreführendem Namenskollisions-Risiko (ein künftiger Fix
+// hätte leicht am falschen, toten Feld ansetzen können) -- ersatzlos entfernt.
 const ORGANIZATIONS = ORGANIZATIONS_RAW.map((org) => {
   const roster = generateOrgRoster(org);
   const strength = computeOrgStrengthFromRoster(roster);
@@ -632,7 +634,6 @@ const ORGANIZATIONS = ORGANIZATIONS_RAW.map((org) => {
     strength,
     roster,
     budget: computeOrgBudget(roster),
-    matchBonusPct: computeMatchBonusPct(strength),
   };
 });
 

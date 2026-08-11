@@ -28,7 +28,7 @@ function currentSoundVolume() {
 // (explizite Nutzeraktion), keine automatische Live-Anwendung.
 function playTone(freq, durationMs, volumeMultiplier, type, volumeOverride) {
   const vol = volumeOverride !== undefined ? volumeOverride : currentSoundVolume();
-  if (vol <= 0) return;
+  if (vol <= 0) return null;
   try {
     const ctx = getAudioContext();
     const osc = ctx.createOscillator();
@@ -44,10 +44,38 @@ function playTone(freq, durationMs, volumeMultiplier, type, volumeOverride) {
     gain.connect(ctx.destination);
     osc.start(now);
     osc.stop(now + durationMs / 1000 + 0.02);
-  } catch {}
+    return { osc, gain };
+  } catch {
+    return null;
+  }
 }
 
-function playHoverSound() { playTone(720, 45, 0.5, 'sine'); }
+// Bug-Fix (Audit): schnelles Überstreichen mehrerer Buttons hintereinander
+// (Sponsoren-Karten, Kalendertage, Kader-Kacheln) ließ jede neue
+// playHoverSound()-Instanz unabhängig bis zum Ende ihrer eigenen Hüllkurve
+// weiterlaufen -- bei kurzem Button-Abstand klangen dadurch mehrere
+// 45ms-Töne hörbar überlagert. currentHoverVoice merkt sich die zuletzt
+// gestartete Instanz; ein neuer Hover-Ton bricht eine noch laufende zuerst
+// sanft ab (kurzer exponentieller Fade statt hartem Abschneiden, um ein
+// Knacken zu vermeiden).
+let currentHoverVoice = null;
+function stopHoverVoice() {
+  if (!currentHoverVoice) return;
+  try {
+    const { osc, gain } = currentHoverVoice;
+    const now = getAudioContext().currentTime;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+    osc.stop(now + 0.04);
+  } catch {}
+  currentHoverVoice = null;
+}
+
+function playHoverSound() {
+  stopHoverVoice();
+  currentHoverVoice = playTone(720, 45, 0.5, 'sine');
+}
 function playClickSound() { playTone(480, 70, 1, 'triangle'); }
 function playTestSound(volumeOverride) { playTone(600, 220, 1, 'triangle', volumeOverride); }
 

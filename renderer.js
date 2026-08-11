@@ -9,6 +9,20 @@ const STAT_LABELS = [
   ['boostMgmt', 'BST'],
 ];
 
+// Trainingssystem: volle, lesbare Namen derselben 6 echten Stats (+ "Allgemein"
+// für gleichmäßiges Training aller 6) -- STAT_LABELS oben sind bewusst kurze
+// Kürzel für enge Stat-Reihen, für Fließtext (Trainingskategorie-Auswahl,
+// Auto-Begründungen) ungeeignet.
+const TRAINING_CATEGORY_LABELS = {
+  general: 'Allgemein',
+  mechanics: 'Mechanik',
+  gameSense: 'Spielverständnis',
+  speed: 'Geschwindigkeit',
+  shooting: 'Schießen',
+  defending: 'Verteidigung',
+  boostMgmt: 'Boost-Management',
+};
+
 // Wird erst bei "Neues Spiel" gesetzt (siehe startNewGame())
 let assignedOrg = null;
 
@@ -44,8 +58,17 @@ function startBackgroundMusic() {
 }
 
 const SETTINGS_SPEED_OPTIONS = [1, 2, 4, 8, 16, 32];
+// Bug-Fix (Audit): quickSimPaceMs() (unten) las diese Optionen bereits, wurde
+// aber selbst NIRGENDS im Spiel aufgerufen -- dieselbe "berechnet, aber nie
+// verwendet"-Bug-Klasse wie zuvor schon bei budgetMultiplier/seasonIncomeBonus
+// (siehe computeCharacterEffects()). 'normal' ist bewusst auf genau den
+// Wert von CASCADE_GAME_DELAY_MS (siehe cascadeRevealSingleMatch()) gesetzt,
+// damit das Standard-Erlebnis (Einstellung nie angefasst) exakt unverändert
+// bleibt -- nur wer aktiv "Schnell"/"Sofort" wählt, bekommt jetzt endlich
+// tatsächlich eine schnellere Bot-Ergebnis-Kaskade statt eines wirkungslosen
+// Reglers.
 const SETTINGS_PACE_OPTIONS = [
-  { id: 'normal', label: 'Normal', ms: 700 },
+  { id: 'normal', label: 'Normal', ms: 1000 },
   { id: 'fast', label: 'Schnell', ms: 250 },
   { id: 'instant', label: 'Sofort', ms: 0 },
 ];
@@ -63,7 +86,7 @@ const SETTINGS_UI_SCALE_OPTIONS = [
 
 function quickSimPaceMs() {
   const opt = SETTINGS_PACE_OPTIONS.find((o) => o.id === appSettings.quickSimPace);
-  return opt ? opt.ms : 700;
+  return opt ? opt.ms : 1000;
 }
 
 // Chronologisches Log ALLER abgeschlossenen Transfers -- für die Transfer-
@@ -92,17 +115,28 @@ let careerState = null;
 // Echte Spielzeit (Sekunden) -- User-Wunsch: Slot-Auswahl soll "Spielzeit X Tg."
 // zeigen (siehe Referenz-Screenshot). Zählt per Intervall hoch, SOLANGE eine
 // Karriere aktiv ist (nicht im Menü) -- siehe startPlaytimeTracking()/
-// stopPlaytimeTracking(). Wird alle 30s mitgespeichert (nicht bei jedem Tick,
-// das wäre unnötig viel Disk-I/O), plus wie gehabt bei jeder ohnehin
+// stopPlaytimeTracking(). Wird periodisch mitgespeichert (nicht bei jedem
+// Tick, das wäre unnötig viel Disk-I/O), plus wie gehabt bei jeder ohnehin
 // stattfindenden saveGameState()-Aktion.
+// Bug-Fix (Audit Runde 7, Performance-Agent): saveGameState() serialisiert/
+// schreibt den KOMPLETTEN Spielstand (wächst mit matchHistory linear, bei
+// 10 simulierten Saisons gemessen ~16MB / ~77ms Schreibzeit im Main-Prozess,
+// der dabei blockiert) -- ein voller Save nur wegen des reinen Sekunden-
+// zählers alle 30s summierte sich über eine lange Sitzung unnötig auf.
+// Intervall auf 5 Minuten verlängert (10x weniger volle Saves) -- die echte
+// Spielzeit bleibt trotzdem laufend im RAM aktuell und wird bei JEDEM
+// tatsächlichen Gameplay-Save (Tagfortschritt, Transfers etc.) ohnehin mit
+// gespeichert, ein Absturz kostet im schlimmsten Fall ein paar Minuten
+// Anzeige-Ungenauigkeit bei einem rein kosmetischen Statistikwert.
 let careerPlaytimeSeconds = 0;
 let playtimeIntervalId = null;
+const PLAYTIME_AUTOSAVE_INTERVAL_SECONDS = 300;
 
 function startPlaytimeTracking() {
   stopPlaytimeTracking();
   playtimeIntervalId = setInterval(() => {
     careerPlaytimeSeconds += 1;
-    if (careerPlaytimeSeconds % 30 === 0) saveGameState();
+    if (careerPlaytimeSeconds % PLAYTIME_AUTOSAVE_INTERVAL_SECONDS === 0) saveGameState();
   }, 1000);
 }
 
@@ -130,13 +164,6 @@ let consecutivePoorSeasons = 0;   // Saisons in Folge mit mehr Niederlagen als S
 let careerEnded = false;          // true nach triggerCeoFired() -- verhindert Weiterspielen nach Reload
 let transfersLockedUntil = null;  // ISO-Datumsstring oder null -- "Transfers für KI-Teams sperren"
 let unlockedAchievements = [];    // Liste freigeschalteter Achievement-IDs
-
-function tierForOverall(overall) {
-  if (overall >= 85) return 'tier-diamond';
-  if (overall >= 78) return 'tier-gold';
-  if (overall >= 70) return 'tier-silver';
-  return 'tier-bronze';
-}
 
 function formatContractDate(date) {
   const dd = String(date.getDate()).padStart(2, '0');
@@ -330,23 +357,58 @@ const ACHIEVEMENTS = [
   },
 ];
 
-function showAchievementToast(title) {
+// Bug-Fix (Audit): mehrere im selben checkAchievements()-Durchlauf
+// freigeschaltete Erfolge (realistisch, z.B. Saison-Meilenstein + Budget-Ziel
+// am selben Tag) landeten bisher alle auf demselben festen top:20px -- exakt
+// übereinander, sichtbar war praktisch nur der zuletzt angehängte Toast, die
+// übrigen verschwanden nach ihren 3.8s unbemerkt, ohne dass der Spieler sie
+// je gesehen hätte. activeAchievementToasts trackt alle gerade sichtbaren
+// Toasts und staffelt sie per top-Offset senkrecht -- reflowAchievementToasts()
+// rückt beim Entfernen eines Toasts die verbleibenden sauber nach oben nach.
+// Name bewusst unverändert gelassen (Trainingssystem: showToast() unten
+// verwendet dieselbe Liste/Staffelung jetzt auch für Trainings-Toasts, kein
+// zweites paralleles Toast-System nötig).
+let activeAchievementToasts = [];
+
+function reflowAchievementToasts() {
+  activeAchievementToasts.forEach((t, i) => { t.style.top = (20 + i * 82) + 'px'; });
+}
+
+// Trainingssystem: showAchievementToast() zu einem generischen showToast()
+// verallgemeinert (Icon/Titel/Label parametrisierbar) -- showAchievementToast()
+// bleibt als dünner Wrapper bestehen, damit kein bestehender Aufrufer
+// angepasst werden muss. Nutzt dieselbe Stapel-/Fade-Logik für beide Fälle.
+function showToast(icon, title, label) {
   const toast = document.createElement('div');
   toast.className = 'achievement-toast';
   toast.innerHTML =
-    '<span class="achievement-toast-icon">🏆</span>' +
-    '<div><div class="achievement-toast-label">Erfolg freigeschaltet</div><div class="achievement-toast-title">' + title + '</div></div>';
+    '<span class="achievement-toast-icon">' + icon + '</span>' +
+    '<div><div class="achievement-toast-label">' + label + '</div><div class="achievement-toast-title">' + title + '</div></div>';
   document.body.appendChild(toast);
+  activeAchievementToasts.push(toast);
+  reflowAchievementToasts();
   requestAnimationFrame(() => toast.classList.add('is-visible'));
   setTimeout(() => {
     toast.classList.remove('is-visible');
-    setTimeout(() => toast.remove(), 500);
+    setTimeout(() => {
+      toast.remove();
+      activeAchievementToasts = activeAchievementToasts.filter((t) => t !== toast);
+      reflowAchievementToasts();
+    }, 500);
   }, 3800);
 }
 
-// Läuft bei jedem renderAll() mit (Draft-/Roster-/Turnier-Bildschirme rendern
-// häufig genug, damit neue Erfolge zeitnah auffallen, ohne dass jede
-// einzelne auslösende Stelle im Code extra daran denken muss).
+function showAchievementToast(title) {
+  showToast('🏆', title, 'Erfolg freigeschaltet');
+}
+
+// Bug-Fix (Audit): der alte Kommentar hier behauptete, renderAll() liefe
+// "häufig genug" für zeitnahe Erfolge -- tatsächlich lief renderAll() im
+// GESAMTEN Spiel nur zweimal: beim Karrierestart und beim Laden eines
+// Spielstands. In einer laufenden Sitzung ohne Neuladen schaltete sich
+// dadurch nie ein Erfolg frei. Läuft jetzt zusätzlich bei jedem
+// Tagfortschritt (finishDashboardDayAdvance()) mit -- dem tatsächlich
+// garantiert häufigen Kern-Loop-Tick.
 function checkAchievements() {
   if (!achievementsEnabled || !careerState) return;
   ACHIEVEMENTS.forEach((a) => {
@@ -840,8 +902,32 @@ async function confirmCharacterAndProceed() {
     portraitUrl: selectedCharacterPortraitUrl,
     traits: { ...characterTraitValues },
   };
-  await window.electronAPI.saveManagerTemplate(careerCharacter);
+  // Bug-Fix (Audit Runde 5): ohne try/catch blieb der Spieler bei einem
+  // fehlschlagenden Schreibvorgang (Berechtigung, voller Datenträger) hier
+  // kommentarlos hängen -- die unhandled promise rejection stoppte den
+  // gesamten Ablauf VOR goToOrgModeSelect(). Das Anlegen der Vorlage ist ein
+  // reiner Komfort-Zusatz (Wiederverwendung bei "Manager erstellen"); ein
+  // Fehlschlag darf die eigentliche Charaktererstellung nicht blockieren.
+  try {
+    await window.electronAPI.saveManagerTemplate(careerCharacter);
+  } catch (err) {
+    console.error('Manager-Vorlage konnte nicht gespeichert werden:', err);
+  }
   goToOrgModeSelect();
+}
+
+// Bug-Fix (Audit): "Zurück" auf screen-org-mode-select war bisher direkt an
+// goToCharacterCreation() gebunden -- deren unbedingter Formular-Reset
+// (careerCharacter = null, alle Eingabefelder geleert) ist korrekt, wenn man
+// die Charaktererstellung frisch aus dem Slot-Picker öffnet, löscht aber
+// hier den gerade fertig ausgefüllten und bereits bestätigten Charakter
+// (Name/Nation/Geburtsdatum/Traits/Portrait) komplett, obwohl der Spieler
+// nur zurück wollte, um z.B. seine Org-Modus-Wahl zu korrigieren. Die
+// Eingabefelder stehen zu diesem Zeitpunkt noch unverändert im DOM (seit
+// confirmCharacterAndProceed() wurde nichts geleert) -- ein einfacher
+// Screen-Wechsel zurück reicht, kein Reset nötig.
+function backToCharacterFromOrgMode() {
+  showScreen('screen-character');
 }
 
 // ── Organisations-Modus (bestehende Org übernehmen oder eigene erstellen) ──
@@ -1065,9 +1151,9 @@ async function randomizeOrgCreateAll() {
 // ── "Organisation erstellen": echte Erstellungs-Logik ──────────────────────
 // Baut aus dem Formular ein Org-Objekt in derselben Form wie eine
 // instantiateOrg()-Instanz aus der 87er-Liste (name/logoUrl/description/
-// budget/roster{starters,sub,coach,staff}/strength/matchBonusPct) -- dadurch
-// brauchen goToOrgContract() und confirmOrgAndProceed() keine Sonderfälle
-// für selbst erstellte Orgas.
+// budget/roster{starters,sub,coach,staff}/strength) -- dadurch brauchen
+// goToOrgContract() und confirmOrgAndProceed() keine Sonderfälle für selbst
+// erstellte Orgas.
 const ORG_CREATE_DIFFICULTY_BUDGET = { hard: 30000, normal: 100000, easy: 1000000, casual: 10000000 };
 const ORG_CREATE_DIFFICULTY_STAFF_COUNT = { hard: 0, normal: 2, easy: 4, casual: 6 };
 const ORG_CREATE_START_PLAYER_COUNT = 3; // User-Wunsch: 3 Spieler statt vorher 5
@@ -1085,6 +1171,20 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
   const rng = mulberry32(hashString(fullname + '|' + Date.now()));
   const pickNation = () => CHARACTER_NATIONS[Math.floor(rng() * CHARACTER_NATIONS.length)].code;
   const pickAvatarId = () => CHARACTER_AVATARS[Math.floor(rng() * CHARACTER_AVATARS.length)].id;
+  // Bug-Fix (User-Meldung: "Personal im Kader steht bei Details als Free
+  // Agent, ist aber unter Vertrag"): jede Person, die HIER dem frisch
+  // gegründeten Kader beitritt, wurde bisher OHNE contractStart/contractEnd
+  // erzeugt -- renderPersonInfoPanel() interpretiert das (korrekt für
+  // tatsächliche Free Agents) als "Kein Vertrag (Free Agent)", hier aber
+  // fälschlich, denn diese Personen sind ja bereits fest angestellt. careerDate
+  // ist an dieser Stelle im Ablauf noch null (Org-Erstellung läuft VOR dem
+  // eigentlichen Karrierestart) -- ROSTER_CAREER_EPOCH ist derselbe feste
+  // Anker, den rollContractDates() (data/org-rosters.js) für JEDE andere Org
+  // im Spiel verwendet, exakt dieselbe 12-36-Monats-Spanne wie dort.
+  const rollFreshContract = () => ({
+    contractStart: ROSTER_CAREER_EPOCH,
+    contractEnd: addMonthsToDateStr(ROSTER_CAREER_EPOCH, Math.round(12 + rng() * 24)),
+  });
 
   // 3 Starter aus dem freien Spieler-Pool, falls "Mit Free Agents auffüllen"
   // aktiv ist -- sonst startet der Kader komplett leer (wird über den
@@ -1094,7 +1194,7 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
   let starters = [];
   if (orgCreateFillAgents) {
     starters = shuffledCopy(FREE_AGENT_PLAYERS, rng).slice(0, ORG_CREATE_START_PLAYER_COUNT)
-      .map((p) => ({ ...p, country: pickNation(), avatarId: pickAvatarId() }));
+      .map((p) => ({ ...p, country: pickNation(), avatarId: pickAvatarId(), ...rollFreshContract() }));
   }
 
   // Team-Mitarbeiter-Anzahl skaliert mit der Startinvestition (siehe
@@ -1105,16 +1205,16 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
   const staff = shuffledCopy(ORG_ROSTER_STAFF_ROLES, rng).slice(0, staffCount).map((role) => {
     const pool = FREE_AGENT_STAFF[role];
     const person = pool[Math.floor(rng() * pool.length)];
-    return { role, name: person.name, overall: person.overall, country: pickNation(), avatarId: pickAvatarId() };
+    return { role, name: person.name, overall: person.overall, country: pickNation(), avatarId: pickAvatarId(), ...rollFreshContract() };
   });
 
   // Kein Free-Agent-Pool für Coaches vorhanden (die Datenbank kennt nur die
-  // 9 Mitarbeiterrollen) -- prozeduraler Fantasiename in mittlerer Stärke
+  // 8 Mitarbeiterrollen) -- prozeduraler Fantasiename in mittlerer Stärke
   // (2,5 Sterne), da eine frisch gegründete Org noch kein Prestige hat, an
   // dem sich eine höhere/niedrigere Stufe festmachen ließe.
   // Bug-Fix (User-Meldung): bei "Schwer" (30K, KEIN "+N Personal"-Bonus,
   // staffCount === 0) bekam die Org bisher TROTZDEM immer einen Coach --
-  // die restlichen 9 Stab-Rollen skalieren korrekt mit der Schwierigkeit
+  // die restlichen 8 Stab-Rollen skalieren korrekt mit der Schwierigkeit
   // (siehe staffCount oben), der Coach war die einzige vergessene Ausnahme.
   // Jetzt an dieselbe Bedingung gekoppelt: kein Personal-Bonus == auch kein
   // Coach beim Start (muss wie jede andere Rolle erst über Scouting verpflichtet werden).
@@ -1124,6 +1224,7 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
     country: pickNation(),
     avatarId: pickAvatarId(),
     overall: starsToOverall(2.5),
+    ...rollFreshContract(),
   } : null;
 
   const roster = { starters, sub: null, coach, staff, reserve: [] };
@@ -1139,7 +1240,6 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
     budget: ORG_CREATE_DIFFICULTY_BUDGET[selectedOrgCreateDifficulty] || ORG_CREATE_DIFFICULTY_BUDGET.normal,
     roster,
     strength,
-    matchBonusPct: computeMatchBonusPct(strength),
   };
 }
 
@@ -1269,7 +1369,7 @@ function goToOrgSelection() {
 // (feste, generierte) Emoji-Avatare -- siehe CHARACTER_AVATARS/data/org-rosters.js.
 const ORG_PREVIEW_PLACEHOLDER_AVATAR = '👤';
 // Team-Mitarbeiter-Rollen -- "Geschäftsführer" (immer erster Eintrag) ist der
-// selbst erstellte Charakter, die übrigen 9 Rollen kommen aus dem festen,
+// selbst erstellte Charakter, die übrigen 8 Rollen kommen aus dem festen,
 // pro Org generierten Mitarbeiter-Kader (siehe ORG_ROSTER_STAFF_ROLES in
 // data/org-rosters.js -- einzige Quelle der Wahrheit für die Rollen-Liste).
 const ORG_PREVIEW_STAFF_ROLES = ['Geschäftsführer', ...ORG_ROSTER_STAFF_ROLES];
@@ -1441,7 +1541,7 @@ function renderOrgSelectList() {
       '<div class="org-select-row" data-org-name="' + org.name + '">' +
         iconHtml +
         '<div class="org-select-row-info">' +
-          '<div class="org-select-row-name-line">' + flagHtml + '<span class="org-select-row-name">' + org.name + '</span></div>' +
+          '<div class="org-select-row-name-line">' + flagHtml + '<span class="org-select-row-name" title="' + org.name + '">' + org.name + '</span></div>' +
           '<div class="org-select-row-meta">' +
             '<span class="org-select-stars"><span class="stars-empty">★★★★★</span><span class="stars-filled" style="width:' + fillPct + '%">★★★★★</span></span>' +
             '<span class="org-select-difficulty-label">SCHWIERIGKEIT:</span> <span class="org-select-difficulty difficulty-' + difficulty.level + '">' + difficulty.label + '</span>' +
@@ -1608,7 +1708,14 @@ const DASHBOARD_PAGE_LABELS = {
 // folgt"-Platzhalters, siehe selectDashboardPage(). Sidebar-Buttons selbst
 // tragen die `is-locked`-Klasse direkt im HTML (index.html) -- MUSS mit
 // dieser Liste synchron gehalten werden.
-const DASHBOARD_LOCKED_PAGES = ['post', 'messages', 'staff', 'tactics', 'basecamp', 'shop', 'training'];
+// 'shop' entfernt (diese Runde: Shop-Seite implementiert, siehe
+// renderDashboardShopPanel() und Umgebung weiter unten). 'basecamp' ebenfalls
+// entfernt (siehe renderDashboardBasecampPanel()). 'tactics' ebenfalls entfernt
+// (siehe renderDashboardTacticsPanel()). 'staff' ebenfalls entfernt (diese
+// Runde: eigene Personal-Seite, siehe renderDashboardPersonalPanel()).
+// 'messages' ebenfalls entfernt (Nachrichtensystem, siehe renderDashboardMessagesPanel()).
+// 'post' ebenfalls entfernt (Postsystem, siehe renderDashboardPostPanel()).
+const DASHBOARD_LOCKED_PAGES = [];
 
 // In-Game-Kalenderdatum, YYYY-MM-DD -- User-Wunsch: "Man startet immer ab
 // 01. Jan 2026". Eigenständig von der Saison-Nummer (careerState.seasonNumber
@@ -1708,6 +1815,42 @@ let sponsorSubtab = 'overview';
 let sponsorTierFilter = 'all';
 let sponsorPage = 1;
 const SPONSORS_PER_PAGE = 12;
+
+// ── Shop (data/shop-items.js) ──────────────────────────────────────────────
+// shopOwnedItems/shopEquippedItems/shopFavorites/shopCart/basecampLevel werden
+// alle in collectSaveState()/loadGameState() persistiert (siehe dortige
+// Kommentare) und in confirmOrgAndProceed() für neue Karrieren zurückgesetzt.
+let shopOwnedItems = {}; // itemId -> true (Equipment ist nicht stapelbar, siehe KONZEPT im Kopf von shop-items.js)
+let shopEquippedItems = {}; // category -> itemId (genau 1 Slot pro Kategorie, verhindert unbegrenztes Stapeln gleicher Kategorie)
+let shopFavorites = {}; // itemId -> true
+let shopCart = {}; // itemId -> true (Set-Ersatz, JSON-persistierbar)
+let basecampLevel = 1; // Minimal-Feld (User-Vorgabe): keine volle Basecamp-Seite, nur genug für Shop-Freischaltungen
+let shopCategoryFilter = 'all';
+let shopPage = 1;
+const SHOP_ITEMS_PER_PAGE = 10; // 5 Spalten x 2 Reihen, siehe Referenzbeschreibung
+// Deckelt die SUMME aller ausgerüsteten Statboni pro Statachse hart (Balancing,
+// siehe Kopfkommentar data/shop-items.js) -- unabhängig davon, wie viele/starke
+// Items künftig ergänzt werden.
+const SHOP_EQUIPMENT_STAT_CAP = 20;
+// Rechnet die gedeckelten Statboni in einen Team-Prozentbonus um, der über den
+// BEREITS EXISTIERENDEN orgMatchBonusPct-Mechanismus (siehe simulateBotSeries())
+// in die auditierte match.js-Engine einfließt, statt diese anzufassen -- gleiche
+// Größenordnung wie teamChemistryBonusPct()/Charakter-Trait-matchBonusPct (grob
+// 4-5% bei Extremwerten), damit Ausrüstung spürbar, aber nicht dominant wirkt.
+const SHOP_EQUIPMENT_BONUS_PCT_PER_STAT_POINT = 0.4; // 20 (Cap) * 0.4 = 8% Bonus-Obergrenze
+
+// ── Strategien (data/strategies.js) ────────────────────────────────────────
+// Persistiert wie shopOwnedItems/basecampLevel: collectSaveState()/
+// loadGameState()/confirmOrgAndProceed()-Reset weiter unten.
+let activeStrategyMode = 'preset'; // 'preset' | 'allround' | 'custom'
+let activeStrategyId = 'balanced'; // genutzt wenn mode === 'preset'
+let allroundTacticSettings = { offense: 50, rotation: 50, challenge: 50, boost: 50, passing: 50, pressing: 50 }; // je 0-100, 50 = neutral
+let customStrategies = []; // [{ id, name, offense, defense, pressing, possession, tempo, risiko }], genutzt wenn mode === 'custom'
+let activeCustomStrategyId = null; // Referenz in customStrategies, genutzt wenn mode === 'custom'
+// Nur UI-Zustand (Browsing/Vergleich), NICHT gespeichert -- die aktive
+// Strategie (oben) ist unabhängig davon, welche der Spieler sich gerade nur ANSIEHT.
+let strategyCategoryFilter = 'all';
+let strategyPreviewId = null;
 const SPONSOR_CATEGORY_COLORS = {
   Betting: '#e0793e', Lifestyle: '#d64fa0', Peripherals: '#3fbdd6', Hardware: '#3f7fd6',
   Apparel: '#d64f8c', Software: '#4f8cd6', 'Energy Drink': '#d6c23f', Finance: '#3fd68c',
@@ -1929,6 +2072,8 @@ function maybeWarnOwnContractExpiry(person, roleLabel) {
   const key = contractWarningKey(person);
   if (contractWarningsShown.has(key)) return;
   contractWarningsShown.add(key);
+  const isPlayerRoleLabel = roleLabel === 'Starter' || roleLabel === 'Sub' || roleLabel === 'Reserve';
+  pushPostMessage(isPlayerRoleLabel ? 'player' : 'staff', 'HIGH', 'Vertragsabteilung', 'Vertrag läuft aus', 'Der Vertrag von ' + person.name + ' (' + roleLabel + ') läuft am ' + formatContractDate(person.contractEnd) + ' aus.', null, { type: 'openPerson', orgName: assignedOrg.name, personName: person.name, role: roleLabel });
   showConfirmModal(
     'Vertrag läuft bald aus',
     'Der Vertrag von ' + person.name + ' (' + roleLabel + ') läuft am ' + formatContractDate(person.contractEnd) + ' aus. Ohne Verlängerung verlässt er dann dein Team -- OHNE dass automatisch ein Ersatz verpflichtet wird.',
@@ -1965,6 +2110,8 @@ function removeOwnExpiredPerson(slotType, index, person, roleLabel) {
   else if (slotType === 'staff') roster.staff.splice(index, 1);
   assignedOrg.strength = computeOrgStrengthFromRoster(roster);
   logTransfer(assignedOrg.name, 'Free Agent', person.name, 0, { role: roleLabel, stars: npcStarRating(person.overall), country: person.country });
+  const isPlayerRoleLabel = roleLabel === 'Starter' || roleLabel === 'Sub' || roleLabel === 'Reserve';
+  pushPostMessage(isPlayerRoleLabel ? 'player' : 'staff', 'CRITICAL', 'Vertragsabteilung', 'Vertrag ausgelaufen', person.name + ' (' + roleLabel + ') hat das Team verlassen, da der Vertrag ausgelaufen ist.', null, { type: 'openPage', page: 'transfers' });
 }
 
 // Läuft täglich NUR für die eigene Org: zuerst alle fälligen 14-Tage-
@@ -2022,9 +2169,17 @@ function checkContractExpirations() {
 // spielen -- realistisch, wie eine echte Kaderbank) PLUS alle noch
 // ausstehenden Neuzugänge (pendingPlayerArrivals, Runde 122: der Vertrag
 // läuft schon ab dem Verpflichten, nicht erst ab der 7-Tage-Ankunft, sonst
-// könnte man das Gehälter-Budget während der Wartezeit umgehen). Bewusst
-// ohne Personal/Coach, da deren Finanz-Seite (Verpflichten) diese Runde
-// erstmal gesperrt bleibt (siehe scoutingStaffRowHtml()-Kommentar).
+// könnte man das Gehälter-Budget während der Wartezeit umgehen).
+// Bug-Fix (Audit, User-Entscheidung): Personal/Coach kosteten nach dem
+// einmaligen Kaufpreis bisher DAUERHAFT kein laufendes Gehalt (der alte
+// Kommentar hier war seit der Personal-Seiten-Freischaltung dieser Session
+// veraltet) -- ein gekündigter/neu eingestellter Mitarbeiter war dadurch
+// strikt billiger im Unterhalt als ein gleich bewerteter Spieler, obwohl
+// beide dieselbe Marktwert-Formel nutzen. Coach + alle nicht-vakanten
+// Personal-Rollen zahlen jetzt dieselbe Gehaltsformel wie Spieler
+// (playerMonthlySalary() hängt nur von .overall ab, funktioniert also
+// unverändert für Personal) -- User-Entscheidung: gilt SOFORT auch für
+// bereits eingestelltes Bestandspersonal, nicht nur für künftige Neuzugänge.
 // `pendingPlayerArrivals` betrifft ausschließlich assignedOrg (nur der
 // Spieler kauft über Scouting) -- deshalb hier gezielt nur für diese Org
 // mitgezählt.
@@ -2032,7 +2187,13 @@ function totalMonthlySalaryCommitment(org) {
   const roster = org.roster;
   const people = [...roster.starters, roster.sub, ...(roster.reserve || [])].filter(Boolean);
   const pendingPeople = org === assignedOrg ? pendingPlayerArrivals.map((a) => a.player) : [];
-  return [...people, ...pendingPeople].reduce((sum, p) => sum + playerMonthlySalary(p), 0);
+  const staffPeople = [roster.coach, ...(roster.staff || [])].filter((p) => p && !p.vacant);
+  const rawTotal = [...people, ...pendingPeople, ...staffPeople].reduce((sum, p) => sum + playerMonthlySalary(p), 0);
+  // Anwalt-Rabatt (Personal-Seite, siehe anwaltSalaryDiscountPct()) -- wirkt
+  // bewusst auf die GESAMTSUMME (Spieler+Personal), nicht nur auf Spieler:
+  // ein Anwalt, der die eigenen Vertragskosten drückt, sollte konsistent auf
+  // ALLE laufenden Gehälter wirken, nicht nur auf einen Teil davon.
+  return Math.round(rawTotal * (1 - anwaltSalaryDiscountPct(org) / 100));
 }
 
 // "Realistisch": skaliert mit dem AKTUELLEN Kaderwert (nicht mit dem sich
@@ -2047,7 +2208,9 @@ function totalMonthlySalaryCommitment(org) {
 // echtes, sichtbares monatliches Budget bekommen.
 const MONTHLY_BOARD_BUDGET_PCT = 0.02;
 function monthlyBoardBudgetAmount(org) {
-  return Math.round(orgRosterMarketValue(org.roster) * MONTHLY_BOARD_BUDGET_PCT / 100) * 100;
+  const base = orgRosterMarketValue(org.roster) * MONTHLY_BOARD_BUDGET_PCT / 100;
+  // Event-Manager-Bonus (Personal-Seite, siehe eventManagerBoardBudgetBonusPct()).
+  return Math.round(base * (1 + eventManagerBoardBudgetBonusPct(org) / 100)) * 100;
 }
 
 // Läuft einmal pro echtem Kalender-Monatswechsel (siehe advanceOneCalendarDay()).
@@ -2066,17 +2229,27 @@ function monthlyBoardBudgetAmount(org) {
 // der Finanzen-Seite, siehe renderFinanceAllocSliders()), damit die Summe
 // der 4 Kategorien IMMER exakt mit dem tatsächlichen Budgetabzug übereinstimmt.
 function applyMonthlyClubFinances() {
+  const budgetBefore = assignedOrg.budget;
   const salaryTotal = totalMonthlySalaryCommitment(assignedOrg);
   if (salaryTotal > 0) {
     assignedOrg.budget -= salaryTotal;
     financeAllocation.salaries = (financeAllocation.salaries || 0) - salaryTotal;
     const playerCount = [...assignedOrg.roster.starters, assignedOrg.roster.sub].filter(Boolean).length;
     addFinanceMonthlyExpense(salaryTotal, 'Gehälter', 'Monatliche Spielergehälter (' + playerCount + ' Spieler)');
+    pushPostMessage('finance', 'NORMAL', 'Buchhaltung', 'Ausgabe verbucht', 'Die monatlichen Personalkosten von ' + formatMoney(salaryTotal) + ' wurden abgebucht.', null, { type: 'openPage', page: 'finance' });
   }
   const boardBudget = monthlyBoardBudgetAmount(assignedOrg);
   if (boardBudget > 0) {
     assignedOrg.budget += boardBudget;
     addFinanceMonthlyIncome(boardBudget, 'Vorstand', 'Monatliches Budget vom Vorstand');
+    pushPostMessage('finance', 'NORMAL', 'Vereinsvorstand', 'Zahlung eingegangen', 'Das monatliche Budget vom Vorstand über ' + formatMoney(boardBudget) + ' wurde deinem Vereinskonto gutgeschrieben.', null, { type: 'openPage', page: 'finance' });
+  }
+  // Insolvenzwarnung: nur beim tatsächlichen ÜBERGANG von "im Plus" zu "im
+  // Minus" innerhalb dieses Monatsabschlusses -- kein Tages-Polling/eigene
+  // Merker-Variable nötig, verhindert automatisch tägliche Wiederholungen,
+  // solange das Budget einfach nur weiter negativ bleibt.
+  if (budgetBefore >= 0 && assignedOrg.budget < 0) {
+    pushPostMessage('finance', 'CRITICAL', 'Buchhaltung', 'Insolvenzwarnung', 'Das Vereinskonto ist mit ' + formatMoney(assignedOrg.budget) + ' ins Minus gerutscht. Handlung ist dringend erforderlich.', null, { type: 'openPage', page: 'finance' });
   }
 }
 
@@ -2205,6 +2378,7 @@ function resolveSponsorResponses() {
         st.completedGoals = sponsor.goals.map(() => false);
         st.collectedGoals = sponsor.goals.map(() => false);
         st.rejectionCount = 0;
+        pushPostMessage('sponsors', 'HIGH', name, 'Sponsoringvertrag abgeschlossen', name + ' hat deinem Sponsoringvertrag zugestimmt.', 'Die Zusammenarbeit mit ' + name + ' beginnt ab sofort.', { type: 'openPage', page: 'sponsors' });
       } else {
         // Kapazität war schon voll, als diese Zusage an der Reihe war --
         // die Zusage selbst verfällt ersatzlos (kein Cooldown/keine Sperre,
@@ -2212,6 +2386,7 @@ function resolveSponsorResponses() {
         delete sponsorState[name];
       }
     } else {
+      pushPostMessage('sponsors', 'NORMAL', name, 'Sponsoring-Anfrage abgelehnt', name + ' hat deiner Sponsoring-Anfrage aktuell nicht zugestimmt.', null, { type: 'openPage', page: 'sponsors' });
       st.rejectionCount = (st.rejectionCount || 0) + 1;
       const d = parseCareerDate(careerDate);
       if (st.rejectionCount >= 2) {
@@ -2269,9 +2444,13 @@ function checkSponsorGoals() {
       }
     });
     if (!st.bonusReady && sponsor.goals.every((g, i) => st.completedGoals[i])) {
-      st.bonusAmount = Math.round((sponsor.revenueMin + Math.random() * (sponsor.revenueMax - sponsor.revenueMin)) / 100) * 100;
+      const rawBonus = sponsor.revenueMin + Math.random() * (sponsor.revenueMax - sponsor.revenueMin);
+      // PR-Manager-Effekt (Personal-Seite): bessere Außendarstellung -- Bonus
+      // auf den Abschluss-Bonus, siehe prManagerSponsorBonusPct().
+      st.bonusAmount = Math.round(rawBonus * (1 + prManagerSponsorBonusPct(assignedOrg) / 100) / 100) * 100;
       st.bonusReady = true;
       changed = true;
+      pushPostMessage('sponsors', 'HIGH', name, 'Sponsoring-Ziele erfüllt', 'Alle Ziele mit ' + name + ' wurden erfüllt -- ein Abschluss-Bonus steht bereit.', null, { type: 'openPage', page: 'sponsors' });
     }
   });
   if (changed) saveGameState();
@@ -2295,7 +2474,9 @@ function collectSponsorGoalReward(name, i) {
   const sponsor = SPONSORS.find((s) => s.name === name);
   if (!sponsor) return;
   st.collectedGoals[i] = true;
-  const reward = sponsor.goals[i].reward;
+  // PR-Manager-Effekt (Personal-Seite): bessere Außendarstellung -- Bonus auf
+  // Einzelziel-Prämien, siehe prManagerSponsorBonusPct().
+  const reward = Math.round(sponsor.goals[i].reward * (1 + prManagerSponsorBonusPct(assignedOrg) / 100) / 100) * 100;
   careerSponsorIncomeTotal += reward;
   assignedOrg.budget += reward;
   addFinanceMonthlyIncome(reward, 'Sponsoring', name + ': ' + sponsor.goals[i].label);
@@ -2462,6 +2643,40 @@ function refreshDashboardSidebarBadges() {
   const hasUnallocated = financeUnallocated() > 0;
   financeBadge.textContent = '1';
   financeBadge.classList.toggle('hidden', !hasUnallocated);
+
+  // Trainingssystem: "!" wenn kein Trainer im Kader (EIN Grund betrifft
+  // potenziell den ganzen Kader, keine sinnvolle Stückzahl), sonst die Anzahl
+  // der Starter/Sub mit explizit deaktiviertem Training. Immer live berechnet
+  // (kein gespeicherter Benachrichtigungs-Log), gleiches Prinzip wie die
+  // Sponsoren-/Finanzen-Badges oben.
+  const trainingBadge = document.getElementById('dashboard-sidebar-badge-training');
+  const trainingInfo = trainingSidebarBadgeInfo(assignedOrg);
+  trainingBadge.textContent = trainingInfo.text || '';
+  trainingBadge.classList.toggle('hidden', !trainingInfo.show);
+
+  // Nachrichtensystem: Summe der ungelesenen NPC-Nachrichten über den
+  // gesamten eigenen Kader -- live berechnet, kein gespeicherter
+  // Benachrichtigungs-Log, gleiches Prinzip wie die Badges oben.
+  const messagesBadge = document.getElementById('dashboard-sidebar-badge-messages');
+  const unreadCount = npcMessagesUnreadCount(assignedOrg);
+  messagesBadge.textContent = String(unreadCount);
+  messagesBadge.classList.toggle('hidden', unreadCount <= 0);
+
+  // Postsystem: Summe der ungelesenen Posteinträge -- postInbox selbst IST
+  // bereits der gespeicherte Log (anders als die live berechneten Badges
+  // oben), einfach direkt gezählt.
+  const postBadge = document.getElementById('dashboard-sidebar-badge-post');
+  const postUnread = postUnreadCount();
+  postBadge.textContent = String(postUnread);
+  postBadge.classList.toggle('hidden', postUnread <= 0);
+}
+
+function npcMessagesUnreadCount(org) {
+  if (!org) return 0;
+  return npcContactableRoster(org).reduce((sum, { person }) => {
+    const rel = npcRelations[npcRelationKey(org.name, person.name)];
+    return sum + (rel ? rel.unread : 0);
+  }, 0);
 }
 
 // ── Dashboard-Seite "Startseite" (User-Vorgabe: UI wie im mitgeschickten
@@ -2502,7 +2717,7 @@ function dashboardHomeUpcomingItemHtml(ev) {
     '<div class="dashboard-home-upcoming-item" data-home-tournament="' + ev.key + '">' +
       '<div class="dashboard-home-upcoming-logo" style="background:' + ev.color + ';">' + ev.icon + '</div>' +
       '<div class="dashboard-home-upcoming-text">' +
-        '<span class="dashboard-home-upcoming-name">' + ev.label + '</span>' +
+        '<span class="dashboard-home-upcoming-name" title="' + ev.label + '">' + ev.label + '</span>' +
         '<span class="dashboard-home-upcoming-stars">' + tournamentStarsHtml(ev.stars) + '</span>' +
       '</div>' +
       '<span class="dashboard-home-upcoming-countdown">' + statusText + '</span>' +
@@ -2533,7 +2748,7 @@ function dashboardHomeRankingRowHtml(row, rank, qualifyingSet) {
       '<span class="dashboard-stats-row-rank">#' + rank + '</span>' +
       '<div class="dashboard-stats-row-team">' +
         '<div class="dashboard-stats-row-logo">' + statsRowLogoHtml(row.org) + '</div>' +
-        '<span class="dashboard-stats-row-name">' + row.org.name + '</span>' +
+        '<span class="dashboard-stats-row-name" title="' + row.org.name + '">' + row.org.name + '</span>' +
       '</div>' +
       '<span class="dashboard-stats-row-num">' + row.points + '</span>' +
     '</div>'
@@ -2592,8 +2807,8 @@ function renderDashboardHomePanel() {
   const avatarsHtml = starters.map((p) => dashboardHomeMiniAvatarHtml(p, 'Starter')).join('') +
     (sub ? dashboardHomeMiniAvatarHtml(sub, 'Sub') : '');
   document.getElementById('dashboard-home-org-avatars').innerHTML = avatarsHtml || '<div class="dashboard-home-results-empty">Noch keine Spieler im Kader.</div>';
-  const condition = computeTeamPhysicalCondition(org);
-  const morale = computeTeamMorale(org);
+  const condition = effectiveTeamPhysicalCondition(org);
+  const morale = effectiveTeamMorale(org);
   const conditionEl = document.getElementById('dashboard-home-org-condition');
   if (condition >= 70 && morale >= 60) {
     conditionEl.className = 'dashboard-home-org-condition is-ok';
@@ -2663,13 +2878,20 @@ function selectDashboardPage(id) {
   const isTransfers = id === 'transfers';
   const isScouting = id === 'scouting';
   const isRoster = id === 'roster';
+  const isShop = id === 'shop';
+  const isBasecamp = id === 'basecamp';
+  const isTactics = id === 'tactics';
+  const isStaff = id === 'staff';
+  const isTraining = id === 'training';
+  const isMessages = id === 'messages';
+  const isPost = id === 'post';
   const isLocked = DASHBOARD_LOCKED_PAGES.includes(id);
   const placeholderEl = document.getElementById('dashboard-page-placeholder');
   placeholderEl.classList.toggle('is-locked', isLocked);
   placeholderEl.innerHTML = isLocked
     ? '<p>🔒 ' + (DASHBOARD_PAGE_LABELS[id] || '') + ' wird zu einem späteren Zeitpunkt ins Spiel kommen.</p>'
     : '<p>🚧 Inhalt folgt in einer späteren Runde.</p>';
-  placeholderEl.classList.toggle('hidden', isHome || isSettings || isFinance || isSponsors || isTournaments || isStats || isTransfers || isScouting || isRoster);
+  placeholderEl.classList.toggle('hidden', isHome || isSettings || isFinance || isSponsors || isTournaments || isStats || isTransfers || isScouting || isRoster || isShop || isBasecamp || isTactics || isStaff || isTraining || isMessages || isPost);
   document.getElementById('dashboard-page-home').classList.toggle('hidden', !isHome);
   document.getElementById('dashboard-page-settings').classList.toggle('hidden', !isSettings);
   document.getElementById('dashboard-page-finance').classList.toggle('hidden', !isFinance);
@@ -2679,6 +2901,13 @@ function selectDashboardPage(id) {
   document.getElementById('dashboard-page-transfers').classList.toggle('hidden', !isTransfers);
   document.getElementById('dashboard-page-scouting').classList.toggle('hidden', !isScouting);
   document.getElementById('dashboard-page-roster').classList.toggle('hidden', !isRoster);
+  document.getElementById('dashboard-page-shop').classList.toggle('hidden', !isShop);
+  document.getElementById('dashboard-page-basecamp').classList.toggle('hidden', !isBasecamp);
+  document.getElementById('dashboard-page-tactics').classList.toggle('hidden', !isTactics);
+  document.getElementById('dashboard-page-staff').classList.toggle('hidden', !isStaff);
+  document.getElementById('dashboard-page-training').classList.toggle('hidden', !isTraining);
+  document.getElementById('dashboard-page-messages').classList.toggle('hidden', !isMessages);
+  document.getElementById('dashboard-page-post').classList.toggle('hidden', !isPost);
   // Turnier-Detailseite ist ein Sub-Zustand von "Turniere", nur über den
   // "DETAILS"-Button erreichbar -- jeder Sidebar-Klick (auch erneut auf
   // "Turniere") kehrt zur Kalender-/Listenansicht zurück.
@@ -2702,6 +2931,13 @@ function selectDashboardPage(id) {
   if (isTransfers) renderDashboardTransfersPanel();
   if (isScouting) renderDashboardScoutingPanel();
   if (isRoster) renderDashboardKaderPanel();
+  if (isShop) renderDashboardShopPanel();
+  if (isBasecamp) renderDashboardBasecampPanel();
+  if (isTactics) renderDashboardTacticsPanel();
+  if (isStaff) renderDashboardPersonalPanel();
+  if (isTraining) renderDashboardTrainingPanel();
+  if (isMessages) renderDashboardMessagesPanel();
+  if (isPost) renderDashboardPostPanel();
 }
 
 // Nutzt die ECHTEN appSettings (siehe screen-settings weiter oben im Code) --
@@ -2725,6 +2961,21 @@ function renderDashboardSettingsPanel() {
   document.getElementById('dashboard-settings-window-size').value = appSettings.windowSize;
   document.getElementById('dashboard-settings-ui-scale').value = String(appSettings.uiScale);
   document.getElementById('dashboard-settings-fullscreen').classList.toggle('is-active', appSettings.displayMode === 'fullscreen');
+}
+
+// Bug-Fix (Audit): persistAppSettings() rief bisher IMMER auch
+// applyDisplaySettings() auf -- main.js' ensureWindowMatchesDisplaySettings()
+// unmaximiert das Fenster und setzt es unbedingt auf die Preset-Größe
+// zurück/zentriert es (siehe dortiger Kommentar), unabhängig davon, ob sich
+// überhaupt ein anzeigerelevantes Setting geändert hat. Dadurch warf schon
+// das bloße Loslassen eines Lautstärke-Reglers im Dashboard-Einstellungen-
+// Panel das Fenster auf Standardgröße zurück, selbst bei aktiviertem
+// "Fenstergröße/Position merken". persistAppSettingsOnly() speichert nur,
+// ohne das Fenster anzufassen -- für reine Audio-Regler. persistAppSettings()
+// (mit Anwenden) bleibt für die tatsächlichen Anzeige-Regler (Fenstergröße/
+// UI-Skalierung/Vollbild) reserviert.
+async function persistAppSettingsOnly() {
+  await window.electronAPI.saveSettings(appSettings);
 }
 
 async function persistAppSettings() {
@@ -2760,7 +3011,8 @@ function financeCashflowThisSeason() {
   return { income, expenses };
 }
 function financeCFO() {
-  return assignedOrg.roster.staff.find((s) => s.role === 'Finanzvorstand') || null;
+  const cfo = assignedOrg.roster.staff.find((s) => s.role === 'Finanzvorstand');
+  return (cfo && !cfo.vacant) ? cfo : null;
 }
 
 function formatMoneyShort(amount) {
@@ -3008,10 +3260,19 @@ function filteredSponsors() {
   return SPONSORS.filter((s) => s.tier === sponsorTierFilter);
 }
 
+// Bug-Fix (Audit): 'pending' (Bewerbung läuft, Antwort in 7-14 Tagen) und
+// 'unavailable' (nach Ablehnung, 1 Monat Cooldown, siehe sponsorStatus())
+// sind inhaltlich zwei sehr unterschiedliche Zustände, zeigten in der
+// Kartenübersicht (sponsorCardHtml()) aber identisches Label + identische
+// Punktfarbe -- nur das Detailpanel verriet den echten Unterschied. Ein
+// Spieler konnte aus der Kartenübersicht allein also nicht erkennen, ob ein
+// Sponsor gerade eine offene Bewerbung hat oder ihn erst kürzlich abgelehnt
+// hat. dotClass bleibt bewusst identisch (beide sind "gerade nicht anfragbar"),
+// nur der Text wird jetzt ehrlich unterschieden.
 const SPONSOR_STATUS_META = {
   available: { label: 'Verfügbar', dotClass: 'is-available' },
-  pending: { label: 'Nicht verfügbar', dotClass: 'is-unavailable' },
-  unavailable: { label: 'Nicht verfügbar', dotClass: 'is-unavailable' },
+  pending: { label: 'Bewerbung läuft', dotClass: 'is-unavailable' },
+  unavailable: { label: 'Kürzlich abgelehnt', dotClass: 'is-unavailable' },
   locked: { label: 'Gesperrt', dotClass: 'is-locked' },
   active: { label: 'Vertrag unterzeichnet', dotClass: 'is-signed' },
 };
@@ -3072,6 +3333,1124 @@ function selectSponsorTier(tier) {
   sponsorPage = 1;
   document.querySelectorAll('.dashboard-sponsors-tier-btn').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.tier === tier));
   renderSponsorGrid();
+}
+
+// ── Shop ────────────────────────────────────────────────────────────────────
+// Ausrüstung wirkt TEAMWEIT (nicht pro Spieler): es existiert im ganzen
+// Projekt kein Pro-Spieler-Inventar-/Ausrüstungskonzept (roster ist ein reines
+// Team-Array, siehe Architektur-Recherche), und Peripherie/Basecamp-Ausbauten
+// sind inhaltlich ohnehin Trainingslager-Ausstattung, kein persönlicher
+// Spielerbesitz. Ein Slot pro Kategorie (shopEquippedItems[category]) statt
+// unbegrenztem Stapeln verhindert außerdem, dass 6 gekaufte Tastaturen
+// gleichzeitig sechsfachen Bonus geben würden.
+
+function shopItemById(id) {
+  return SHOP_ITEMS.find((it) => it.id === id) || null;
+}
+
+function equipmentStatBonuses() {
+  const totals = {};
+  SHOP_STAT_KEYS.forEach((k) => { totals[k] = 0; });
+  // Basecamp selbst liefert Boni (User-Vorgabe: "Basecamp ist ebenfalls Teil
+  // des Bonus-Systems") -- BASECAMP_LEVELS[basecampLevel].statBonuses fließt
+  // hier als eigener additiver Term ein, genau wie ausgerüstetes Equipment.
+  const basecamp = basecampLevelData(basecampLevel);
+  Object.keys(basecamp.statBonuses).forEach((k) => { totals[k] = (totals[k] || 0) + basecamp.statBonuses[k]; });
+  Object.values(shopEquippedItems).forEach((itemId) => {
+    const item = shopItemById(itemId);
+    if (!item || !item.statBonuses) return;
+    Object.keys(item.statBonuses).forEach((k) => { totals[k] = (totals[k] || 0) + item.statBonuses[k]; });
+  });
+  SHOP_STAT_KEYS.forEach((k) => { totals[k] = Math.min(SHOP_EQUIPMENT_STAT_CAP, totals[k]); });
+  return totals;
+}
+
+// Separater, kleiner Team-Chemie-Bonus NUR vom Basecamp-Level (Equipment
+// selbst beeinflusst die Team-Chemie nicht -- thematisch ist das ein
+// Trainingslager-/Umgebungseffekt, keine persönliche Peripherie-Eigenschaft).
+// Eigener, klar benannter Kanal statt in equipmentMatchBonusPct() versteckt,
+// damit die Basecamp-Seite ihn separat als "Team-Zustand"-Beitrag ausweisen kann.
+function basecampChemistryBonusPct() {
+  return basecampLevelData(basecampLevel).chemistryBonusPct;
+}
+
+// Für Anzeige-Zwecke (Basiswert bleibt in player[key] unangetastet, siehe
+// playerDevelopment-Präzedenzfall -- Equipment ist im Gegensatz dazu jederzeit
+// entfernbar, darf den Basiswert also NIE dauerhaft überschreiben).
+function getEffectivePlayerStats(player) {
+  const bonuses = equipmentStatBonuses();
+  const effective = {};
+  SHOP_STAT_KEYS.forEach((k) => { effective[k] = Math.max(1, Math.min(99, Math.round((player[k] || 0) + bonuses[k]))); });
+  return effective;
+}
+
+// Rechnet equipmentStatBonuses() in den BEREITS EXISTIERENDEN orgMatchBonusPct-
+// Kanal um (siehe simulateBotSeries()/match.js) statt die auditierte
+// duelStat()-Formel oder deren Aufrufer anzufassen -- gleiche Größenordnung wie
+// teamChemistryBonusPct()/Charakter-Trait-matchBonusPct (wenige Prozent),
+// Maximalwert bei voll ausgerüsteten 9 Kategorie-Slots ist hart auf 8%
+// gedeckelt (SHOP_EQUIPMENT_STAT_CAP * SHOP_EQUIPMENT_BONUS_PCT_PER_STAT_POINT).
+// Gleichgewichtete Mittelung über alle 6 Statachsen (kein 1:1-Abbild von
+// duelStat()s eigenen Gewichten, da shooting/defending dort gar nicht
+// vorkommen, matcht aber trotzdem echt Match-Ergebnisse -- kein rein
+// kosmetischer Bonus).
+function equipmentMatchBonusPct() {
+  const b = equipmentStatBonuses();
+  const avg = SHOP_STAT_KEYS.reduce((sum, k) => sum + b[k], 0) / SHOP_STAT_KEYS.length;
+  return avg * SHOP_EQUIPMENT_BONUS_PCT_PER_STAT_POINT;
+}
+
+// Räumt Verweise auf nicht (mehr) existierende Item-IDs weg (z.B. nach
+// künftigen Katalog-Änderungen oder einem beschädigten Spielstand) -- gleiche
+// Fehlerbehandlungs-Philosophie wie reapplyStaffTransferReplacements(). Wird
+// nach jedem Laden UND nach jedem Checkout aufgerufen.
+function reapplyShopEquipmentIntegrity() {
+  Object.keys(shopEquippedItems).forEach((cat) => {
+    const item = shopItemById(shopEquippedItems[cat]);
+    if (!item || !shopOwnedItems[item.id] || item.category !== cat) delete shopEquippedItems[cat];
+  });
+  Object.keys(shopFavorites).forEach((id) => { if (!shopItemById(id)) delete shopFavorites[id]; });
+  Object.keys(shopCart).forEach((id) => { if (!shopItemById(id)) delete shopCart[id]; });
+}
+
+function filteredShopItems() {
+  if (shopCategoryFilter === 'favoriten') return SHOP_ITEMS.filter((it) => shopFavorites[it.id]);
+  if (shopCategoryFilter === 'all') return SHOP_ITEMS;
+  return SHOP_ITEMS.filter((it) => it.category === shopCategoryFilter);
+}
+
+function shopItemCardHtml(item) {
+  const owned = !!shopOwnedItems[item.id];
+  const inCart = !!shopCart[item.id];
+  const isFav = !!shopFavorites[item.id];
+  const locked = basecampLevel < item.requiredBasecampLevel;
+  const isBasecamp = item.type === 'basecamp_upgrade';
+  const isEquipped = shopEquippedItems[item.category] === item.id;
+  const levelAlreadyReached = isBasecamp && basecampLevel >= item.levelValue;
+
+  const statRows = Object.keys(item.statBonuses).map((k) => (
+    '<div class="dashboard-shop-stat-row"><span class="dashboard-shop-stat-label">' + (SHOP_STAT_LABELS_FULL[k] || k) + '</span><span class="dashboard-shop-stat-bonus">+' + item.statBonuses[k] + '</span></div>'
+  )).join('');
+
+  let actionHtml;
+  if (isBasecamp && levelAlreadyReached) {
+    actionHtml = '<span class="dashboard-shop-status-hint">Bereits erreicht</span>';
+  } else if (isBasecamp) {
+    actionHtml = '<button type="button" class="dashboard-shop-buy-btn' + (inCart ? ' is-in-cart' : '') + '" data-shop-cart-toggle="' + item.id + '">' + (inCart ? 'Im Warenkorb' : 'Ausbauen') + '</button>';
+  } else if (owned) {
+    actionHtml = '<button type="button" class="dashboard-shop-equip-btn' + (isEquipped ? ' is-equipped' : '') + '" data-shop-equip="' + item.id + '">' + (isEquipped ? 'Ausgerüstet ✓' : 'Ausrüsten') + '</button>';
+  } else {
+    actionHtml = '<button type="button" class="dashboard-shop-buy-btn' + (inCart ? ' is-in-cart' : '') + '" data-shop-cart-toggle="' + item.id + '">' + (inCart ? 'Im Warenkorb ✓' : 'In den Korb') + '</button>';
+  }
+  const heartHtml = isBasecamp ? '' : (
+    '<button type="button" class="dashboard-shop-fav-btn' + (isFav ? ' is-fav' : '') + '" data-shop-fav="' + item.id + '" title="Favorit">' + (isFav ? '♥' : '♡') + '</button>'
+  );
+
+  const footerHtml = locked
+    ? '<div class="dashboard-shop-card-footer"><span class="dashboard-shop-locked-hint">Höheres Basecamp-Level<br>erforderlich</span></div>'
+    : (
+      '<div class="dashboard-shop-card-footer">' +
+        '<span class="dashboard-shop-card-price">' + formatMoney(item.price) + '</span>' +
+        '<div class="dashboard-shop-card-actions">' + actionHtml + heartHtml + '</div>' +
+      '</div>'
+    );
+
+  return (
+    '<div class="dashboard-shop-card' + (locked ? ' is-locked' : '') + (isEquipped ? ' is-equipped' : '') + '" data-shop-item="' + item.id + '">' +
+      (locked ? '<div class="dashboard-shop-lock-overlay">🔒</div>' : '') +
+      '<div class="dashboard-shop-card-image" style="background:' + item.color + ';">' + item.emoji + '</div>' +
+      '<div class="dashboard-shop-card-stars">' + starsHtml(item.stars) + '</div>' +
+      '<div class="dashboard-shop-card-name">' + item.name + '</div>' +
+      '<div class="dashboard-shop-card-stats">' + statRows + '</div>' +
+      footerHtml +
+    '</div>'
+  );
+}
+
+function renderShopGrid() {
+  const all = filteredShopItems();
+  const pageCount = Math.max(1, Math.ceil(all.length / SHOP_ITEMS_PER_PAGE));
+  shopPage = Math.min(Math.max(1, shopPage), pageCount);
+  const start = (shopPage - 1) * SHOP_ITEMS_PER_PAGE;
+  const pageItems = all.slice(start, start + SHOP_ITEMS_PER_PAGE);
+
+  document.getElementById('dashboard-shop-empty').classList.toggle('hidden', all.length > 0);
+  document.getElementById('dashboard-shop-grid').innerHTML = pageItems.map(shopItemCardHtml).join('');
+
+  document.querySelectorAll('#dashboard-shop-grid [data-shop-cart-toggle]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); toggleCartItem(btn.dataset.shopCartToggle); });
+  });
+  document.querySelectorAll('#dashboard-shop-grid [data-shop-equip]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); toggleEquipItem(btn.dataset.shopEquip); });
+  });
+  document.querySelectorAll('#dashboard-shop-grid [data-shop-fav]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); toggleShopFavorite(btn.dataset.shopFav); });
+  });
+
+  renderShopPagination(pageCount);
+}
+
+function renderShopPagination(pageCount) {
+  const el = document.getElementById('dashboard-shop-pagination');
+  if (pageCount <= 1) { el.innerHTML = ''; return; }
+  let html = '';
+  for (let p = 1; p <= pageCount; p++) {
+    html += '<button type="button" class="dashboard-shop-page-btn' + (p === shopPage ? ' is-active' : '') + '" data-page="' + p + '">' + p + '</button>';
+  }
+  html += '<button type="button" class="dashboard-shop-page-btn" id="dashboard-shop-page-next" ' + (shopPage >= pageCount ? 'disabled' : '') + '>›</button>';
+  el.innerHTML = html;
+  el.querySelectorAll('.dashboard-shop-page-btn[data-page]').forEach((btn) => {
+    btn.addEventListener('click', () => { shopPage = Number(btn.dataset.page); renderShopGrid(); });
+  });
+  const nextBtn = document.getElementById('dashboard-shop-page-next');
+  if (nextBtn) nextBtn.addEventListener('click', () => { shopPage = Math.min(pageCount, shopPage + 1); renderShopGrid(); });
+}
+
+function selectShopCategory(tab) {
+  shopCategoryFilter = tab;
+  shopPage = 1;
+  document.querySelectorAll('.dashboard-shop-tab').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.shopTab === tab));
+  renderShopGrid();
+}
+
+function renderDashboardShopPanel() {
+  document.getElementById('dashboard-shop-basecamp-status').textContent = '🏕️ Basecamp-Level ' + basecampLevel + ' von 5';
+  document.querySelectorAll('.dashboard-shop-tab').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.shopTab === shopCategoryFilter));
+  renderShopGrid();
+  renderCartPanel();
+}
+
+// ── Warenkorb ───────────────────────────────────────────────────────────────
+
+function cartItemsList() {
+  return Object.keys(shopCart).map(shopItemById).filter(Boolean);
+}
+function cartTotal() {
+  return cartItemsList().reduce((sum, it) => sum + it.price, 0);
+}
+
+function toggleCartItem(id) {
+  const item = shopItemById(id);
+  if (!item) return; // unbekannte/ungültige ID -- Fehlerbehandlung statt Absturz
+  if (basecampLevel < item.requiredBasecampLevel) return; // Karte zeigt diesen Button bei Sperre ohnehin nicht an
+  if (item.type !== 'basecamp_upgrade' && shopOwnedItems[id]) return; // bereits im Besitz, kein Mehrfachkauf
+  if (item.type === 'basecamp_upgrade' && basecampLevel >= item.levelValue) return; // Stufe schon erreicht
+  if (shopCart[id]) delete shopCart[id]; else shopCart[id] = true;
+  renderShopGrid();
+  renderCartPanel();
+}
+
+function renderCartPanel() {
+  const items = cartItemsList();
+  const countEl = document.getElementById('dashboard-cart-count');
+  countEl.textContent = String(items.length);
+  countEl.classList.toggle('hidden', items.length === 0);
+
+  document.getElementById('dashboard-cart-empty').classList.toggle('hidden', items.length > 0);
+  document.getElementById('dashboard-cart-items').innerHTML = items.map((it) => (
+    '<div class="dashboard-cart-item">' +
+      '<span class="dashboard-cart-item-emoji" style="background:' + it.color + ';">' + it.emoji + '</span>' +
+      '<span class="dashboard-cart-item-name">' + it.name + '</span>' +
+      '<span class="dashboard-cart-item-price">' + formatMoney(it.price) + '</span>' +
+      '<button type="button" class="dashboard-cart-item-remove" data-shop-cart-remove="' + it.id + '" title="Entfernen">✕</button>' +
+    '</div>'
+  )).join('');
+  document.querySelectorAll('#dashboard-cart-items [data-shop-cart-remove]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleCartItem(btn.dataset.shopCartRemove));
+  });
+
+  document.getElementById('dashboard-cart-total').textContent = 'Gesamt: ' + formatMoney(cartTotal());
+  document.getElementById('btn-dashboard-cart-checkout').disabled = items.length === 0;
+}
+
+function openCartPanel() {
+  document.getElementById('dashboard-cart-panel').classList.remove('hidden');
+}
+function closeCartPanel() {
+  document.getElementById('dashboard-cart-panel').classList.add('hidden');
+}
+function toggleCartPanelOpen() {
+  const panel = document.getElementById('dashboard-cart-panel');
+  if (panel.classList.contains('hidden')) openCartPanel(); else closeCartPanel();
+}
+
+function clearCart() {
+  shopCart = {};
+  renderShopGrid();
+  renderCartPanel();
+}
+
+function checkoutCart() {
+  const items = cartItemsList();
+  if (items.length === 0) return;
+  const total = cartTotal();
+  if (total > assignedOrg.budget) {
+    showConfirmModal('Budget zu niedrig', 'Der Warenkorb kostet insgesamt ' + formatMoney(total) + ' -- das übersteigt dein aktuelles Budget von ' + formatMoney(assignedOrg.budget) + '.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
+    return;
+  }
+  showConfirmModal('Kauf bestätigen', items.length + ' Artikel für insgesamt ' + formatMoney(total) + ' kaufen?', () => executeCartCheckout(), {});
+}
+
+function executeCartCheckout() {
+  // Erneut aus shopCart lesen statt den beim Öffnen des Dialogs übergebenen
+  // Snapshot zu verwenden -- zwischen "Kaufen bestätigen" und Klick auf
+  // "Bestätigen" im Modal könnte sich der Warenkorb theoretisch nicht mehr
+  // ändern (Modal blockiert die Seite), aber so bleibt die Funktion auch bei
+  // künftigen Änderungen (z.B. Mehrfach-Bestätigungs-Ketten) korrekt.
+  const items = cartItemsList();
+  items.forEach((item) => {
+    // Basecamp-Vorbedingung kann sich seit dem Hinzufügen geändert haben (z.B.
+    // zwei aufeinanderfolgende Ausbaustufen gleichzeitig im Warenkorb) --
+    // pro Artikel erneut prüfen statt blind auszuführen.
+    if (item.type === 'basecamp_upgrade') {
+      if (basecampLevel !== item.requiredBasecampLevel) { delete shopCart[item.id]; return; }
+      basecampLevel = item.levelValue;
+    } else {
+      if (shopOwnedItems[item.id]) { delete shopCart[item.id]; return; }
+      shopOwnedItems[item.id] = true;
+    }
+    assignedOrg.budget -= item.price;
+    addFinanceMonthlyExpense(item.price, 'Shop', item.name);
+    if (item.type === 'basecamp_upgrade') {
+      pushPostMessage('shop', 'NORMAL', 'Basecamp-Team', 'Basecamp-Ausstattung aktualisiert', 'Dein neues Basecamp-Level (' + item.name + ') wurde installiert und verbessert ab sofort die Trainingsbedingungen.', null, { type: 'openPage', page: 'basecamp' });
+    } else {
+      pushPostMessage('shop', 'NORMAL', 'Shop', 'Bestellung erfolgreich', 'Deine Bestellung "' + item.name + '" wurde erfolgreich abgeschlossen und deinem Basecamp hinzugefügt.', null, { type: 'openPage', page: 'basecamp' });
+    }
+    delete shopCart[item.id];
+  });
+  reapplyShopEquipmentIntegrity();
+  renderDashboardShopPanel();
+  renderDashboardTopbar();
+  saveGameState();
+}
+
+function toggleEquipItem(id) {
+  const item = shopItemById(id);
+  if (!item || item.type === 'basecamp_upgrade' || !shopOwnedItems[id]) return; // Fehlerbehandlung: ungültig/nicht im Besitz
+  if (shopEquippedItems[item.category] === id) delete shopEquippedItems[item.category];
+  else shopEquippedItems[item.category] = id;
+  renderShopGrid();
+  saveGameState();
+}
+
+function toggleShopFavorite(id) {
+  if (!shopItemById(id)) return;
+  if (shopFavorites[id]) delete shopFavorites[id]; else shopFavorites[id] = true;
+  renderShopGrid();
+  saveGameState();
+}
+
+// ── Basecamp-Seite ───────────────────────────────────────────────────────────
+// Zeigt das aktuelle Basecamp-Level (Hero), das ausgerüstete Equipment pro
+// Kategorie (3x3-Grid), die daraus berechneten Gesamtboni und eine Inventar-
+// Tabelle mit Verkaufsfunktion. Baut bewusst KEINE zweite Kauf-/Filter-UI --
+// Kategorie-Tabs und Equipment-Karten verlinken in den bestehenden Shop
+// (goToShopCategory()), Kauf/Ausrüsten bleiben dort die einzige Quelle der
+// Wahrheit für shopOwnedItems/shopEquippedItems.
+
+// 3x3-Reihenfolge exakt wie in der Referenzbeschreibung: Tastatur/Kopfhörer/
+// Tisch, Maus/PC/Stuhl, Mauspad/Monitor/Getränk.
+const BASECAMP_EQUIP_GRID_ORDER = ['tastaturen', 'kopfhoerer', 'tische', 'maeuse', 'pcs', 'stuehle', 'mauspads', 'monitore', 'getraenke'];
+// Tabellen-Reihenfolge exakt wie in der Referenzbeschreibung.
+const BASECAMP_INVENTORY_CATEGORIES = ['maeuse', 'mauspads', 'tastaturen', 'basecamp', 'monitore', 'pcs', 'stuehle', 'getraenke', 'tische', 'kopfhoerer'];
+// Verkauf erstattet die Hälfte des Kaufpreises -- übliche, für den Spieler
+// nachvollziehbare Spielökonomie-Konvention (verhindert Kauf-Verkauf-Arbitrage
+// ohne echten Verlust).
+const SHOP_SELL_RATIO = 0.5;
+
+function shopCategoryById(id) {
+  return SHOP_CATEGORIES.find((c) => c.id === id) || null;
+}
+function equippedItemForCategory(categoryId) {
+  const id = shopEquippedItems[categoryId];
+  return id ? shopItemById(id) : null;
+}
+function ownedItemsInCategory(categoryId) {
+  return Object.keys(shopOwnedItems).map(shopItemById).filter((it) => it && it.category === categoryId);
+}
+
+function goToShopCategory(categoryId) {
+  selectDashboardPage('shop');
+  selectShopCategory(categoryId);
+}
+
+function basecampEquipCardHtml(categoryId) {
+  const cat = shopCategoryById(categoryId);
+  const item = equippedItemForCategory(categoryId);
+  if (!item) {
+    return (
+      '<div class="dashboard-basecamp-equip-card is-empty" data-basecamp-equip-goto="' + categoryId + '">' +
+        '<div class="dashboard-basecamp-equip-card-image dashboard-basecamp-equip-card-image-empty">' + cat.emoji + '</div>' +
+        '<div class="dashboard-basecamp-equip-card-category">' + cat.label.toUpperCase() + '</div>' +
+        '<div class="dashboard-basecamp-equip-card-empty-hint">Nicht ausgerüstet</div>' +
+      '</div>'
+    );
+  }
+  return (
+    '<div class="dashboard-basecamp-equip-card" data-basecamp-equip-goto="' + categoryId + '">' +
+      '<div class="dashboard-basecamp-equip-card-image" style="background:' + item.color + ';">' + item.emoji + '</div>' +
+      '<div class="dashboard-basecamp-equip-card-stars">' + starsHtml(item.stars) + '</div>' +
+      '<div class="dashboard-basecamp-equip-card-category">' + cat.label.toUpperCase() + '</div>' +
+      '<div class="dashboard-basecamp-equip-card-name">' + item.name + '</div>' +
+    '</div>'
+  );
+}
+
+function renderDashboardBasecampEquipGrid() {
+  document.getElementById('dashboard-basecamp-equip-grid').innerHTML = BASECAMP_EQUIP_GRID_ORDER.map(basecampEquipCardHtml).join('');
+  document.querySelectorAll('#dashboard-basecamp-equip-grid [data-basecamp-equip-goto]').forEach((card) => {
+    card.addEventListener('click', () => goToShopCategory(card.dataset.basecampEquipGoto));
+  });
+}
+
+function renderDashboardBasecampHero() {
+  const data = basecampLevelData(basecampLevel);
+  const heroEl = document.getElementById('dashboard-basecamp-hero');
+  heroEl.style.background = 'linear-gradient(160deg, ' + data.color + ' 0%, #10152a 100%)';
+  document.getElementById('dashboard-basecamp-hero-stars').innerHTML = starsHtml(data.stars);
+  document.getElementById('dashboard-basecamp-hero-type').textContent = data.type;
+  document.getElementById('dashboard-basecamp-hero-name').textContent = data.name + ' · Level ' + basecampLevel;
+}
+
+const BASECAMP_BONUS_COLUMNS = [
+  { title: 'SPIELWEISE', keys: ['mechanics', 'gameSense', 'speed'] },
+  { title: 'ABSCHLUSS & ABWEHR', keys: ['shooting', 'defending', 'boostMgmt'] },
+];
+
+function basecampBonusRowHtml(label, value, isPct) {
+  const cls = value > 0 ? ' is-positive' : '';
+  const sign = value > 0 ? '+' : '';
+  const text = isPct ? sign + value.toFixed(1) + '%' : sign + value;
+  return (
+    '<div class="dashboard-basecamp-bonus-row">' +
+      '<span class="dashboard-basecamp-bonus-label">' + label + '</span>' +
+      '<span class="dashboard-basecamp-bonus-value' + cls + '">' + text + '</span>' +
+    '</div>'
+  );
+}
+function basecampStatusRowHtml(label, value) {
+  const cls = value >= TEAM_CHEMISTRY_NEUTRAL_BASELINE ? ' is-positive' : '';
+  return (
+    '<div class="dashboard-basecamp-bonus-row">' +
+      '<span class="dashboard-basecamp-bonus-label">' + label + '</span>' +
+      '<span class="dashboard-basecamp-bonus-value' + cls + '">' + value + '</span>' +
+    '</div>'
+  );
+}
+
+// 3 Spalten wie in der Referenz -- ABER mit echten, im Spiel vorhandenen
+// Werten statt erfundener CS-Attribute (AWP/Gewehr/Pistole/... hätten in
+// diesem Rocket-League-Manager keine Entsprechung, gleiche Begründung wie
+// schon bei den Sponsoring-Zielen in data/sponsors.js): Spalte 1+2 sind die
+// 6 echten Spieler-Statachsen (equipmentStatBonuses(), fließt bereits in
+// getEffectivePlayerStats()/equipmentMatchBonusPct() ein), Spalte 3 ist das
+// bestehende Team-Chemie-System (computeTeamPhysicalCondition()/-Morale()/
+// -LanguageUnderstanding()) als ehrlicher IST-Wert plus der echten, separat
+// benannten Basecamp-Chemie-Prozentzahl (basecampChemistryBonusPct()).
+function renderDashboardBasecampBonusPanel() {
+  const bonuses = equipmentStatBonuses();
+  let html = '<div class="dashboard-basecamp-bonus-columns">';
+  BASECAMP_BONUS_COLUMNS.forEach((col) => {
+    html += '<div class="dashboard-basecamp-bonus-col">' +
+      '<div class="dashboard-basecamp-bonus-col-title">' + col.title + '</div>' +
+      col.keys.map((k) => basecampBonusRowHtml(SHOP_STAT_LABELS_FULL[k], bonuses[k], false)).join('') +
+    '</div>';
+  });
+  // effectiveTeamPhysicalCondition()/effectiveTeamMorale() statt der reinen
+  // compute*()-Werte (Personal-Seite: Physiotherapeut/Psychologe wirken jetzt
+  // real auf diese Werte, siehe deren Kommentare) -- die Basecamp-Chemie-
+  // Zeile darunter bleibt ein SEPARATER, eigener Bonus-Beitrag.
+  const condition = Math.round(effectiveTeamPhysicalCondition(assignedOrg));
+  const morale = Math.round(effectiveTeamMorale(assignedOrg));
+  const language = Math.round(computeTeamLanguageUnderstanding(assignedOrg));
+  html += '<div class="dashboard-basecamp-bonus-col">' +
+    '<div class="dashboard-basecamp-bonus-col-title">TEAM-ZUSTAND</div>' +
+    basecampStatusRowHtml('Kondition', condition) +
+    basecampStatusRowHtml('Moral', morale) +
+    basecampStatusRowHtml('Sprachverständnis', language) +
+    basecampBonusRowHtml('Basecamp-Chemie', basecampChemistryBonusPct(), true) +
+  '</div>';
+  html += '</div>';
+  document.getElementById('dashboard-basecamp-bonus-panel').innerHTML = html;
+}
+
+function basecampInventoryRowHtml(categoryId) {
+  if (categoryId === 'basecamp') {
+    const spent = SHOP_ITEMS.filter((it) => it.category === 'basecamp' && it.levelValue <= basecampLevel).reduce((s, it) => s + it.price, 0);
+    return (
+      '<tr>' +
+        '<td>Bootcamp</td>' +
+        '<td>1</td>' +
+        '<td>' + formatMoney(spent) + '</td>' +
+        '<td class="dashboard-basecamp-inv-unsellable">–</td>' +
+      '</tr>'
+    );
+  }
+  const cat = shopCategoryById(categoryId);
+  const owned = ownedItemsInCategory(categoryId);
+  const totalCost = owned.reduce((s, it) => s + it.price, 0);
+  const sellTotal = Math.round(totalCost * SHOP_SELL_RATIO);
+  return (
+    '<tr>' +
+      '<td>' + cat.label + '</td>' +
+      '<td>' + owned.length + '</td>' +
+      '<td>' + formatMoney(totalCost) + '</td>' +
+      '<td>' + (owned.length > 0
+        ? '<button type="button" class="dashboard-basecamp-sell-btn" data-basecamp-sell="' + categoryId + '">' + formatMoney(sellTotal) + ' verkaufen</button>'
+        : '<span class="dashboard-basecamp-inv-unsellable">' + formatMoney(0) + '</span>') +
+      '</td>' +
+    '</tr>'
+  );
+}
+
+function renderDashboardBasecampInventory() {
+  const rows = BASECAMP_INVENTORY_CATEGORIES.map(basecampInventoryRowHtml).join('');
+  document.getElementById('dashboard-basecamp-inventory').innerHTML =
+    '<table class="dashboard-basecamp-inv-table">' +
+      '<thead><tr><th>Kategorie</th><th>Menge</th><th>Gesamtkosten</th><th>Verkaufspreis</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+    '</table>';
+  document.querySelectorAll('#dashboard-basecamp-inventory [data-basecamp-sell]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); sellAllInCategoryPrompt(btn.dataset.basecampSell); });
+  });
+}
+
+function sellAllInCategoryPrompt(categoryId) {
+  const cat = shopCategoryById(categoryId);
+  const owned = ownedItemsInCategory(categoryId);
+  if (owned.length === 0) return; // Fehlerbehandlung: nichts zu verkaufen, Button sollte hier ohnehin nicht sichtbar sein
+  const total = Math.round(owned.reduce((s, it) => s + it.price, 0) * SHOP_SELL_RATIO);
+  showConfirmModal('Verkauf bestätigen', 'Alle ' + owned.length + ' Artikel aus "' + cat.label + '" für insgesamt ' + formatMoney(total) + ' verkaufen?', () => sellAllInCategory(categoryId), {});
+}
+
+function sellAllInCategory(categoryId) {
+  const owned = ownedItemsInCategory(categoryId);
+  let total = 0;
+  owned.forEach((item) => {
+    total += Math.round(item.price * SHOP_SELL_RATIO);
+    delete shopOwnedItems[item.id];
+    // Verkauftes, aber noch ausgerüstetes Item muss auch aus shopEquippedItems
+    // verschwinden -- sonst zeigt der Hero/Equip-Grid ein Item, das es nicht
+    // mehr gibt (reapplyShopEquipmentIntegrity() würde es zwar beim nächsten
+    // Laden aufräumen, aber die laufende Session soll sofort korrekt sein).
+    if (shopEquippedItems[categoryId] === item.id) delete shopEquippedItems[categoryId];
+  });
+  if (total > 0) {
+    assignedOrg.budget += total;
+    addFinanceMonthlyIncome(total, 'Shop', shopCategoryById(categoryId).label + ' verkauft (' + owned.length + ' Artikel)');
+  }
+  renderDashboardBasecampPanel();
+  renderDashboardTopbar();
+  saveGameState();
+}
+
+function renderDashboardBasecampPanel() {
+  document.querySelectorAll('#dashboard-basecamp-tabs .dashboard-shop-tab').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.basecampTab === 'overview'));
+  renderDashboardBasecampHero();
+  renderDashboardBasecampEquipGrid();
+  renderDashboardBasecampBonusPanel();
+  renderDashboardBasecampInventory();
+}
+
+// ── Strategien: zentrale Berechnung ──────────────────────────────────────────
+// EINE zentrale Auswertungskette (User-Vorgabe: "keine 20 verschiedenen
+// Stellen") statt verstreuter if/else-Ketten: getActiveStrategyResolved()
+// liefert IMMER dieselbe Form (modifiers/statRequirements/riskVariance/
+// counters), egal ob die Quelle ein Preset, die Allround-Taktik-Regler oder
+// eine selbst erstellte Taktik ist -- computeActiveStrategyMatchBonusPct()
+// ist der EINZIGE Ort, der das Ergebnis in die Match-Simulation einspeist
+// (über den bestehenden orgMatchBonusPct-Kanal, siehe simulateBotSeries()).
+
+function strategyById(id) {
+  return STRATEGIES.find((s) => s.id === id) || null;
+}
+
+const STRATEGY_GENERIC_STAT_REQUIREMENTS = { mechanics: 0.25, gameSense: 0.3, speed: 0.25, boostMgmt: 0.2 };
+
+// Regler 0-100 (50 = neutral) -> dieselben 8 taktischen Dimensionen wie die
+// Presets. Vorzeichen/Gewichtung sind eine bewusste, dokumentierte Abbildung
+// (kein 1:1-Referenzwert vorgegeben): hohe Offensiv-Ausrichtung erhöht
+// offense/senkt defense, hohes Pressing erhöht pressing/tempo, enges ODER
+// weites Rotationsabstand-Extrem (nicht nur "weit") erhöht das Rotationsrisiko,
+// hohe Boost-Nutzung kostet Boost-Effizienz.
+function allroundModifiersFromSettings(settings) {
+  const n = (v) => ((v ?? 50) - 50) / 50; // -1..+1
+  return {
+    offense: n(settings.offense) * 25,
+    defense: -n(settings.offense) * 20,
+    tempo: (n(settings.pressing) + n(settings.challenge)) * 12,
+    pressing: n(settings.pressing) * 28,
+    possession: n(settings.passing) * 20 - n(settings.pressing) * 8,
+    rotation: -Math.abs(n(settings.rotation)) * 12,
+    counter: -n(settings.challenge) * 10,
+    boost: -n(settings.boost) * 18,
+  };
+}
+function allroundRiskVariance(settings) {
+  const vals = ['offense', 'rotation', 'challenge', 'boost', 'passing', 'pressing'].map((k) => Math.abs((settings[k] ?? 50) - 50));
+  const avgDeviation = vals.reduce((s, v) => s + v, 0) / vals.length; // 0..50
+  return 0.5 + (avgDeviation / 50) * 2.5; // 0.5 (alles neutral) .. 3.0 (alle Regler extrem)
+}
+
+// Taktik-Ersteller: User-Vorgabe ("man muss eingeschränkt werden, offense 100
+// darf nicht auch defense 100 erlauben, eine Seite macht die andere
+// schlechter") -- Offense/Defense und Pressing/Ballbesitz sind deshalb KEINE
+// zwei unabhängigen Regler mehr, sondern je EIN Gegensatz-Regler
+// (offenseBalance/pressingBalance, 0-100, 50=ausgeglichen). defense/possession
+// werden als 100-Balance abgeleitet -- ein höherer Offense-Wert senkt den
+// Defense-Wert damit MECHANISCH, nicht nur per Zufalls-Deckel. cs.offense/
+// cs.defense/cs.pressing/cs.possession als Fallback gelesen (Altstand vor
+// dieser Umstellung, siehe customStrategyCardHtml() für dieselbe Migration).
+function customStrategyModifiers(cs) {
+  const n = (v) => ((v ?? 50) - 50) / 50;
+  const offenseBalance = cs.offenseBalance ?? cs.offense ?? 50;
+  const pressingBalance = cs.pressingBalance ?? cs.pressing ?? 50;
+  return {
+    offense: n(offenseBalance) * 25,
+    defense: n(100 - offenseBalance) * 25,
+    tempo: n(cs.tempo) * 25,
+    pressing: n(pressingBalance) * 25,
+    possession: n(100 - pressingBalance) * 20,
+    // Bug-Fix (Audit): Math.abs() bestrafte SICHER (risiko=0) genauso stark
+    // wie RISKANT (risiko=100) -- copy-paste aus allroundModifiersFromSettings()
+    // (dort für "Rotationsabstand" korrekt, weil dort BEIDE Extreme schlecht
+    // sind). Beim Ersteller-Regler SICHER/RISKANT ist das falsch: SICHER hat
+    // seinen Vorteil bereits über customStrategyRiskVariance() (geringere
+    // Streuung), ohne zusätzlichen Rotations-Malus. Nur Richtung RISKANT
+    // (n>0) kostet jetzt Rotation, SICHER/neutral bleibt bei 0.
+    rotation: -Math.max(0, n(cs.risiko)) * 10,
+    counter: 0,
+    boost: -n(cs.tempo) * 12,
+  };
+}
+function customStrategyRiskVariance(cs) {
+  return 0.4 + ((cs.risiko ?? 50) / 100) * 3;
+}
+
+// Liefert die aktive Strategie in EINER einheitlichen Form, unabhängig von der
+// Quelle. Fällt auf 'balanced' zurück, wenn der gespeicherte Zustand auf
+// etwas nicht (mehr) Existierendes zeigt (z.B. gelöschte eigene Taktik nach
+// Save/Load) -- Fehlerbehandlung statt Absturz.
+function getActiveStrategyResolved() {
+  if (activeStrategyMode === 'allround') {
+    return {
+      id: '__allround', name: 'Allround-Taktik', category: 'custom',
+      modifiers: allroundModifiersFromSettings(allroundTacticSettings),
+      statRequirements: STRATEGY_GENERIC_STAT_REQUIREMENTS,
+      riskVariance: allroundRiskVariance(allroundTacticSettings),
+      counters: [],
+    };
+  }
+  if (activeStrategyMode === 'custom') {
+    const cs = customStrategies.find((c) => c.id === activeCustomStrategyId);
+    if (cs) {
+      return {
+        id: cs.id, name: cs.name, category: 'custom',
+        modifiers: customStrategyModifiers(cs),
+        statRequirements: STRATEGY_GENERIC_STAT_REQUIREMENTS,
+        riskVariance: customStrategyRiskVariance(cs),
+        counters: [],
+      };
+    }
+  }
+  return strategyById(activeStrategyId) || strategyById('balanced');
+}
+
+// Team-Eignung: gewichteter Mittelwert der ECHTEN Statachsen der 3 Starter
+// (individuell unterschiedlich pro Spieler, siehe rollPlayer() in
+// org-rosters.js) gegen statRequirements der Strategie, relativ zur
+// Simulations-Baseline 75 (siehe MATCH_SIM_STAT_BASELINE in match.js) skaliert.
+// Rückgabe in Prozentpunkten, kann negativ sein (Team passt NICHT zur Strategie).
+function strategyTeamFitPct(strategy) {
+  if (!assignedOrg || !assignedOrg.roster || !assignedOrg.roster.starters || assignedOrg.roster.starters.length === 0) return 0;
+  const starters = assignedOrg.roster.starters;
+  let weightedSum = 0;
+  let weightTotal = 0;
+  Object.keys(strategy.statRequirements).forEach((statKey) => {
+    const weight = strategy.statRequirements[statKey];
+    const avgStat = starters.reduce((s, p) => s + (p[statKey] || 0), 0) / starters.length;
+    weightedSum += weight * avgStat;
+    weightTotal += weight;
+  });
+  const weightedAvgStat = weightTotal > 0 ? weightedSum / weightTotal : 75;
+  return (weightedAvgStat - 75) * 1.2;
+}
+
+// Effektivität (User-Beispiel: "Basis-Effektivität 70% + Team passt gut +10%
+// + Teamarbeit hoch +7% + ..."): Basis 70%, Team-Fit (oben) plus ein kleiner
+// Team-Chemie-Anteil (Moral als "Teamarbeit"-naher, echter, bereits
+// existierender Wert -- siehe computeTeamMorale()) als zweiter additiver Term.
+function strategyEffectivenessPct(strategy) {
+  const base = 70;
+  const fit = strategyTeamFitPct(strategy);
+  const moraleTerm = assignedOrg ? ((effectiveTeamMorale(assignedOrg) - TEAM_CHEMISTRY_NEUTRAL_BASELINE) / 100) * 15 : 0;
+  return Math.max(20, Math.min(150, base + fit + moraleTerm));
+}
+
+// Verrechnet die 8 taktischen Dimensionen zu EINEM Netto-Prozentwert. Positive
+// Dimensionen (offense/defense/tempo/pressing/possession) tragen bei, die
+// "Kosten"-Dimensionen (rotation/counter/boost sind bei riskanten Strategien
+// typischerweise negativ) mindern ihn -- Skalierungsfaktor 0.12 hält den
+// Wertebereich in derselben Größenordnung wie die anderen Bonus-Kanäle
+// (Team-Chemie/Traits/Ausrüstung, siehe SHOP_EQUIPMENT_BONUS_PCT_PER_STAT_POINT-
+// Kommentar), damit keine Strategie den Chemie-/Ausrüstungs-Einfluss dominiert.
+function strategyBaseNetPct(strategy) {
+  const m = strategy.modifiers;
+  const positive = (m.offense + m.defense + m.tempo + m.pressing + m.possession) / 5;
+  const cost = (Math.abs(m.rotation) + Math.abs(m.counter) + Math.abs(m.boost)) / 3;
+  return (positive - cost * 0.3) * 0.12;
+}
+
+// Deterministische "Spielstil-Tendenz" für Orgs ohne echtes Strategiesystem
+// (alle Bot-Orgs) -- gleiches Hash-Muster wie überall im Projekt (siehe
+// shopHashString() in data/shop-items.js), rein für die Konter-Beziehung
+// unten, KEIN gespeicherter Zustand nötig (bei jedem Aufruf gleich reproduzierbar).
+function orgStrategyTendency(org) {
+  return STRATEGIES[shopHashString(org.name) % STRATEGIES.length];
+}
+
+// Kleine, klar begrenzte Konter-Anpassung (User-Vorgabe: "KEIN Strategie A
+// schlägt Strategie B automatisch") -- +/-3 Prozentpunkte, nicht entscheidend,
+// aber spürbar genug, damit die in data/strategies.js hinterlegten counters[]-
+// Beziehungen (Pressing<Konter<Ballbesitz<Pressing, siehe dortigen Kommentar)
+// real ins Gewicht fallen.
+function counterPlayAdjustmentPct(strategy, opponentOrg) {
+  if (!opponentOrg || !strategy.id) return 0;
+  const oppTendency = orgStrategyTendency(opponentOrg);
+  if (Array.isArray(strategy.counters) && strategy.counters.includes(oppTendency.id)) return 3;
+  if (Array.isArray(oppTendency.counters) && oppTendency.counters.includes(strategy.id)) return -3;
+  return 0;
+}
+
+// Einziger Aufruf-Ort für die Match-Integration (aus simulateBotSeries()).
+// riskVariance sorgt dafür, dass "Risiko" ECHT simulationswirksam ist: eine
+// riskante Strategie hat denselben Erwartungswert-Charakter wie eine
+// vorsichtige, aber deutlich mehr Streuung nach oben UND unten (gaussianRandom()
+// ist bereits in match.js definiert und global verfügbar, gleiche Funktion,
+// die auch resolveDuel() für die Duell-Varianz nutzt). Harte Deckelung auf
+// +/-15%, konsistent mit den anderen additiven Bonus-Kanälen.
+function computeActiveStrategyMatchBonusPct(opponentOrg) {
+  const strategy = getActiveStrategyResolved();
+  const effectivenessPct = strategyEffectivenessPct(strategy) / 100;
+  const netBase = strategyBaseNetPct(strategy) * effectivenessPct;
+  const counterAdj = counterPlayAdjustmentPct(strategy, opponentOrg);
+  const sampled = gaussianRandom(netBase + counterAdj, strategy.riskVariance || 1);
+  return Math.max(-15, Math.min(15, sampled));
+}
+
+// ── Strategien: UI (Tab "Strategien") ───────────────────────────────────────
+
+function selectTacticsMainTab(tab) {
+  document.querySelectorAll('[data-tactics-main-tab]').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.tacticsMainTab === tab));
+  document.getElementById('dashboard-tactics-strategien-tab').classList.toggle('hidden', tab !== 'strategien');
+  document.getElementById('dashboard-tactics-allround-tab').classList.toggle('hidden', tab !== 'allround');
+  document.getElementById('dashboard-tactics-ersteller-tab').classList.toggle('hidden', tab !== 'ersteller');
+  if (tab === 'strategien') renderTacticsStrategienTab();
+  if (tab === 'allround') renderTacticsAllroundTab();
+  if (tab === 'ersteller') renderTacticsErstellerTab();
+}
+
+function filteredStrategies() {
+  if (strategyCategoryFilter === 'all') return STRATEGIES;
+  return STRATEGIES.filter((s) => s.category === strategyCategoryFilter);
+}
+
+function selectStrategyCategory(cat) {
+  strategyCategoryFilter = cat;
+  document.querySelectorAll('[data-tactics-cat]').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.tacticsCat === cat));
+  const list = filteredStrategies();
+  if (list.length > 0 && !list.some((s) => s.id === strategyPreviewId)) strategyPreviewId = list[0].id;
+  renderTacticsStrip();
+  renderTacticsArenaAndDetail();
+}
+
+function strategyStripCardHtml(strategy) {
+  const isActive = activeStrategyMode === 'preset' && activeStrategyId === strategy.id;
+  const isPreview = strategyPreviewId === strategy.id;
+  return (
+    '<div class="dashboard-tactics-strip-card' + (isPreview ? ' is-selected' : '') + (isActive ? ' is-active-strategy' : '') + '" data-tactics-strip="' + strategy.id + '">' +
+      '<span class="dashboard-tactics-strip-emoji" style="background:' + strategy.color + ';">' + strategy.emoji + '</span>' +
+      '<span class="dashboard-tactics-strip-name">' + strategy.name + '</span>' +
+      (isActive ? '<span class="dashboard-tactics-strip-active-badge">✓ AKTIV</span>' : '') +
+    '</div>'
+  );
+}
+
+function renderTacticsStrip() {
+  const list = filteredStrategies();
+  document.getElementById('dashboard-tactics-strip').innerHTML = list.map(strategyStripCardHtml).join('');
+  document.querySelectorAll('#dashboard-tactics-strip [data-tactics-strip]').forEach((card) => {
+    card.addEventListener('click', () => { strategyPreviewId = card.dataset.tacticsStrip; renderTacticsStrip(); renderTacticsArenaAndDetail(); });
+  });
+}
+
+// Kleine dynamische Pfeil-Overlay-Darstellung auf der Arena (User-Vorgabe:
+// "Rotationspfeile / Laufwege / Ballrichtung / Angriffsrichtung / defensive
+// Positionierung / Pressing-Zonen") -- kein statisches Bild pro Strategie
+// (keine Assets dafür im Projekt vorhanden), sondern aus den echten
+// modifiers abgeleitet, damit die Darstellung wirklich zur Strategie passt.
+function arenaArrowsHtml(strategy) {
+  const m = strategy.modifiers;
+  const arrows = [];
+  if (m.offense > 0) {
+    arrows.push({ top: '64%', left: '32%', rot: -35, size: 13 + m.offense * 0.4, color: '#3ecf72' });
+    arrows.push({ top: '58%', left: '68%', rot: -15, size: 11 + m.offense * 0.3, color: '#3ecf72' });
+  }
+  if (m.defense > 0) {
+    arrows.push({ top: '80%', left: '50%', rot: 180, size: 11 + m.defense * 0.3, color: '#4f8cf7' });
+  }
+  if (Math.abs(m.pressing) > 8) {
+    arrows.push({ top: '38%', left: '50%', rot: m.pressing > 0 ? -90 : 90, size: 15, color: '#e8a23e' });
+  }
+  if (m.possession > 10) {
+    arrows.push({ top: '48%', left: '50%', rot: 0, size: 10, color: '#3fbdd6' });
+  }
+  if (arrows.length === 0) {
+    arrows.push({ top: '50%', left: '50%', rot: -45, size: 12, color: '#8a91a8' });
+  }
+  return arrows.map((a) => (
+    '<span class="dashboard-tactics-arrow" style="top:' + a.top + ';left:' + a.left + ';transform:translate(-50%,-50%) rotate(' + a.rot + 'deg);font-size:' + a.size + 'px;color:' + a.color + ';">➤</span>'
+  )).join('');
+}
+
+function riskDotsHtml(riskLevel) {
+  let html = '';
+  for (let i = 1; i <= 5; i++) html += '<span class="dashboard-tactics-risk-dot' + (i <= riskLevel ? ' is-filled' : '') + '"></span>';
+  return html;
+}
+
+// Anforderungs-Balken (User-Vorgabe: "Geeignet für" mit Balken je Wert, grün
+// wenn das Team die Anforderung erfüllt, Warnung wenn nicht) -- Balkenlänge
+// aus dem ECHTEN Team-Durchschnitt der 3 Starter für diese Statachse (45-95
+// -> 0-100%-Skala für die Anzeige).
+function requirementBarHtml(statKey, weight) {
+  const starters = (assignedOrg && assignedOrg.roster && assignedOrg.roster.starters) || [];
+  const avg = starters.length > 0 ? starters.reduce((s, p) => s + (p[statKey] || 0), 0) / starters.length : 0;
+  const pct = Math.max(0, Math.min(100, avg));
+  const meetsReq = avg >= 70; // grober, aber ehrlicher Schwellenwert (Statskala 45-95, Mitte 70)
+  return (
+    '<div class="dashboard-tactics-req-row">' +
+      '<span class="dashboard-tactics-req-label">' + (SHOP_STAT_LABELS_FULL[statKey] || statKey) + '</span>' +
+      '<div class="dashboard-tactics-req-track"><div class="dashboard-tactics-req-fill' + (meetsReq ? '' : ' is-warning') + '" style="width:' + pct + '%;"></div></div>' +
+      '<span class="dashboard-tactics-req-value' + (meetsReq ? '' : ' is-warning') + '">' + Math.round(avg) + '</span>' +
+    '</div>'
+  );
+}
+
+function modifierRowHtml(key, value, comparisonValue) {
+  const cls = value > 0 ? ' is-positive' : value < 0 ? ' is-negative' : '';
+  const sign = value > 0 ? '+' : '';
+  let compareHtml = '';
+  if (typeof comparisonValue === 'number') {
+    const delta = value - comparisonValue;
+    if (Math.abs(delta) >= 1) {
+      const deltaCls = delta > 0 ? ' is-positive' : ' is-negative';
+      compareHtml = '<span class="dashboard-tactics-modifier-delta' + deltaCls + '">(' + (delta > 0 ? '+' : '') + Math.round(delta) + ' vs. aktiv)</span>';
+    }
+  }
+  return (
+    '<div class="dashboard-tactics-modifier-row">' +
+      '<span class="dashboard-tactics-modifier-label">' + (STRATEGY_MODIFIER_LABELS[key] || key) + '</span>' +
+      '<span class="dashboard-tactics-modifier-value' + cls + '">' + sign + Math.round(value) + compareHtml + '</span>' +
+    '</div>'
+  );
+}
+
+// Datenbasierter Hinweis (User-Vorgabe Abschnitt 19) -- KEIN Fülltext, direkt
+// aus strategyTeamFitPct()/strategyEffectivenessPct() abgeleitet.
+function strategyRecommendationText(strategy) {
+  const fit = strategyTeamFitPct(strategy);
+  const eff = strategyEffectivenessPct(strategy);
+  const statLabel = Object.keys(strategy.statRequirements).sort((a, b) => strategy.statRequirements[b] - strategy.statRequirements[a])[0];
+  if (fit >= 8) {
+    return 'Dein Team liegt bei ' + (SHOP_STAT_LABELS_FULL[statLabel] || statLabel) + ' deutlich über dem Durchschnitt -- diese Strategie ist für dein Team besonders effektiv (' + Math.round(eff) + '% Effektivität).';
+  }
+  if (fit <= -8) {
+    return 'Dein Team liegt bei ' + (SHOP_STAT_LABELS_FULL[statLabel] || statLabel) + ' unter dem für diese Strategie empfohlenen Niveau -- die Effektivität fällt dadurch niedriger aus (' + Math.round(eff) + '%).';
+  }
+  return 'Dein Team passt durchschnittlich zu dieser Strategie (' + Math.round(eff) + '% Effektivität).';
+}
+
+function renderTacticsArenaAndDetail() {
+  const list = filteredStrategies();
+  const strategy = strategyById(strategyPreviewId) || list[0] || STRATEGIES[0];
+  if (!strategy) return;
+  strategyPreviewId = strategy.id;
+
+  const arenaEl = document.getElementById('dashboard-tactics-arena');
+  arenaEl.style.setProperty('--tactics-arena-tint', strategy.color);
+  document.getElementById('dashboard-tactics-arena-arrows').innerHTML = arenaArrowsHtml(strategy);
+  document.getElementById('dashboard-tactics-arena-name').textContent = strategy.name.toUpperCase();
+  document.getElementById('dashboard-tactics-arena-category').textContent = (STRATEGY_CATEGORIES.find((c) => c.id === strategy.category) || {}).label || strategy.category.toUpperCase();
+  document.getElementById('dashboard-tactics-arena-desc').textContent = strategy.description;
+
+  const isActive = activeStrategyMode === 'preset' && activeStrategyId === strategy.id;
+  const activeStrategy = getActiveStrategyResolved();
+  const comparisonModifiers = !isActive ? activeStrategy.modifiers : null;
+  const eff = strategyEffectivenessPct(strategy);
+
+  document.getElementById('dashboard-tactics-detail').innerHTML =
+    '<div class="dashboard-tactics-detail-head">' +
+      '<div class="dashboard-tactics-detail-name">' + strategy.name + (isActive ? ' <span class="dashboard-tactics-detail-active-badge">✓ AKTIVE STRATEGIE</span>' : '') + '</div>' +
+      '<div class="dashboard-tactics-detail-category">' + ((STRATEGY_CATEGORIES.find((c) => c.id === strategy.category) || {}).label || strategy.category.toUpperCase()) + '</div>' +
+      '<p class="dashboard-tactics-detail-playstyle">' + strategy.playstyle + '</p>' +
+    '</div>' +
+    '<div class="dashboard-tactics-detail-section">' +
+      '<div class="dashboard-tactics-detail-section-title">STRATEGIE-EFFEKT' + (comparisonModifiers ? ' <span class="dashboard-tactics-detail-section-hint">(Vergleich zur aktiven Strategie)</span>' : '') + '</div>' +
+      '<div class="dashboard-tactics-modifier-grid">' + Object.keys(strategy.modifiers).map((k) => modifierRowHtml(k, strategy.modifiers[k], comparisonModifiers ? comparisonModifiers[k] : undefined)).join('') + '</div>' +
+    '</div>' +
+    '<div class="dashboard-tactics-detail-section-row">' +
+      '<div class="dashboard-tactics-detail-section">' +
+        '<div class="dashboard-tactics-detail-section-title">RISIKO</div>' +
+        '<div class="dashboard-tactics-risk-row"><span class="dashboard-tactics-risk-dots">' + riskDotsHtml(strategy.riskLevel) + '</span><span class="dashboard-tactics-risk-label">' + strategy.riskLabel + '</span></div>' +
+      '</div>' +
+      '<div class="dashboard-tactics-detail-section">' +
+        '<div class="dashboard-tactics-detail-section-title">EFFEKTIVITÄT</div>' +
+        '<div class="dashboard-tactics-effectiveness-value' + (eff >= 90 ? ' is-positive' : eff < 60 ? ' is-negative' : '') + '">' + Math.round(eff) + '%</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="dashboard-tactics-detail-section">' +
+      '<div class="dashboard-tactics-detail-section-title">GEEIGNET FÜR</div>' +
+      '<div class="dashboard-tactics-req-list">' + Object.keys(strategy.statRequirements).map((k) => requirementBarHtml(k, strategy.statRequirements[k])).join('') + '</div>' +
+    '</div>' +
+    '<div class="dashboard-tactics-detail-section-row">' +
+      '<div class="dashboard-tactics-detail-section">' +
+        '<div class="dashboard-tactics-detail-section-title">VORTEILE</div>' +
+        '<ul class="dashboard-tactics-pros-list">' + strategy.pros.map((p) => '<li>' + p + '</li>').join('') + '</ul>' +
+      '</div>' +
+      '<div class="dashboard-tactics-detail-section">' +
+        '<div class="dashboard-tactics-detail-section-title">NACHTEILE</div>' +
+        '<ul class="dashboard-tactics-cons-list">' + strategy.cons.map((c) => '<li>' + c + '</li>').join('') + '</ul>' +
+      '</div>' +
+    '</div>' +
+    '<p class="dashboard-tactics-recommendation">💡 ' + strategyRecommendationText(strategy) + '</p>' +
+    '<button type="button" class="menu-btn menu-btn-primary dashboard-tactics-activate-btn"' + (isActive ? ' disabled' : '') + ' data-tactics-activate="' + strategy.id + '">' +
+      (isActive ? '✓ Aktive Strategie' : 'Strategie aktivieren') +
+    '</button>';
+
+  const activateBtn = document.querySelector('[data-tactics-activate]');
+  if (activateBtn) activateBtn.addEventListener('click', () => activateStrategy(strategy.id));
+}
+
+function activateStrategy(id) {
+  if (!strategyById(id)) return;
+  activeStrategyMode = 'preset';
+  activeStrategyId = id;
+  renderTacticsStrip();
+  renderTacticsArenaAndDetail();
+  saveGameState();
+}
+
+// Einfache HTML-Escape-Hilfe -- wird nur hier für den frei eintippbaren
+// Taktik-Ersteller-Namen gebraucht (der Rest des Spiels rendert Freitext
+// konsequent über .textContent statt innerHTML-Interpolation, siehe
+// renderDashboardTopbar() für careerCharacter.name).
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ── Strategien: UI (Tab "Allround-Taktik") ─────────────────────────────────
+const ALLROUND_SLIDER_DEFS = [
+  { key: 'offense', label: 'Offensiv-Ausrichtung', lowLabel: 'DEFENSIV', highLabel: 'OFFENSIV' },
+  { key: 'rotation', label: 'Rotationsabstand', lowLabel: 'ENG', highLabel: 'WEIT' },
+  { key: 'challenge', label: 'Challenge-Verhalten', lowLabel: 'VORSICHTIG', highLabel: 'AGGRESSIV' },
+  { key: 'boost', label: 'Boost-Nutzung', lowLabel: 'SPARSAM', highLabel: 'HOCH' },
+  { key: 'passing', label: 'Passing', lowLabel: 'SELTEN', highLabel: 'HÄUFIG' },
+  { key: 'pressing', label: 'Pressing', lowLabel: 'NIEDRIG', highLabel: 'HOCH' },
+];
+
+function renderTacticsAllroundTab() {
+  const isActive = activeStrategyMode === 'allround';
+  const html =
+    '<p class="dashboard-tactics-allround-intro">Stelle 6 Matchbereiche individuell ein -- die resultierenden Taktik-Effekte werden rechts live berechnet.</p>' +
+    '<div class="dashboard-tactics-allround-columns">' +
+      '<div class="dashboard-tactics-allround-sliders">' +
+        ALLROUND_SLIDER_DEFS.map((def) => (
+          '<div class="dashboard-tactics-slider-card">' +
+            '<div class="dashboard-tactics-slider-label-row"><span>' + def.label + '</span><span class="dashboard-tactics-slider-value" data-allround-value-for="' + def.key + '">' + allroundTacticSettings[def.key] + '</span></div>' +
+            '<input type="range" min="0" max="100" step="1" class="dashboard-tactics-slider" data-allround-slider="' + def.key + '" value="' + allroundTacticSettings[def.key] + '" />' +
+            '<div class="dashboard-tactics-slider-endpoints"><span>' + def.lowLabel + '</span><span>' + def.highLabel + '</span></div>' +
+          '</div>'
+        )).join('') +
+      '</div>' +
+      '<div class="dashboard-tactics-allround-preview">' +
+        '<div class="dashboard-tactics-detail-section-title">RESULTIERENDE TAKTIK-EFFEKTE</div>' +
+        '<div id="dashboard-tactics-allround-modifier-grid" class="dashboard-tactics-modifier-grid"></div>' +
+      '</div>' +
+    '</div>' +
+    '<button type="button" class="menu-btn menu-btn-primary dashboard-tactics-activate-btn"' + (isActive ? ' disabled' : '') + ' id="btn-tactics-activate-allround">' +
+      (isActive ? '✓ Aktive Taktik' : 'Allround-Taktik aktivieren') +
+    '</button>';
+  document.getElementById('dashboard-tactics-allround-panel').innerHTML = html;
+  updateAllroundPreview();
+
+  // Gezielte Updates statt vollständigem Re-Render bei jedem 'input'-Event --
+  // ein kompletter innerHTML-Rebuild würde den gerade gezogenen Slider mitten
+  // in der Drag-Geste ersetzen und die Maus-Interaktion abreißen lassen.
+  document.querySelectorAll('[data-allround-slider]').forEach((input) => {
+    input.addEventListener('input', () => {
+      allroundTacticSettings[input.dataset.allroundSlider] = Number(input.value);
+      const valueEl = document.querySelector('[data-allround-value-for="' + input.dataset.allroundSlider + '"]');
+      if (valueEl) valueEl.textContent = input.value;
+      updateAllroundPreview();
+    });
+    input.addEventListener('change', () => saveGameState());
+  });
+  const activateBtn = document.getElementById('btn-tactics-activate-allround');
+  if (activateBtn) activateBtn.addEventListener('click', activateAllroundTactic);
+}
+
+function updateAllroundPreview() {
+  const modifiers = allroundModifiersFromSettings(allroundTacticSettings);
+  const grid = document.getElementById('dashboard-tactics-allround-modifier-grid');
+  if (grid) grid.innerHTML = Object.keys(modifiers).map((k) => modifierRowHtml(k, modifiers[k])).join('');
+}
+
+function activateAllroundTactic() {
+  activeStrategyMode = 'allround';
+  const btn = document.getElementById('btn-tactics-activate-allround');
+  if (btn) { btn.disabled = true; btn.textContent = '✓ Aktive Taktik'; }
+  renderTacticsStrip();
+  saveGameState();
+}
+
+// ── Strategien: UI (Tab "Taktik-Ersteller") ────────────────────────────────
+// User-Vorgabe: keine 6 unabhängigen Regler mehr (damit ließ sich ALLES auf
+// 100 stellen, offense UND defense gleichzeitig maximal -- kein echter
+// Kompromiss). Offense/Defense und Pressing/Ballbesitz sind jetzt je EIN
+// Gegensatz-Regler: ein höherer Wert auf der einen Seite senkt die andere
+// automatisch (siehe customStrategyModifiers()). Tempo/Risiko bleiben frei,
+// da sie keinen natürlichen taktischen Gegenpol im Datenmodell haben.
+const ERSTELLER_SLIDER_DEFS = [
+  { key: 'offenseBalance', label: 'Offensive / Defensive', lowLabel: 'DEFENSIV', highLabel: 'OFFENSIV' },
+  { key: 'pressingBalance', label: 'Pressing / Ballbesitz', lowLabel: 'BALLBESITZ', highLabel: 'PRESSING' },
+  { key: 'tempo', label: 'Tempo', lowLabel: 'LANGSAM', highLabel: 'SCHNELL' },
+  { key: 'risiko', label: 'Risiko', lowLabel: 'SICHER', highLabel: 'RISKANT' },
+];
+let erstellerDraft = { name: '', offenseBalance: 50, pressingBalance: 50, tempo: 50, risiko: 50 };
+
+function renderTacticsErstellerTab() {
+  const html =
+    '<div class="dashboard-tactics-ersteller-form">' +
+      '<div class="dashboard-tactics-ersteller-name-row">' +
+        '<label for="dashboard-tactics-ersteller-name">Name</label>' +
+        '<input type="text" id="dashboard-tactics-ersteller-name" class="dashboard-tactics-ersteller-name-input" maxlength="30" placeholder="Meine Taktik" value="' + escapeHtml(erstellerDraft.name) + '" />' +
+      '</div>' +
+      ERSTELLER_SLIDER_DEFS.map((def) => (
+        '<div class="dashboard-tactics-slider-card">' +
+          '<div class="dashboard-tactics-slider-label-row"><span>' + def.label + '</span><span class="dashboard-tactics-slider-value" data-ersteller-value-for="' + def.key + '">' + erstellerDraft[def.key] + '</span></div>' +
+          '<input type="range" min="0" max="100" step="1" class="dashboard-tactics-slider" data-ersteller-slider="' + def.key + '" value="' + erstellerDraft[def.key] + '" />' +
+          '<div class="dashboard-tactics-slider-endpoints"><span>' + def.lowLabel + '</span><span>' + def.highLabel + '</span></div>' +
+        '</div>'
+      )).join('') +
+      '<button type="button" class="menu-btn menu-btn-primary" id="btn-tactics-ersteller-save">Taktik speichern</button>' +
+    '</div>' +
+    '<div class="dashboard-tactics-ersteller-list-col">' +
+      '<div class="dashboard-tactics-detail-section-title">GESPEICHERTE TAKTIKEN</div>' +
+      '<div id="dashboard-tactics-ersteller-list" class="dashboard-tactics-ersteller-list"></div>' +
+    '</div>';
+  document.getElementById('dashboard-tactics-ersteller-panel').innerHTML = html;
+  renderErstellerList();
+
+  document.getElementById('dashboard-tactics-ersteller-name').addEventListener('input', (e) => { erstellerDraft.name = e.target.value; });
+  document.querySelectorAll('[data-ersteller-slider]').forEach((input) => {
+    input.addEventListener('input', () => {
+      erstellerDraft[input.dataset.erstellerSlider] = Number(input.value);
+      const valueEl = document.querySelector('[data-ersteller-value-for="' + input.dataset.erstellerSlider + '"]');
+      if (valueEl) valueEl.textContent = input.value;
+    });
+  });
+  document.getElementById('btn-tactics-ersteller-save').addEventListener('click', saveCustomStrategy);
+}
+
+function saveCustomStrategy() {
+  const name = (erstellerDraft.name || '').trim();
+  if (!name) {
+    showConfirmModal('Name fehlt', 'Bitte gib deiner Taktik zuerst einen Namen.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
+    return;
+  }
+  const cs = {
+    id: 'custom-' + Date.now() + '-' + Math.floor(Math.random() * 10000),
+    name,
+    offenseBalance: erstellerDraft.offenseBalance, pressingBalance: erstellerDraft.pressingBalance,
+    tempo: erstellerDraft.tempo, risiko: erstellerDraft.risiko,
+  };
+  customStrategies.push(cs);
+  erstellerDraft = { name: '', offenseBalance: 50, pressingBalance: 50, tempo: 50, risiko: 50 };
+  renderTacticsErstellerTab();
+  saveGameState();
+}
+
+function customStrategyCardHtml(cs) {
+  const isActive = activeStrategyMode === 'custom' && activeCustomStrategyId === cs.id;
+  // Fallback-Lesart cs.offense/cs.pressing: Migration für Taktiken, die vor
+  // der Umstellung auf Gegensatz-Regler gespeichert wurden (siehe
+  // customStrategyModifiers()).
+  const offenseBalance = cs.offenseBalance ?? cs.offense ?? 50;
+  const pressingBalance = cs.pressingBalance ?? cs.pressing ?? 50;
+  return (
+    '<div class="dashboard-tactics-ersteller-card' + (isActive ? ' is-active-strategy' : '') + '">' +
+      '<div class="dashboard-tactics-ersteller-card-name">' + escapeHtml(cs.name) + (isActive ? ' <span class="dashboard-tactics-strip-active-badge">✓ AKTIV</span>' : '') + '</div>' +
+      '<div class="dashboard-tactics-ersteller-card-stats">OFF ' + offenseBalance + ' / DEF ' + (100 - offenseBalance) + ' · PRS ' + pressingBalance + ' / BB ' + (100 - pressingBalance) + ' · TMP ' + cs.tempo + ' · RSK ' + cs.risiko + '</div>' +
+      '<div class="dashboard-tactics-ersteller-card-actions">' +
+        '<button type="button" class="menu-btn" data-ersteller-activate="' + cs.id + '"' + (isActive ? ' disabled' : '') + '>' + (isActive ? '✓ Aktiv' : 'Aktivieren') + '</button>' +
+        '<button type="button" class="menu-btn menu-btn-danger" data-ersteller-delete="' + cs.id + '">Löschen</button>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function renderErstellerList() {
+  const listEl = document.getElementById('dashboard-tactics-ersteller-list');
+  if (customStrategies.length === 0) {
+    listEl.innerHTML = '<div class="dashboard-tactics-ersteller-empty">Noch keine eigenen Taktiken gespeichert.</div>';
+    return;
+  }
+  listEl.innerHTML = customStrategies.map(customStrategyCardHtml).join('');
+  listEl.querySelectorAll('[data-ersteller-activate]').forEach((btn) => {
+    btn.addEventListener('click', () => activateCustomStrategy(btn.dataset.erstellerActivate));
+  });
+  listEl.querySelectorAll('[data-ersteller-delete]').forEach((btn) => {
+    btn.addEventListener('click', () => deleteCustomStrategy(btn.dataset.erstellerDelete));
+  });
+}
+
+function activateCustomStrategy(id) {
+  if (!customStrategies.some((c) => c.id === id)) return;
+  activeStrategyMode = 'custom';
+  activeCustomStrategyId = id;
+  renderErstellerList();
+  saveGameState();
+}
+
+function deleteCustomStrategy(id) {
+  showConfirmModal('Taktik löschen', 'Diese eigene Taktik wirklich löschen?', () => {
+    customStrategies = customStrategies.filter((c) => c.id !== id);
+    // Fehlerbehandlung: aktive, gerade gelöschte Taktik -- getActiveStrategyResolved()
+    // würde eine tote Referenz zwar ohnehin sicher auf 'balanced' zurückfallen
+    // lassen, aber der sichtbare UI-Zustand (Sidebar/Strip-Badges) soll ehrlich
+    // bleiben statt weiter "aktiv" für eine nicht mehr existierende Taktik zu zeigen.
+    if (activeStrategyMode === 'custom' && activeCustomStrategyId === id) {
+      activeStrategyMode = 'preset';
+      activeStrategyId = 'balanced';
+      activeCustomStrategyId = null;
+    }
+    renderErstellerList();
+    saveGameState();
+  }, { danger: true, confirmLabel: 'Löschen' });
+}
+
+function renderTacticsStrategienTab() {
+  document.querySelectorAll('[data-tactics-cat]').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.tacticsCat === strategyCategoryFilter));
+  if (!strategyPreviewId || !filteredStrategies().some((s) => s.id === strategyPreviewId)) {
+    strategyPreviewId = (activeStrategyMode === 'preset' ? activeStrategyId : null) || filteredStrategies()[0].id;
+  }
+  renderTacticsStrip();
+  renderTacticsArenaAndDetail();
+}
+
+function renderDashboardTacticsPanel() {
+  selectTacticsMainTab('strategien');
 }
 
 // Klick auf eine Karte (Übersicht ODER Meine Sponsoren) zeigt/aktualisiert
@@ -3281,6 +4660,7 @@ function openSponsorRequestPopup(name) {
   document.getElementById('sponsor-request-remaining').textContent = String(remainingSponsorRequests());
   document.getElementById('btn-sponsor-request-confirm').disabled = remainingSponsorRequests() <= 0;
   document.getElementById('sponsor-request-modal').classList.remove('hidden');
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
 function closeSponsorRequestPopup() {
@@ -3886,9 +5266,26 @@ function playOwnMatchSeriesLive(match, event, onSeriesDone) {
     const nameB = ownIsA ? oppName : ownName;
     const playersA = ownIsA ? ownRoster : oppRoster;
     const playersB = ownIsA ? oppRoster : ownRoster;
-    const result = { events: g.events, scoreA: g.scoreA, scoreB: g.scoreB, teamABonusPct: 0 };
+    const result = { events: g.events, scoreA: g.scoreA, scoreB: g.scoreB };
+    // Bug-Fix (Audit): der reale Team-Bonus (Chemie/Ausrüstung/Coach/etc.,
+    // siehe simulateBotSeries()) hängt an TeamA/TeamB relativ zur
+    // ursprünglichen simulateMatch()-Aufrufreihenfolge, nicht an "eigenes
+    // Team" -- muss also wie nameA/playersA über ownIsA umgemappt werden,
+    // statt (wie zuvor) fest als 0 angezeigt zu werden.
+    const ownBonusPct = ownIsA ? (g.teamABonusPct || 0) : (g.teamBBonusPct || 0);
 
-    playMatchTicker(result, nameA, nameB, playersA, playersB, assignedOrg.roster.coach, null, () => {
+    // Bug-Fix (User-Meldung: "beim eigenen Team steht Sub nicht gedraftet,
+    // obwohl seit Beginn einer da ist"): Coach wurde hier korrekt aus
+    // assignedOrg.roster.coach gelesen, der Sub-Parameter war aber hart auf
+    // null gesetzt -- renderMatchMeta() zeigte dadurch IMMER "— keiner
+    // gedraftet" für Sub, unabhängig vom tatsächlichen Kaderzustand.
+    // Bug-Fix (Audit): renderMatchMeta() schrieb Coach/Sub/Bonus zuvor IMMER
+    // fest in das linke Panel (metaA) und "— Bot-Team" fest ins rechte
+    // (metaB) -- ist die eigene Org positionell Team B (ownIsA === false,
+    // random per Bracket-Paarung), zeigte der Ticker den eigenen echten
+    // Kader/Bonus im GEGNER-Panel und "— Bot-Team" im eigenen. ownIsA wird
+    // jetzt mit durchgereicht, damit renderMatchMeta() die richtige Seite trifft.
+    playMatchTicker(result, nameA, nameB, playersA, playersB, ownIsA, assignedOrg.roster.coach, assignedOrg.roster.sub, ownBonusPct, () => {
       priorResults.push(ownWinsThisGame ? 'win' : 'loss');
       if (isLastGame) onSeriesDone();
       else playNextGame();
@@ -4034,7 +5431,7 @@ const TEAM_LANGUAGE_HOMOGENEITY_RANGE = 70;
 // Kondition ohne kürzliche Spiele, ~50% Siegquote+Bonus, mittlere
 // Nationalitäten-Streuung liegen alle grob in diesem Bereich).
 const TEAM_CHEMISTRY_NEUTRAL_BASELINE = 70;
-const TEAM_CHEMISTRY_BONUS_PER_POINT = 0.15; // -> max. rund -10.5%/+4.5%, ähnliche Größenordnung wie computeMatchBonusPct()
+const TEAM_CHEMISTRY_BONUS_PER_POINT = 0.15; // -> max. rund -10.5%/+4.5%, ähnliche Größenordnung wie die Charakter-Trait-matchBonusPct-Werte (character-traits.js)
 
 // Physischer Zustand: sinkt mit jedem Match der letzten TEAM_CONDITION_WINDOW_DAYS
 // Tage (Ermüdung durch Spiellast), erholt sich von selbst, sobald eine Weile
@@ -4076,14 +5473,122 @@ function computeTeamLanguageUnderstanding(org) {
 }
 
 // Fasst alle 3 Werte zu EINEM Match-Bonus/-Malus zusammen (Prozentpunkte,
-// dieselbe Einheit wie computeMatchBonusPct()/orgMatchBonusPct in match.js) --
-// wird nur für die eigene, gedraftete Org tatsächlich in die Simulation
+// dieselbe Einheit wie orgMatchBonusPct in match.js) -- wird nur für die
+// eigene, gedraftete Org tatsächlich in die Simulation
 // eingespeist (siehe simulateBotSeries() unten), nicht für Bot-vs-Bot (bleibt
 // bewusst unangetastet/fair, exakt wie schon beim bestehenden Coach-Bonus-
 // Mechanismus in match.js).
+// ── Personal-Seite: echte Gameplay-Effekte ──────────────────────────────────
+// Jede Funktion liest genau EINEN Mitarbeiter der jeweiligen Rolle aus
+// org.roster.staff/-coach und wandelt dessen overall in einen kleinen,
+// begrenzten Bonus um -- dieselbe Formel-Form wie die bereits bestehenden
+// Boni (Ausrüstung/Basecamp/Strategie/Charakter-Traits), damit sich Personal
+// nahtlos in die vorhandene additive orgMatchBonusPct-Kette einreiht statt
+// einen eigenen Mechanismus zu erfinden. `!s.vacant` schließt gekündigte,
+// noch nicht neu besetzte Rollen korrekt aus (0 Bonus statt Absturz).
+function findStaffByRole(org, role) {
+  const s = org && org.roster && org.roster.staff && org.roster.staff.find((x) => x.role === role);
+  return (s && !s.vacant) ? s : null;
+}
+
+// Coach: war in match.js als eigener myOptions.coach-Parameter dokumentiert
+// ("Team-A-Bonus/-Malus auf alle Duelle"), aber von renderer.js nie tatsächlich
+// befüllt -- der Coach-Bonus war seit jeher totes Feature (Bug, per Recherche
+// für die Personal-Seite gefunden). Gleiche Formel wie ursprünglich in match.js
+// vorgesehen (0,18 je 100 Overall-Punkte Abstand von der 75er-Baseline), jetzt
+// über denselben Prozent-Kanal wie alle anderen Boni statt eines toten
+// Objekt-Parameters.
+function coachMatchBonusPct(org) {
+  const coach = org && org.roster && org.roster.coach;
+  if (!coach) return 0;
+  return ((coach.overall - 75) / 100) * 18;
+}
+// Analyst: kleiner sekundärer Match-Bonus (taktische Gegner-Vorbereitung) --
+// gleicher Kanal, deutlich kleineres Gewicht als der Coach.
+function analystMatchBonusPct(org) {
+  const analyst = findStaffByRole(org, 'Analyst');
+  return analyst ? ((analyst.overall - 75) / 100) * 8 : 0;
+}
+// Bug-Fix/Zusammenlegung (User-Meldung: "Coach und Trainer sind dasselbe,
+// eines davon entfernen" -- Entscheidung: Coach bleibt): war vorher eine
+// eigene Personal-Rolle "Trainer" (findStaffByRole(org,'Trainer')) -- deren
+// Entwicklungsbonus wandert jetzt zum Coach (org.roster.coach), zusätzlich zu
+// dessen bereits bestehendem coachMatchBonusPct() oben. Beeinflusst die
+// Spielerentwicklungs-Rate (siehe devBonusFactor in applyPlayerDevelopmentForGame())
+// -- reiht sich dort als zweiter additiver Prozent-Term neben dem
+// bestehenden Charakter-Trait-developmentBonus ein.
+function coachDevelopmentBonusPct(org) {
+  const coach = org && org.roster && org.roster.coach;
+  return coach ? ((coach.overall - 75) / 100) * 20 : 0;
+}
+// Physiotherapeut/Psychologe: kleiner, begrenzter Bonus auf den ECHTEN
+// (matchhistorie-basierten) Kondition-/Moral-Wert -- als "effektiver" Wert
+// analog zu getEffectivePlayerStats() (Shop-Feature): Basiswert bleibt
+// unverändert berechenbar, der Bonus wird sichtbar addiert, nie negativ
+// unter 0 oder über 100 gedeckelt.
+function physiotherapeutConditionBonus(org) {
+  const p = findStaffByRole(org, 'Physiotherapeut');
+  return p ? Math.round(((p.overall - 75) / 100) * 20) : 0;
+}
+function effectiveTeamPhysicalCondition(org) {
+  return Math.max(0, Math.min(100, computeTeamPhysicalCondition(org) + physiotherapeutConditionBonus(org)));
+}
+function psychologeMoraleBonus(org) {
+  const p = findStaffByRole(org, 'Psychologe');
+  return p ? Math.round(((p.overall - 75) / 100) * 20) : 0;
+}
+function effectiveTeamMorale(org) {
+  return Math.max(0, Math.min(100, computeTeamMorale(org) + psychologeMoraleBonus(org)));
+}
+// Scout: verhandelt bessere Deals -- Rabatt auf den tatsächlich gezahlten
+// Preis bei Personal-Verpflichtungen (siehe executeStaffSigning()). Nur
+// positive Rabatte (ein schwacher Scout verteuert nichts).
+function scoutHireDiscountPct(org) {
+  const s = findStaffByRole(org, 'Scout');
+  return s ? Math.max(0, ((s.overall - 75) / 100) * 10) : 0;
+}
+// Bug-Fix (Audit): Finanzvorstand/Anwalt/Event-Manager/PR-Manager waren
+// außerhalb der reinen Anzeige komplett wirkungslos -- man konnte den
+// aktuellen Mitarbeiter kündigen und einen teureren/besseren einstellen, ohne
+// dass sich mechanisch irgendetwas geändert hätte. Alle vier reihen sich hier
+// nach demselben Muster wie die bereits bestehenden Rollen in real vorhandene
+// Kanäle ein (kein erfundener neuer Wert):
+// Finanzvorstand: verhandelt bessere Transferkonditionen -- Rabatt auf den
+// tatsächlich gezahlten Preis bei SPIELER-Verpflichtungen (angewendet in
+// executePlayerSigning(), analog zum bestehenden Scout-Rabatt bei Personal-
+// Verpflichtungen).
+function financeTransferDiscountPct(org) {
+  const cfo = findStaffByRole(org, 'Finanzvorstand');
+  return cfo ? Math.max(0, ((cfo.overall - 75) / 100) * 10) : 0;
+}
+// Anwalt: verhandelt bessere Vertragskonditionen -- Rabatt auf die
+// GESAMTEN monatlichen Spielergehälter (angewendet in
+// totalMonthlySalaryCommitment()).
+function anwaltSalaryDiscountPct(org) {
+  const a = findStaffByRole(org, 'Anwalt');
+  return a ? Math.max(0, ((a.overall - 75) / 100) * 10) : 0;
+}
+// Event-Manager: organisiert bessere Matchdays/Events -- Bonus auf das
+// monatliche Vorstandsbudget (angewendet in monthlyBoardBudgetAmount()).
+function eventManagerBoardBudgetBonusPct(org) {
+  const em = findStaffByRole(org, 'Event-Manager');
+  return em ? Math.max(0, ((em.overall - 75) / 100) * 15) : 0;
+}
+// PR-Manager: bessere Außendarstellung -- Bonus auf Sponsoren-Prämien
+// (Einzelziele UND Abschluss-Bonus, angewendet in collectSponsorGoalReward()/
+// checkSponsorGoals()).
+function prManagerSponsorBonusPct(org) {
+  const pr = findStaffByRole(org, 'PR-Manager');
+  return pr ? Math.max(0, ((pr.overall - 75) / 100) * 15) : 0;
+}
+
 function teamChemistryBonusPct(org) {
-  const condition = computeTeamPhysicalCondition(org);
-  const morale = computeTeamMorale(org);
+  // effectiveTeamPhysicalCondition()/effectiveTeamMorale() statt der reinen
+  // compute*()-Werte -- Physiotherapeut/Psychologe wirken dadurch nicht nur
+  // kosmetisch auf der Kader-Seite, sondern fließen echt in den Match-Bonus
+  // ein (siehe deren Kommentare oben).
+  const condition = effectiveTeamPhysicalCondition(org);
+  const morale = effectiveTeamMorale(org);
   const language = computeTeamLanguageUnderstanding(org);
   const avg = (condition + morale + language) / 3;
   return (avg - TEAM_CHEMISTRY_NEUTRAL_BASELINE) * TEAM_CHEMISTRY_BONUS_PER_POINT;
@@ -4166,8 +5671,31 @@ function simulateBotSeries(orgA, orgB, bestOf) {
     // berechnet, aber NIRGENDS im Spiel tatsächlich verwendet -- addiert sich
     // hier zur bestehenden Team-Chemie-Bonus/Malus (gleiche Einheit,
     // Prozentpunkte), statt sie zu ersetzen.
-    const totalBonusPct = teamChemistryBonusPct(assignedOrg) + computeCharacterEffects(careerCharacter.traits).matchBonusPct;
-    ownMyOptions = ownIsA ? { orgMatchBonusPct: totalBonusPct } : { orgMatchBonusPctB: totalBonusPct };
+    // Shop-Ausrüstung (equipmentMatchBonusPct()), Basecamp-Level
+    // (basecampChemistryBonusPct()) UND die aktive Strategie
+    // (computeActiveStrategyMatchBonusPct(), inkl. Konter-Bonus gegen die
+    // Gegner-Org-Tendenz) reihen sich hier als weitere additive Prozent-Terme
+    // ein -- gleicher Kanal wie Team-Chemie und Charakter-Traits, kein neuer
+    // Mechanismus.
+    const opponentOrg = ownIsA ? orgB : orgA;
+    // Coach/Analyst (Personal-Seite) reihen sich hier als weitere additive
+    // Prozent-Terme ein -- teamChemistryBonusPct() selbst nutzt bereits die
+    // Physiotherapeut-/Psychologe-"effektiven" Werte (siehe deren Kommentare).
+    // Nachrichtensystem: communicationMatchBonusPct() reiht sich hier als
+    // weiterer additiver Term ein (Team-Durchschnitt über Starter+Sub mit
+    // aktivem tempPerformanceBonusPct, siehe dortigen Kommentar -- match.js
+    // kennt nur EINEN Team-Bonus pro Serie, keine Pro-Spieler-Differenzierung).
+    const totalBonusPct = teamChemistryBonusPct(assignedOrg) + computeCharacterEffects(careerCharacter.traits).matchBonusPct + equipmentMatchBonusPct() + basecampChemistryBonusPct() + computeActiveStrategyMatchBonusPct(opponentOrg) + coachMatchBonusPct(assignedOrg) + analystMatchBonusPct(assignedOrg) + communicationMatchBonusPct(assignedOrg);
+    // Bug-Fix (Audit): assignedOrg.roster.sub wurde hier nie an match.js
+    // weitergereicht -- der Sub-Disconnect-Notfallwechsel (DISCONNECT_CHANCE_PER_EVENT
+    // in match.js) konnte dadurch in KEINEM einzigen Match jemals feuern, egal
+    // wie lange ein Sub im Kader stand. Coach fließt bewusst NICHT zusätzlich
+    // als myOptions.coach ein -- der ist bereits über coachMatchBonusPct()
+    // oben im additiven Bonus-Kanal enthalten, ein zweites Mal über match.js'
+    // eigenen coachBonusFraction-Pfad würde ihn doppelt zählen.
+    ownMyOptions = ownIsA
+      ? { orgMatchBonusPct: totalBonusPct, sub: assignedOrg.roster.sub }
+      : { orgMatchBonusPctB: totalBonusPct, subB: assignedOrg.roster.sub };
   }
   // Runde 95, User-Vorgabe ("eigenes Match live ansehen, mit Ticker/Timer/
   // Overtime"): die vollen Ticker-Events (simulateMatch()s r.events) werden
@@ -4179,7 +5707,15 @@ function simulateBotSeries(orgA, orgB, bestOf) {
   while (winsA < targetWins && winsB < targetWins) {
     const r = simulateMatch(orgA.roster.starters, orgB.roster.starters, orgA.name, orgB.name, ownMyOptions);
     if (r.scoreA > r.scoreB) winsA++; else winsB++;
-    games.push(isOwnMatch ? { scoreA: r.scoreA, scoreB: r.scoreB, events: r.events } : { scoreA: r.scoreA, scoreB: r.scoreB });
+    // Bug-Fix (Audit): teamABonusPct/teamBBonusPct kommen von simulateMatch()
+    // bereits fertig berechnet zurück, wurden hier aber verworfen -- der
+    // Live-Ticker zeigte dadurch immer "Team-Bonus +0%", selbst wenn Team-
+    // Chemie/Ausrüstung/Coach/etc. tatsächlich einen echten Bonus beigetragen
+    // hatten. Nur für eigene Matches gespeichert, gleiche Begründung wie bei
+    // events (Bot-vs-Bot wird nie live angesehen).
+    games.push(isOwnMatch
+      ? { scoreA: r.scoreA, scoreB: r.scoreB, events: r.events, teamABonusPct: r.teamABonusPct, teamBBonusPct: r.teamBBonusPct }
+      : { scoreA: r.scoreA, scoreB: r.scoreB });
     // Runde 113, User-Vorgabe: Spieler entwickeln sich aus den ECHTEN
     // Ticker-Ereignissen dieses Spiels weiter (siehe applyPlayerDevelopmentForGame()-
     // Kommentar) -- läuft für JEDES Spiel, nicht nur eigene, rein additiv (nutzt
@@ -5310,24 +6846,94 @@ function simulateSingleElimBracket(teams, bestOf, historySet) {
   const matches = [];
   const localHistory = new Set(historySet || []);
   let roundIndex = 0;
+  // Bug-Fix (Audit): trackt pro Team, aus welchem Match der VORHERIGEN Runde
+  // es tatsächlich als Sieger hervorgegangen ist -- reduceRound1RematchCollisions()
+  // darf Gewinner zwischen Positionen vertauschen (Anti-Rematch), wodurch die
+  // naive "Match 2i/2i+1 -> Match i"-Annahme der Bracket-Verbindungslinien
+  // (buildSingleElimTree()) nicht mehr stimmt. fromSlotA/fromSlotB an jedem
+  // Match-Eintrag halten die ECHTE Herkunft fest, siehe
+  // correctSingleElimConnections().
+  let winnerOrigin = new Map();
   while (round.length > 1) {
     const pairedRound = roundIndex === 0 ? round : reduceRound1RematchCollisions(round, localHistory);
     const winners = [];
     const losers = [];
+    const nextWinnerOrigin = new Map();
     for (let i = 0; i < pairedRound.length; i += 2) {
       const teamA = pairedRound[i];
       const teamB = pairedRound[i + 1];
       const r = simulateBotSeries(teamA, teamB, bestOf);
-      matches.push({ slot: 'r' + roundIndex + '-' + (i / 2), teamAName: teamA.name, teamBName: teamB.name, scoreA: r.winsA, scoreB: r.winsB, games: r.games, isOwnMatch: r.isOwnMatch, ownIsA: r.ownIsA });
+      const slotKey = 'r' + roundIndex + '-' + (i / 2);
+      matches.push({
+        slot: slotKey, teamAName: teamA.name, teamBName: teamB.name, scoreA: r.winsA, scoreB: r.winsB, games: r.games, isOwnMatch: r.isOwnMatch, ownIsA: r.ownIsA,
+        fromSlotA: roundIndex === 0 ? null : (winnerOrigin.get(teamA) || null),
+        fromSlotB: roundIndex === 0 ? null : (winnerOrigin.get(teamB) || null),
+      });
       localHistory.add([teamA.name, teamB.name].sort().join('|'));
       winners.push(r.winner);
       losers.push(r.loser);
+      nextWinnerOrigin.set(r.winner, slotKey);
     }
     eliminationRounds.push(losers);
     round = winners;
+    winnerOrigin = nextWinnerOrigin;
     roundIndex++;
   }
   return { champion: round[0], eliminationRounds, matches };
+}
+
+// Bug-Fix (Audit): buildSingleElimTree() kennt beim HTML-Bau nur die
+// STRUKTUR (Rundenzahl/Matches je Runde), noch nicht die echten simulierten
+// Ergebnisse -- ihre Verbindungslinien nahmen deshalb strukturell an, dass
+// Match 2i/2i+1 einer Runde immer in Match i der Folgerunde münden. Sobald
+// die echten Matches (mit fromSlotA/fromSlotB aus simulateSingleElimBracket())
+// vorliegen, ersetzt diese Funktion die naiven Verbindungen durch die
+// tatsächlich korrekten -- siehe Aufruf in renderTournamentFormatTabs().
+function correctSingleElimConnections(treeId, matches) {
+  const connections = [];
+  (matches || []).forEach((m) => {
+    if (m.fromSlotA) connections.push({ fromId: treeId + '-' + m.fromSlotA, toId: treeId + '-' + m.slot, color: 'rgba(255,255,255,0.35)' });
+    if (m.fromSlotB) connections.push({ fromId: treeId + '-' + m.fromSlotB, toId: treeId + '-' + m.slot, color: 'rgba(255,255,255,0.35)' });
+  });
+  return connections;
+}
+
+// Bug-Fix (Audit): dieselbe Ursache wie bei correctSingleElimConnections(),
+// hier für das AFL-Bracket (Open-/Major-Playoffs) -- buildAflBracket()
+// verbindet strukturell IMMER lb-Sieger-Position i mit qf.ids[i] bzw.
+// QF-Sieger-Position i mit sf.ids[i]. pairAvoidingRematch() (Anti-Rematch)
+// kann genau an diesen zwei Übergängen (QF- und SF-Einspeisung von der
+// jeweils "freien" Bracket-Seite) die Zuordnung vertauschen -- alle anderen
+// Linien in diesem Bracket (Freilos-Pfad ubR1->sf, GF-Bündelung) laufen über
+// die NICHT vertauschbare Seite (immer teamA der jeweiligen Simulation, siehe
+// simulateAflBracket()) und bleiben unangetastet, nur diese zwei Paare
+// werden hier anhand der echten Sieger-Namen neu bestimmt und ersetzt.
+// Nimmt die bereits gebaute (strukturelle) Verbindungsliste entgegen und
+// gibt eine korrigierte Kopie zurück -- ersetzt darin GEZIELT nur die zwei
+// betroffenen Eintragspaare (erkennbar an toId=qf-i mit Quelle aus lbKey,
+// bzw. toId=sf-i mit Quelle aus qf), rührt alle anderen (Freilos-Pfad mit
+// cornerAtMidOf/stubLength, GF-merge) unangetastet an.
+function correctAflBracketConnections(treeId, shape, matches, connections) {
+  const byId = {};
+  (matches || []).forEach((m) => { byId[m.slot] = m; });
+  const winnerName = (slot) => { const m = byId[slot]; return m && (m.scoreA > m.scoreB ? m.teamAName : m.teamBName); };
+  const mkId = (roundKey, i) => treeId + '-' + roundKey + '-' + i;
+  const lbKey = shape === 'afl8' ? 'lbr1' : 'lbr2';
+  const lbWinnerName = [winnerName(lbKey + '-0'), winnerName(lbKey + '-1')];
+  const qfWinnerName = [winnerName('qf-0'), winnerName('qf-1')];
+  return (connections || []).map((c) => {
+    for (let i = 0; i < 2; i++) {
+      if (c.toId === mkId('qf', i) && c.fromId.indexOf('-' + lbKey + '-') !== -1) {
+        const qfMatch = byId['qf-' + i];
+        if (qfMatch) return { fromId: mkId(lbKey, qfMatch.teamBName === lbWinnerName[1] ? 1 : 0), toId: c.toId, color: c.color };
+      }
+      if (c.toId === mkId('sf', i) && c.fromId.indexOf('-qf-') !== -1) {
+        const sfMatch = byId['sf-' + i];
+        if (sfMatch) return { fromId: mkId('qf', sfMatch.teamBName === qfWinnerName[1] ? 1 : 0), toId: c.toId, color: c.color };
+      }
+    }
+    return c;
+  });
 }
 
 // Vollständige Auflösung der World Championship (Runde 85). 20 Teams: die 16
@@ -5602,7 +7208,26 @@ const PLAYER_DEV_LOSS_PENALTY_BASE = 0.15;
 const PLAYER_DEV_LOSS_OFFSET_THRESHOLD = 6; // Aktionspunkte, ab denen die Niederlage-Strafe komplett aufgehoben ist
 const PLAYER_DEV_RECENT_GAMES_MAX = 8;
 
-let playerDevelopment = {}; // 'orgName::playerName' -> { baseline:{...6 Stats}, delta, history:[{date,value}], matches, goals, wins, losses, recentGames:[...] }
+// ── Trainingssystem: Aufteilung des bestehenden Wachstumsbudgets ───────────
+// Erweitert (ersetzt NICHT) das obige match-getriebene Entwicklungssystem:
+// statt EINEM Skalar-delta, das gleichmäßig auf alle 6 Stats wirkt, bekommt
+// jeder Spieler jetzt einen Trainingsfokus (auto/manuell/aus), der steuert,
+// WELCHER Stat vom Wachstumsbudget eines Spiels/Tages überproportional
+// profitiert. Das GESAMTBUDGET pro Ereignis bleibt unverändert -- nur seine
+// Verteilung auf die 6 Stats ändert sich (siehe applyPlayerStatDelta()).
+const TRAINING_PASSIVE_SHARE = 0.3; // gleichmäßig auf alle 6 Stats, unabhängig vom Fokus
+const TRAINING_FOCUSED_SHARE = 0.7; // auf den aufgelösten Fokus-Stat (oder gleichmäßig bei 'general')
+const TRAINING_PLATEAU_START = 80; // ab hier wird weiteres Wachstum spürbar zäher
+const TRAINING_PLATEAU_MIN_RATE = 0.3; // Rate bei PLAYER_DEV_STAT_MAX (99)
+const TRAINING_COACH_CAPACITY = 5; // Spieler, die der EINE Coach ohne Qualitätsverlust trainieren kann
+const TRAINING_CAPACITY_PENALTY = [0, 0, 0, 0, 0, 0.10, 0.20]; // Index = 0-basierte Kapazitäts-Position, ab Index 6 bleibt 0.20
+// Tages-Tick (siehe applyDailyPlayerTraining()): bewusst klein -- ~1 Trainingswoche
+// (7 Tage) soll ungefähr so viel bewirken wie EIN fokussiertes Spiel-Delta.
+const TRAINING_DAILY_BASE_GROWTH = PLAYER_DEV_BASE_GROWTH / 7;
+const TRAINING_MORALE_CONDITION_MIN_FACTOR = 0.5;
+const TRAINING_MORALE_CONDITION_MAX_FACTOR = 1.25;
+
+let playerDevelopment = {}; // 'orgName::playerName' -> { baseline:{...6 Stats}, deltas:{...6 Stats}, training:{mode,category}, history:[{date,value}], matches, goals, wins, losses, recentGames:[...] }
 
 function playerDevKey(orgName, playerName) { return orgName + '::' + playerName; }
 
@@ -5610,10 +7235,142 @@ function ensurePlayerDevelopment(orgName, player) {
   const key = playerDevKey(orgName, player.name);
   if (!playerDevelopment[key]) {
     const baseline = {};
-    PLAYER_STAT_KEYS.forEach((k) => { baseline[k] = player[k]; });
-    playerDevelopment[key] = { baseline, delta: 0, history: [], matches: 0, goals: 0, wins: 0, losses: 0, recentGames: [] };
+    const deltas = {};
+    PLAYER_STAT_KEYS.forEach((k) => { baseline[k] = player[k]; deltas[k] = 0; });
+    playerDevelopment[key] = {
+      baseline, deltas, history: [], matches: 0, goals: 0, wins: 0, losses: 0, recentGames: [],
+      training: { mode: 'auto', category: null },
+    };
   }
   return playerDevelopment[key];
+}
+
+// Bug-freie Migration (Trainingssystem): Speicherstände vor diesem Feature
+// kennen `dev.delta` (EIN Skalar für alle 6 Stats) statt `dev.deltas` (pro
+// Stat) und kein `dev.training`-Feld. MUSS als EINMALIGER, vollständiger
+// Durchlauf über ALLE Einträge laufen, BEVOR reapplyPlayerDevelopmentToRosters()
+// dev.deltas[k] liest -- eine rein lazy Migration nur bei Spieler-Berührung
+// (wie ensurePlayerDevelopment() es für NEUE Einträge tut) würde für nie
+// wieder berührte Spieler für immer beim alten `delta`-Feld bleiben und beim
+// nächsten Laden NaN-Stats erzeugen (dev.deltas[k] wäre dann undefined).
+function migratePlayerDevelopmentDeltas() {
+  Object.keys(playerDevelopment).forEach((key) => {
+    const dev = playerDevelopment[key];
+    if (dev.delta !== undefined && !dev.deltas) {
+      const deltas = {};
+      PLAYER_STAT_KEYS.forEach((k) => { deltas[k] = dev.delta; });
+      dev.deltas = deltas;
+      delete dev.delta;
+    }
+    if (!dev.training) dev.training = { mode: 'auto', category: null };
+  });
+}
+
+// Sanftes Abflachen nahe der Obergrenze (PLAYER_DEV_STAT_MAX=99) -- volle
+// Rate bis TRAINING_PLATEAU_START, danach linear runter auf
+// TRAINING_PLATEAU_MIN_RATE. Kein harter Deckel (der existiert schon über den
+// PLAYER_DEV_STAT_MIN/MAX-Clamp) -- nur ein weicher Dämpfer, damit die
+// letzten Punkte spürbar schwerer fallen als die ersten.
+function playerDevStatPlateauFactor(currentValue) {
+  if (currentValue <= TRAINING_PLATEAU_START) return 1;
+  const span = PLAYER_DEV_STAT_MAX - TRAINING_PLATEAU_START;
+  const progress = Math.min(1, (currentValue - TRAINING_PLATEAU_START) / span);
+  return 1 - progress * (1 - TRAINING_PLATEAU_MIN_RATE);
+}
+
+// Meldet einen Stat-Ganzzahl-Sprung als Toast (showToast(), siehe dort) --
+// NUR für die eigene Org (sonst würden 454 Bot-Orgs bei jedem Spiel/Tag
+// Toast-Spam erzeugen, exakt derselbe Grund wie beim bestehenden
+// devBonusFactor-Präzedenzfall) und NICHT während eines Schnellvorlauf-
+// Batches (trainingToastsSuppressed, siehe runWithFastForwardOverlay()) --
+// über viele übersprungene Tage würden sonst dutzende Toasts gleichzeitig
+// aufploppen, der Fortschritt selbst wird trotzdem ganz normal übernommen.
+function maybeNotifyStatIncrease(org, player, key, before, after) {
+  if (org !== assignedOrg || trainingToastsSuppressed || after <= before) return;
+  const label = TRAINING_CATEGORY_LABELS[key] || key;
+  showToast('📈', player.name + ': ' + label + ' ' + before + ' → ' + after, 'Attribut verbessert');
+}
+
+// Gemeinsamer Schreib-Helper für BEIDE Wachstumspfade (Match-getrieben UND
+// der neue tägliche Trainings-Tick, siehe applyDailyPlayerTraining()) --
+// verhindert doppelte Rundungs-/Clamp-/Benachrichtigungslogik. Schreibt EINEN
+// Stat, rundet/klemmt player[key] wie gehabt, meldet Ganzzahl-Sprünge (nur
+// für die eigene Org, siehe maybeNotifyStatIncrease()).
+function applyPlayerStatDelta(org, player, dev, key, rawDeltaChange) {
+  const before = player[key];
+  dev.deltas[key] += rawDeltaChange;
+  const next = Math.max(PLAYER_DEV_STAT_MIN, Math.min(PLAYER_DEV_STAT_MAX, Math.round(dev.baseline[key] + dev.deltas[key])));
+  player[key] = next;
+  if (next !== before) {
+    maybeNotifyStatIncrease(org, player, key, before, next);
+    // Postsystem: sammelt nur, welche eigenen Spieler sich seit dem letzten
+    // Wochenbericht verbessert haben -- KEIN Post-Eintrag pro Einzelpunkt
+    // (das wäre exakt der Spam, vor dem der Auftrag warnt), siehe
+    // maybeFlushPostDevSummary() in advanceOneCalendarDay().
+    if (org === assignedOrg && next > before) postDevAccumulator[org.name + '::' + player.name] = true;
+  }
+}
+
+// Team-Durchschnitt EINES Stats über Starter+Sub (die tatsächlich fürs Match
+// relevante Rotation) -- nutzt bewusst den ECHTEN player[k]-Wert, NICHT
+// getEffectivePlayerStats() (das würde temporäre Ausrüstungs-Boni fälschlich
+// als "kein Team-Bedarf" werten, siehe getEffectivePlayerStats()-Kommentar
+// zur Trennung permanent/temporär).
+function teamStatAverage(org, key) {
+  const roster = [...((org.roster && org.roster.starters) || []), org.roster && org.roster.sub].filter(Boolean);
+  if (roster.length === 0) return MATCH_SIM_STAT_BASELINE;
+  return roster.reduce((sum, p) => sum + p[key], 0) / roster.length;
+}
+
+// Auto-Training: wählt pro Spieler die Kategorie mit dem größten kombinierten
+// Bedarf -- 70% Gewicht auf den eigenen Rückstand zum eigenen Statdurchschnitt
+// (persönliche Schwäche), 30% auf den Team-Rückstand zur neutralen Baseline
+// von match.js (MATCH_SIM_STAT_BASELINE=75 -- bewusst NICHT die 70er Chemie-
+// Baseline aus teamChemistryBonusPct(), um beide Konstanten nicht zu
+// verwechseln, siehe deren jeweilige Kommentare). Liefert einen ECHTEN, aus
+// den Zahlen generierten Begründungstext -- keine Blackbox-Entscheidung.
+function computeAutoTrainingCategory(org, player) {
+  const selfAvg = PLAYER_STAT_KEYS.reduce((s, k) => s + player[k], 0) / PLAYER_STAT_KEYS.length;
+  let best = null;
+  PLAYER_STAT_KEYS.forEach((key) => {
+    const selfWeakness = Math.max(0, selfAvg - player[key]);
+    const teamWeakness = Math.max(0, MATCH_SIM_STAT_BASELINE - teamStatAverage(org, key));
+    const score = selfWeakness * 0.7 + teamWeakness * 0.3;
+    if (!best || score > best.score) best = { key, score, selfWeakness, teamWeakness };
+  });
+  const label = TRAINING_CATEGORY_LABELS[best.key] || best.key;
+  const reason = best.selfWeakness >= best.teamWeakness
+    ? label + ' ist aktuell dein größter Rückstand zu deinem eigenen Durchschnitt (-' + Math.round(best.selfWeakness) + ').'
+    : label + ' ist aktuell der größte Entwicklungsbedarf im Team (-' + Math.round(best.teamWeakness) + ' unter Liga-Niveau).';
+  return { category: best.key, reason };
+}
+
+// Löst den TATSÄCHLICH wirksamen Trainingsfokus auf -- 'auto' läuft IMMER
+// live neu (ändert sich automatisch mit der Kaderentwicklung, wird nie
+// gespeichert), 'manual' nutzt die vom Spieler gewählte Kategorie, 'off'
+// liefert null (kein Fokus -- nur der passive Anteil greift noch, siehe
+// applyPlayerDevelopmentDelta()/applyDailyPlayerTraining()).
+function resolveEffectiveTrainingCategory(org, player, dev) {
+  const t = dev.training || { mode: 'auto', category: null };
+  if (t.mode === 'off') return null;
+  if (t.mode === 'manual') return t.category || computeAutoTrainingCategory(org, player).category;
+  return computeAutoTrainingCategory(org, player).category;
+}
+
+// Sidebar-Badge-Zustand (siehe refreshDashboardSidebarBadges()): "!" wenn kein
+// Coach im Kader (EIN Grund betrifft potenziell den ganzen Kader, keine
+// sinnvolle Stückzahl), sonst die Anzahl der Starter/Sub mit explizit
+// deaktiviertem Training (mode:'off'). Reserve bewusst nicht mitgezählt --
+// kein Pflichtfeld für Bank-Spieler.
+function trainingSidebarBadgeInfo(org) {
+  if (!org || !org.roster) return { show: false };
+  if (!org.roster.coach) return { show: true, text: '!' };
+  const roster = [...(org.roster.starters || []), org.roster.sub].filter(Boolean);
+  const offCount = roster.filter((p) => {
+    const dev = playerDevelopment[playerDevKey(org.name, p.name)];
+    return dev && dev.training && dev.training.mode === 'off';
+  }).length;
+  return { show: offCount > 0, text: String(offCount) };
 }
 
 // Zählt pro Spieler Tore/gewonnene Zweikämpfe/Paraden/Fehlschüsse aus den
@@ -5641,14 +7398,31 @@ function playerActionScore(t) {
   return t.goals * 3 + t.saves * 2 + t.duelsWon * 1;
 }
 
+// Bug-Fix/Erweiterung (Trainingssystem): dev.delta war bisher EIN Skalar, der
+// gleichmäßig auf alle 6 Stats wirkte -- es gab keine Möglichkeit, gezielt
+// EINEN Stat zu fördern. Das Gesamtbudget (deltaChange) bleibt exakt wie
+// bisher, wird jetzt aber aufgeteilt: TRAINING_PASSIVE_SHARE gleichmäßig auf
+// alle 6 (repräsentiert "wird durchs Spielen allgemein besser"),
+// TRAINING_FOCUSED_SHARE auf den über resolveEffectiveTrainingCategory()
+// aufgelösten Fokus-Stat (bei 'general' ebenfalls gleichmäßig, bei 'off'
+// verfällt dieser Anteil ersatzlos -- kein stiller Verlust, sondern die
+// bewusste Konsequenz aus "kein Trainingsplan = weniger Wachstum"). Ein
+// Spieler im Default-Modus 'auto' bekommt IMMER einen echten Fokus (nie
+// null), das Gesamtwachstumsbudget bleibt für ihn also unverändert zum
+// bisherigen Verhalten -- nur seine Verteilung auf die 6 Stats ändert sich.
 function applyPlayerDevelopmentDelta(org, player, deltaChange, actionTally, isWinner, opponentName) {
   const dev = ensurePlayerDevelopment(org.name, player);
-  dev.delta += deltaChange;
   dev.matches += 1;
   dev.goals += actionTally.goals;
   if (isWinner) dev.wins += 1; else dev.losses += 1;
-  PLAYER_STAT_KEYS.forEach((k) => {
-    player[k] = Math.max(PLAYER_DEV_STAT_MIN, Math.min(PLAYER_DEV_STAT_MAX, Math.round(dev.baseline[k] + dev.delta)));
+  const focusCategory = resolveEffectiveTrainingCategory(org, player, dev);
+  PLAYER_STAT_KEYS.forEach((key) => {
+    const passive = deltaChange * TRAINING_PASSIVE_SHARE / PLAYER_STAT_KEYS.length;
+    let focused = 0;
+    if (focusCategory === 'general') focused = deltaChange * TRAINING_FOCUSED_SHARE / PLAYER_STAT_KEYS.length;
+    else if (focusCategory === key) focused = deltaChange * TRAINING_FOCUSED_SHARE;
+    const combined = (passive + focused) * playerDevStatPlateauFactor(player[key]);
+    applyPlayerStatDelta(org, player, dev, key, combined);
   });
   player.overall = Math.round(PLAYER_STAT_KEYS.reduce((s, k) => s + player[k], 0) / PLAYER_STAT_KEYS.length);
   dev.history.push({ date: careerDate, value: player.overall });
@@ -5700,8 +7474,11 @@ function applyPlayerDevelopmentForGame(orgA, orgB, gameResult) {
     // eigene, gedraftete Org (ein Manager-Trait betrifft nur das eigene Team,
     // Bots entwickeln sich unbeeinflusst weiter) -- gleiches subtiles
     // Multiplikator-Prinzip wie playerAgeGrowthFactor() (dort 0,8-1,15x).
+    // Personal-Seite: Coach reiht sich hier als zweiter additiver Prozent-
+    // Term neben dem Charakter-Trait-developmentBonus ein (coachDevelopmentBonusPct(),
+    // vorher trainerDevelopmentBonusPct() -- Coach/Trainer wurden zusammengelegt).
     const devBonusFactor = (org === assignedOrg)
-      ? 1 + computeCharacterEffects(careerCharacter.traits).developmentBonus / 100
+      ? 1 + (computeCharacterEffects(careerCharacter.traits).developmentBonus + coachDevelopmentBonusPct(org)) / 100
       : 1;
     roster.forEach((player) => {
       const t = (tally[player.name] && tally[player.name].team === team) ? tally[player.name] : { goals: 0, duelsWon: 0, saves: 0, misses: 0 };
@@ -5734,12 +7511,16 @@ function reapplyPlayerDevelopmentToRosters() {
     const playerName = key.slice(sepIdx + 2);
     const org = findOrgByName(orgName);
     if (!org || !org.roster) return;
-    const roster = [...(org.roster.starters || []), org.roster.sub].filter(Boolean);
+    // Bug-Fix (Trainingssystem): Reserve-Spieler ergänzt -- sie sind vom
+    // match-getriebenen System ausgeschlossen (siehe applyPlayerDevelopmentForGame()),
+    // können aber jetzt über den täglichen Trainings-Tick entwickelt werden
+    // und brauchen deshalb dieselbe Zurückspiel-Logik nach dem Laden.
+    const roster = [...(org.roster.starters || []), org.roster.sub, ...(org.roster.reserve || [])].filter(Boolean);
     const player = roster.find((p) => p.name === playerName);
     if (!player) return;
     const dev = playerDevelopment[key];
     PLAYER_STAT_KEYS.forEach((k) => {
-      player[k] = Math.max(PLAYER_DEV_STAT_MIN, Math.min(PLAYER_DEV_STAT_MAX, Math.round(dev.baseline[k] + dev.delta)));
+      player[k] = Math.max(PLAYER_DEV_STAT_MIN, Math.min(PLAYER_DEV_STAT_MAX, Math.round(dev.baseline[k] + dev.deltas[k])));
     });
     player.overall = Math.round(PLAYER_STAT_KEYS.reduce((s, k) => s + player[k], 0) / PLAYER_STAT_KEYS.length);
     touchedOrgs.add(org);
@@ -5764,7 +7545,7 @@ function resetPlayerDevelopmentToBaseline() {
     const playerName = key.slice(sepIdx + 2);
     const org = findOrgByName(orgName);
     if (!org || !org.roster) return;
-    const roster = [...(org.roster.starters || []), org.roster.sub].filter(Boolean);
+    const roster = [...(org.roster.starters || []), org.roster.sub, ...(org.roster.reserve || [])].filter(Boolean);
     const player = roster.find((p) => p.name === playerName);
     if (!player) return;
     const dev = playerDevelopment[key];
@@ -5791,6 +7572,18 @@ function resetPlayerDevelopmentToBaseline() {
 // eine numerische ID einzuführen wäre ein eigener, viel größerer Umbau des
 // gesamten Org-Referenzierungs-Systems, nicht Teil dieser Runde.
 let matchHistory = []; // wächst über die ganze Karriere (kein Saison-Reset, wie teamForm)
+// Bug-Fix (Audit): matchHistory sammelte JEDES Match ALLER 454 Orgs über die
+// gesamte Karriere komplett ohne Obergrenze -- über mehrere Saisons wuchs die
+// Save-Datei stetig, und jeder Speichervorgang (bei praktisch jeder Aktion,
+// siehe saveGameState()-Aufrufstellen) dadurch spürbar langsamer.
+// careerWinLossTally hält die kumulierte Sieg/Niederlagen-Bilanz jeder Org
+// separat und wird INKREMENTELL in recordMatchHistoryForEvent() gepflegt --
+// die Statistiken-Seite braucht dadurch nicht mehr die komplette Historie,
+// matchHistory selbst wird auf MATCH_HISTORY_CAP gedeckelt (bleibt nur noch
+// für "letzte Spiele"-Anzeigen wie matchesForTeam() da, die sowieso nur ein
+// kleines Fenster brauchen).
+let careerWinLossTally = {};
+const MATCH_HISTORY_CAP = 20000;
 
 // Menschenlesbare Runden-Bezeichnung aus dem Slot-Key (z.B. "gf-0" ->
 // "Grand Final") -- deckt alle Slot-Präfixe ab, die
@@ -5875,7 +7668,18 @@ function buildMatchRecordsForEvent(event, region, eventResult) {
 }
 
 function recordMatchHistoryForEvent(event, region, eventResult) {
-  matchHistory.push(...buildMatchRecordsForEvent(event, region, eventResult));
+  const records = buildMatchRecordsForEvent(event, region, eventResult);
+  records.forEach((m) => {
+    if (!careerWinLossTally[m.teamA]) careerWinLossTally[m.teamA] = { wins: 0, losses: 0 };
+    if (!careerWinLossTally[m.teamB]) careerWinLossTally[m.teamB] = { wins: 0, losses: 0 };
+    if (m.winner === m.teamA) { careerWinLossTally[m.teamA].wins += 1; careerWinLossTally[m.teamB].losses += 1; }
+    else { careerWinLossTally[m.teamB].wins += 1; careerWinLossTally[m.teamA].losses += 1; }
+  });
+  matchHistory.push(...records);
+  // Nur die neuesten MATCH_HISTORY_CAP Einträge behalten (matchHistory wird
+  // immer chronologisch per push() angehängt, die ältesten stehen also vorne)
+  // -- careerWinLossTally bleibt davon unberührt, die zählt unabhängig weiter.
+  if (matchHistory.length > MATCH_HISTORY_CAP) matchHistory.splice(0, matchHistory.length - MATCH_HISTORY_CAP);
 }
 
 // Einfache Abfrage-Hilfsfunktion ("wie ein Team zuletzt gespielt hat") --
@@ -5905,9 +7709,12 @@ let statsPlayerPage = 1;
 let selectedStatsPlayerKey = null;
 const STATS_PLAYERS_PER_PAGE = 20;
 
-// Ein einziger Durchlauf über matchHistory statt pro Org zu filtern (könnte
-// bei 454 Orgs x wachsender Matchdatenbank sonst spürbar langsam werden).
-function computeCareerWinLossTally() {
+// Nur noch für die Migration alter Speicherstände gebraucht (siehe
+// loadGameState()), die careerWinLossTally noch nicht kannten -- der laufende
+// Betrieb pflegt careerWinLossTally inkrementell in
+// recordMatchHistoryForEvent() und braucht dafür NICHT mehr die komplette
+// (jetzt gedeckelte) matchHistory.
+function rebuildCareerWinLossTallyFromHistory() {
   const tally = {};
   matchHistory.forEach((m) => {
     if (!tally[m.teamA]) tally[m.teamA] = { wins: 0, losses: 0 };
@@ -5964,7 +7771,7 @@ function statsQualifyingOrgSet(region) {
 // Funktion, keine allgemeine Rangliste). Sortiert nach Saison-Punkten
 // absteigend, bei Gleichstand nach Org-Stärke -- ergibt direkt den "Platz".
 function statsTeamRows(region) {
-  const tally = computeCareerWinLossTally();
+  const tally = careerWinLossTally;
   return regionOrgs(region)
     .map((org) => ({
       org,
@@ -5992,7 +7799,7 @@ function statsTeamRowHtml(row, rank, qualifyingSet) {
       '<span class="dashboard-stats-row-rank">' + rank + '</span>' +
       '<div class="dashboard-stats-row-team">' +
         '<div class="dashboard-stats-row-logo">' + statsRowLogoHtml(row.org) + '</div>' +
-        '<span class="dashboard-stats-row-name">' + row.org.name + '</span>' +
+        '<span class="dashboard-stats-row-name" title="' + row.org.name + '">' + row.org.name + '</span>' +
       '</div>' +
       '<span class="dashboard-stats-row-num">' + row.winPct + '</span>' +
       '<span class="dashboard-stats-row-num">' + row.majorsWon + '</span>' +
@@ -6204,14 +8011,19 @@ function statsPlayerFilteredRows() {
 function statsPlayerRowHtml(row, rank) {
   const isSelected = row.key === selectedStatsPlayerKey;
   const avatar = CHARACTER_AVATARS.find((a) => a.id === row.player.avatarId) || CHARACTER_AVATARS[0];
-  const devLabel = row.dev ? (row.dev.delta >= 0 ? '+' : '') + row.dev.delta.toFixed(1) : '–';
-  const devClass = row.dev && row.dev.delta > 0.05 ? ' is-dev-positive' : (row.dev && row.dev.delta < -0.05 ? ' is-dev-negative' : '');
+  // Bug-Fix (Trainingssystem): dev.delta (EIN Skalar) gibt es nicht mehr --
+  // dev.deltas ist jetzt pro Stat. Der Durchschnitt der 6 Werte entspricht
+  // exakt derselben Größe wie vorher (player.overall ist ja selbst der
+  // Durchschnitt der 6 Stats, siehe applyPlayerDevelopmentDelta()).
+  const avgDelta = row.dev ? PLAYER_STAT_KEYS.reduce((s, k) => s + row.dev.deltas[k], 0) / PLAYER_STAT_KEYS.length : 0;
+  const devLabel = row.dev ? (avgDelta >= 0 ? '+' : '') + avgDelta.toFixed(1) : '–';
+  const devClass = row.dev && avgDelta > 0.05 ? ' is-dev-positive' : (row.dev && avgDelta < -0.05 ? ' is-dev-negative' : '');
   return (
     '<div class="dashboard-stats-row is-player-row' + (isSelected ? ' is-selected' : '') + '" data-stats-player="' + row.key + '">' +
       '<span class="dashboard-stats-row-rank">' + rank + '</span>' +
       '<div class="dashboard-stats-row-team">' +
         '<div class="dashboard-stats-row-logo" style="background:' + avatar.color + '33;display:flex;align-items:center;justify-content:center;">' + avatar.emoji + '</div>' +
-        '<span class="dashboard-stats-row-name">' + row.player.name + '</span>' +
+        '<span class="dashboard-stats-row-name" title="' + row.player.name + '">' + row.player.name + '</span>' +
       '</div>' +
       '<span class="dashboard-stats-row-num">' + row.matches + '</span>' +
       '<span class="dashboard-stats-row-num">' + row.winPct + '</span>' +
@@ -6444,6 +8256,28 @@ function hideDashboardSubpagesForNavigation() {
   document.getElementById('dashboard-page-roster').classList.add('hidden');
   document.getElementById('dashboard-page-team-info').classList.add('hidden');
   document.getElementById('dashboard-page-person-info').classList.add('hidden');
+  // Bug-Fix (gefunden beim Bau der Trainings-Seite, betraf aber bereits die
+  // Personal-Seite): 'staff' und 'training' fehlten hier -- ihre Karten-Grids
+  // blieben unter der Person-Info-Seite sichtbar und quetschten sich optisch
+  // mit ihr zusammen (per Screenshot bestätigt), statt sauber ausgeblendet zu
+  // werden wie alle anderen Ursprungsseiten.
+  document.getElementById('dashboard-page-staff').classList.add('hidden');
+  document.getElementById('dashboard-page-training').classList.add('hidden');
+  // Nachrichtensystem: dieselbe Absicherung präventiv gleich mit eingebaut
+  // (statt erst per Screenshot wiederzuentdecken, siehe Kommentar oben zu
+  // staff/training).
+  document.getElementById('dashboard-page-messages').classList.add('hidden');
+  // Postsystem: dieselbe präventive Absicherung -- Post kann ebenfalls in
+  // Person-Info navigieren (Aktions-Button in der Detailansicht).
+  document.getElementById('dashboard-page-post').classList.add('hidden');
+  // Audit-Runde: Shop/Basecamp/Strategien haben aktuell keinen "Person-/
+  // Team-Info öffnen"-Link, sind also heute kein erreichbarer Auslöser --
+  // trotzdem präventiv mit abgesichert, damit sich das bereits zweimal
+  // aufgetretene "neue Seite fehlt in der Ausblend-Liste"-Muster nicht ein
+  // drittes Mal wiederholt, falls eine künftige Änderung dort einen Link ergänzt.
+  document.getElementById('dashboard-page-shop').classList.add('hidden');
+  document.getElementById('dashboard-page-basecamp').classList.add('hidden');
+  document.getElementById('dashboard-page-tactics').classList.add('hidden');
   personInfoIdentity = null;
   personInfoOrigin = null;
 }
@@ -6492,7 +8326,7 @@ function resolvePersonByIdentity(orgName, personName, role) {
     person = roster.find((p) => p.name === personName) || null;
   } else if (role === 'Reserve') {
     // Runde 122: neue Reserve-Kategorie (Kader-Seite) -- eigener Pfad, da
-    // org.roster.reserve weder Starter/Sub noch eine der 9 Personal-Rollen ist.
+    // org.roster.reserve weder Starter/Sub noch eine der 8 Personal-Rollen ist.
     person = (org.roster.reserve || []).find((p) => p.name === personName) || null;
   } else {
     person = (org.roster.staff || []).find((s) => s.role === role && s.name === personName) || null;
@@ -6503,7 +8337,7 @@ function resolvePersonByIdentity(orgName, personName, role) {
 
 // Kurze, EHRLICHE Beschreibungszeile -- keine erfundene Bio/Rolle (dasselbe
 // Prinzip wie schon beim Statistiken-Spieler-Tab, Runde 113). Statachsen gibt
-// es nur bei Spielern/Coach (rollPlayer()), nicht bei den 9 regulären
+// es nur bei Spielern/Coach (rollPlayer()), nicht bei den 8 regulären
 // Mitarbeiter-Rollen (rollStaff()).
 function personInfoDescription(person) {
   const hasStats = PLAYER_STAT_KEYS.every((k) => typeof person[k] === 'number');
@@ -6550,6 +8384,18 @@ function closePersonInfo() {
   } else if (origin.page === 'roster') {
     document.getElementById('dashboard-page-title').textContent = DASHBOARD_PAGE_LABELS.roster;
     renderDashboardKaderPanel();
+  } else if (origin.page === 'staff') {
+    document.getElementById('dashboard-page-title').textContent = DASHBOARD_PAGE_LABELS.staff;
+    renderDashboardPersonalPanel();
+  } else if (origin.page === 'training') {
+    document.getElementById('dashboard-page-title').textContent = DASHBOARD_PAGE_LABELS.training;
+    renderDashboardTrainingPanel();
+  } else if (origin.page === 'messages') {
+    document.getElementById('dashboard-page-title').textContent = DASHBOARD_PAGE_LABELS.messages;
+    renderDashboardMessagesPanel();
+  } else if (origin.page === 'post') {
+    document.getElementById('dashboard-page-title').textContent = DASHBOARD_PAGE_LABELS.post;
+    renderDashboardPostPanel();
   } else {
     document.getElementById('dashboard-page-title').textContent = DASHBOARD_PAGE_LABELS.stats;
     renderDashboardStatsPanel();
@@ -6574,19 +8420,26 @@ function renderPersonInfoPanel() {
   document.getElementById('dashboard-person-info-description').textContent = personInfoDescription(person);
 
   document.getElementById('dashboard-person-info-age').textContent = person.age;
-  document.getElementById('dashboard-person-info-contract').textContent = formatContractDate(person.contractStart) + ' – ' + formatContractDate(person.contractEnd);
+  // Bug-Fix (User-Meldung: "da steht NaN überall"): freie Agenten haben per
+  // Design KEINEN Vertrag (weder Spieler noch Personal, siehe Kommentar an
+  // hydrateFreeAgentIdentity() in data/org-rosters.js) -- contractStart/-End
+  // sind dann schlicht undefined. formatContractDate(undefined) rechnete das
+  // bisher ungeprüft zu "NaN.NaN.NaN – NaN.NaN.NaN" hoch, weil diese eine
+  // Stelle (anders als z.B. scoutingStaffRowHtml()/scoutingPlayerRowHtml(),
+  // die genau dafür schon eine Ternary-Absicherung haben) den Fall nie
+  // abgefangen hat.
+  document.getElementById('dashboard-person-info-contract').textContent = (person.contractStart && person.contractEnd)
+    ? formatContractDate(person.contractStart) + ' – ' + formatContractDate(person.contractEnd)
+    : 'Kein Vertrag (Free Agent)';
   document.getElementById('dashboard-person-info-potential').textContent = '★ ' + scoutingPotentialStars(person).toFixed(1);
   document.getElementById('dashboard-person-info-value').textContent = formatMoney(calculatePrice(person.overall));
 
-  // Runde 121: Gehalt gibt es aktuell nur für Spieler (Starter/Sub) --
-  // Personal/Coach-Verpflichtungen bleiben diese Runde gesperrt (siehe
-  // scoutingStaffRowHtml()-Kommentar), ein Gehalt dafür anzuzeigen wäre
-  // irreführend.
-  const isPlayerRole = role === 'Starter' || role === 'Sub' || role === 'Reserve';
-  document.getElementById('dashboard-person-info-salary-fact').classList.toggle('hidden', !isPlayerRole);
-  if (isPlayerRole) {
-    document.getElementById('dashboard-person-info-salary').textContent = formatMoney(playerMonthlySalary(person)) + '/Monat';
-  }
+  // Bug-Fix (Audit, User-Entscheidung): Gehalt war früher nur für Spieler
+  // sichtbar (Personal/Coach zahlten damals kein laufendes Gehalt, siehe
+  // totalMonthlySalaryCommitment()-Kommentar) -- Personal zahlt jetzt
+  // dieselbe Gehaltsformel, die Anzeige gilt deshalb jetzt für JEDE Rolle.
+  document.getElementById('dashboard-person-info-salary-fact').classList.remove('hidden');
+  document.getElementById('dashboard-person-info-salary').textContent = formatMoney(playerMonthlySalary(person)) + '/Monat';
 
   document.getElementById('dashboard-person-info-role').textContent = role;
   document.getElementById('dashboard-person-info-team-logo').innerHTML = statsRowLogoHtml(org);
@@ -6594,19 +8447,72 @@ function renderPersonInfoPanel() {
   teamNameEl.textContent = org.name;
   teamNameEl.onclick = () => openTeamInfo(org.name);
 
+  // Nachrichtensystem: nur für den eigenen Kader sinnvoll (Bot-Org-Personen
+  // sind nicht kontaktierbar, siehe npcContactableRoster()-Geltungsbereich).
+  const messageBtn = document.getElementById('dashboard-person-info-message-btn');
+  const isOwnOrgPersonForMessages = !!(assignedOrg && org.name === assignedOrg.name);
+  messageBtn.classList.toggle('hidden', !isOwnOrgPersonForMessages);
+  if (isOwnOrgPersonForMessages) messageBtn.onclick = () => goToMessagesPage(org.name, person.name, role);
+
   // Statachsen -- nur bei Spielern/Coach (rollPlayer()), nicht bei den 9
   // regulären Mitarbeiter-Rollen (rollStaff() hat keine 6 Statachsen).
   const hasStats = PLAYER_STAT_KEYS.every((k) => typeof person[k] === 'number');
-  document.getElementById('dashboard-person-info-stats-section').classList.toggle('hidden', !hasStats);
+  // Personal-Seite: die 8 echten Mitarbeiter-Rollen haben KEINE Spieler-
+  // Statachsen, sondern eigene, rollenspezifische Attribute (STAFF_ROLE_
+  // ATTRIBUTES, data/org-rosters.js) -- "Coach" hat weiterhin echte
+  // PLAYER_STAT_KEYS (rollPlayer()) und läuft über den hasStats-Zweig oben.
+  const staffAttrKeys = STAFF_ROLE_ATTRIBUTES[role];
+  const hasStaffStats = !hasStats && staffAttrKeys && staffAttrKeys.every((k) => typeof person[k] === 'number');
+  document.getElementById('dashboard-person-info-stats-section').classList.toggle('hidden', !hasStats && !hasStaffStats);
   if (hasStats) {
-    document.getElementById('dashboard-person-info-stats').innerHTML = STAT_LABELS.map(([key, label]) => (
-      '<div class="dashboard-person-info-stat-row">' +
-        '<span class="dashboard-person-info-stat-label">' + label + '</span>' +
+    // Shop-Ausrüstung wirkt nur auf die EIGENE Org (equipmentStatBonuses() ist
+    // ohnehin org-unabhängig berechnet, da nur die eigene Org je ausrüsten
+    // kann) -- Gegner-/andere-Org-Spieler zeigen bewusst nur den Basiswert,
+    // sonst würde ein Bonus angezeigt, der im Match dieses Spielers nie wirkt.
+    const isOwnOrgPerson = !!(org && assignedOrg && org.name === assignedOrg.name);
+    const effective = isOwnOrgPerson ? getEffectivePlayerStats(person) : person;
+    document.getElementById('dashboard-person-info-stats').innerHTML = STAT_LABELS.map(([key, label]) => {
+      const base = person[key];
+      const eff = effective[key];
+      const bonus = eff - base;
+      return (
+        '<div class="dashboard-person-info-stat-row">' +
+          '<span class="dashboard-person-info-stat-label">' + label + '</span>' +
+          '<div class="dashboard-person-info-stat-track"><div class="dashboard-person-info-stat-fill" style="width:' + eff + '%;"></div></div>' +
+          '<span class="dashboard-person-info-stat-value" title="Basis ' + base + (bonus > 0 ? ' + Ausrüstung ' + bonus : '') + '">' + eff + (bonus > 0 ? '<span class="dashboard-person-info-stat-equip-bonus"> (+' + bonus + ')</span>' : '') + '</span>' +
+        '</div>'
+      );
+    }).join('');
+  } else if (hasStaffStats) {
+    document.getElementById('dashboard-person-info-stats').innerHTML = staffAttrKeys.map((key) => (
+      // Bug-Fix (gefunden bei der Trainings-Seite): is-wide-label, siehe CSS-Kommentar --
+      // volle Attributnamen wie "Fitness-Wissen" brachen sonst in der schmalen Spalte um.
+      '<div class="dashboard-person-info-stat-row is-wide-label">' +
+        '<span class="dashboard-person-info-stat-label">' + (STAFF_ATTRIBUTE_LABELS[key] || key) + '</span>' +
         '<div class="dashboard-person-info-stat-track"><div class="dashboard-person-info-stat-fill" style="width:' + person[key] + '%;"></div></div>' +
         '<span class="dashboard-person-info-stat-value">' + person[key] + '</span>' +
       '</div>'
     )).join('');
   }
+
+  // Team-Zustand (User-Vorgabe: "auch bei Personal wie bei Spieler Moral und
+  // Gesundheit-Status anzeigen") -- es gibt (wie bei Spielern) keinen echten
+  // PRO-PERSON-Wert, nur den bestehenden TEAM-weiten Zustand (jetzt inkl.
+  // Physiotherapeut-/Psychologe-Bonus, siehe effectiveTeamPhysicalCondition()/
+  // effectiveTeamMorale()) -- gilt deshalb einheitlich für JEDE Person dieser
+  // Org (Spieler UND Personal), nicht nur für Mitarbeiter.
+  const teamCondition = effectiveTeamPhysicalCondition(org);
+  const teamMorale = effectiveTeamMorale(org);
+  document.getElementById('dashboard-person-info-condition-value').textContent = teamCondition + '%';
+  document.getElementById('dashboard-person-info-condition-fill').style.width = teamCondition + '%';
+  document.getElementById('dashboard-person-info-morale-value').textContent = teamMorale + '%';
+  document.getElementById('dashboard-person-info-morale-fill').style.width = teamMorale + '%';
+  document.getElementById('dashboard-person-info-morale-pill').textContent = teamMorale >= 60 ? 'Glücklich' : 'Unzufrieden';
+  document.getElementById('dashboard-person-info-morale-pill').classList.toggle('is-happy', teamMorale >= 60);
+  document.getElementById('dashboard-person-info-morale-pill').classList.toggle('is-unhappy', teamMorale < 60);
+  document.getElementById('dashboard-person-info-condition-pill').textContent = teamCondition >= 70 ? 'Aktiv' : 'Erschöpft';
+  document.getElementById('dashboard-person-info-condition-pill').classList.toggle('is-happy', teamCondition >= 70);
+  document.getElementById('dashboard-person-info-condition-pill').classList.toggle('is-unhappy', teamCondition < 70);
 
   // Entwicklungs-Verlauf/letzte Ergebnisse -- nur wenn playerDevelopment
   // tatsächlich Daten hat (mindestens 1 getracktes Spiel). Mitarbeiter/Coach
@@ -6620,6 +8526,42 @@ function renderPersonInfoPanel() {
   document.getElementById('dashboard-person-info-results-card').classList.toggle('hidden', !hasResults);
   if (hasResults) {
     document.getElementById('dashboard-person-info-recent-results').innerHTML = dev.recentGames.map(statsPlayerRecentResultRowHtml).join('');
+  }
+
+  // Trainingssystem: nur bei echten Spielern (hasStats) MIT einem
+  // playerDevelopment-Eintrag -- Coach hat zwar hasStats=true (rollPlayer()),
+  // nimmt aber (wie die 8 Personal-Rollen) nicht am Entwicklungssystem teil
+  // und hat i.d.R. nie einen dev-Eintrag -- sauber ausgeblendet statt zu
+  // crashen. Bewusst NUR Anzeige hier (keine Bearbeitung) -- Modus/Kategorie
+  // ändern passiert auf der Trainings-Seite selbst (setPlayerTrainingCategory()),
+  // um dieselbe Editier-Logik nicht doppelt zu pflegen.
+  const hasTrainingSection = hasStats && !!dev;
+  document.getElementById('dashboard-person-info-training-card').classList.toggle('hidden', !hasTrainingSection);
+  if (hasTrainingSection) {
+    const t = dev.training || { mode: 'auto', category: null };
+    const resolvedCategory = resolveEffectiveTrainingCategory(org, person, dev);
+    document.getElementById('dashboard-person-info-training-mode').textContent =
+      t.mode === 'off' ? 'Deaktiviert' : t.mode === 'manual' ? 'Manuell' : 'Automatisch';
+    let reasonText;
+    if (t.mode === 'off') reasonText = 'Kein Trainingsfokus -- nur allgemeine Entwicklung durchs Spielen.';
+    else if (t.mode === 'auto') reasonText = computeAutoTrainingCategory(org, person).reason;
+    else reasonText = 'Manuell auf ' + (TRAINING_CATEGORY_LABELS[resolvedCategory] || resolvedCategory) + ' festgelegt.';
+    document.getElementById('dashboard-person-info-training-reason').textContent = reasonText;
+    document.getElementById('dashboard-person-info-training-categories').innerHTML = PLAYER_STAT_KEYS.map((key) => {
+      // Echte Bucket-Position statt erfundenem Level/XP: player[key] rundet
+      // baseline+deltas -- der "Fortschritt zum nächsten Punkt" ist die
+      // reale Position innerhalb des aktuellen Rundungs-Buckets [wert-0.5, wert+0.5).
+      const raw = dev.baseline[key] + dev.deltas[key];
+      const bucketProgress = Math.round(Math.max(0, Math.min(1, raw - (person[key] - 0.5))) * 100);
+      const isFocused = resolvedCategory === key || resolvedCategory === 'general';
+      return (
+        '<div class="dashboard-person-info-stat-row is-wide-label' + (isFocused ? ' is-training-focus' : '') + '">' +
+          '<span class="dashboard-person-info-stat-label">' + TRAINING_CATEGORY_LABELS[key] + '</span>' +
+          '<div class="dashboard-person-info-stat-track"><div class="dashboard-person-info-stat-fill" style="width:' + bucketProgress + '%;"></div></div>' +
+          '<span class="dashboard-person-info-stat-value">' + person[key] + '</span>' +
+        '</div>'
+      );
+    }).join('');
   }
 }
 
@@ -6715,7 +8657,7 @@ function resolveTransferLogPlayerInfo(entry) {
     // Bug-Fix (User-Meldung: "Rolle/Nation/Bewertung leer bei Transfers"):
     // suchte bisher NUR in starters/sub -- seit Runde 122 landet ein
     // Neuzugang aber zuerst in roster.reserve (nicht mehr direkt im
-    // Hauptkader), und Personal-Transfers (Coach/die 9 Stab-Rollen, Runde
+    // Hauptkader), und Personal-Transfers (Coach/die 8 Stab-Rollen, Runde
     // 117) wurden hier nie überhaupt berücksichtigt. Deckt jetzt den
     // kompletten Kader ab.
     if (org.roster.starters && org.roster.starters.some((p) => p.name === entry.player)) {
@@ -6844,8 +8786,13 @@ function matchesScoutingAgeFilter(age) {
 }
 
 function scoutingPotentialStars(player) {
+  // Bug-Fix (User-Meldung: "bei potential steht noch nan"): npcStarRating()
+  // ist jetzt zwar selbst schon gegen undefined/NaN overall abgesichert, aber
+  // ein undefined/NaN `age` hätte hier direkt in ageFactor NaN erzeugt und
+  // wäre ungebremst durchgereicht worden (Math.max(0, NaN) ist NaN, nicht 0).
+  const safeAge = (typeof player.age === 'number' && !Number.isNaN(player.age)) ? player.age : 26;
   const currentStars = npcStarRating(player.overall);
-  const ageFactor = Math.max(0, (26 - player.age) / 10);
+  const ageFactor = Math.max(0, (26 - safeAge) / 10);
   const boosted = Math.min(5, currentStars + ageFactor * 1.5);
   return Math.round(boosted * 2) / 2;
 }
@@ -7021,7 +8968,7 @@ function findScoutingPlayerRow(orgName, playerName) {
 
 // ── "Personal"-Tab (Runde 117) -- wie "Spieler", aber mit echter
 // Verpflichtungs-Mechanik (User-Vorgabe: "da kann man Coach, Psychologe etc.
-// kaufen bzw. verhandeln"). Coach (org.roster.coach, eigenes Feld) UND die 9
+// kaufen bzw. verhandeln"). Coach (org.roster.coach, eigenes Feld) UND die 8
 // regulären Rollen (org.roster.staff) fließen beide ein.
 let scoutingStaffPage = 1;
 const SCOUTING_STAFF_PER_PAGE = 20;
@@ -7045,7 +8992,7 @@ function scoutingAllStaff() {
       });
     });
   });
-  // Runde 120: freies Personal (nur die 9 regulären Rollen -- für Coaches
+  // Runde 120: freies Personal (nur die 8 regulären Rollen -- für Coaches
   // gibt es KEINEN Free-Agent-Pool, siehe buildCustomOrgFromForm()-Kommentar
   // "Kein Free-Agent-Pool für Coaches vorhanden", dasselbe Prinzip gilt hier).
   // Bug-Fix: region war hier hart auf null gesetzt (siehe scoutingAllPlayers()).
@@ -7087,14 +9034,27 @@ function findScoutingStaffRow(orgName, personName, role) {
 function scoutingStaffRowHtml(row) {
   const avatar = CHARACTER_AVATARS.find((a) => a.id === row.person.avatarId) || CHARACTER_AVATARS[0];
   const nationLabel = (CHARACTER_NATIONS.find((n) => n.code === row.person.country) || {}).name || row.person.country || '–';
-  // Runde 121, User-Vorgabe ("Personal soll erstmal gesperrt sein"): der
-  // Verpflichten-Button bleibt für JEDE Personal-Zeile deaktiviert, egal ob
-  // Transferfenster/Budget an sich passen würden -- Fenster-/Budget-Logik
-  // bewusst nicht gelöscht (nur überschrieben), damit sie bei einer späteren
-  // Freischaltung sofort wieder greift.
-  const canSign = false;
-  const disabledReason = 'Kommt in einem späteren Update';
   const isFreeAgent = !row.org;
+  const isOwnOrgRow = row.org && assignedOrg && row.org.name === assignedOrg.name;
+  // Freigeschaltet (Personal-Seite): gleiches "sieht gesperrt aus, bleibt
+  // aber klickbar"-Muster wie bei scoutingAllPlayers()-Reihen (is-locked statt
+  // natives disabled) -- ein Klick auf eine belegte Kategorie soll den
+  // erklärenden "Limit von 1"-Dialog in signStaffMember() erreichen, statt
+  // stumm nichts zu tun. Eigene-Org-Zeilen (man "verpflichtet" nicht die
+  // eigenen aktuellen Mitarbeiter) bleiben nativ disabled -- da gibt es
+  // nichts zu erklären.
+  const isTransferOpen = isTransferWindowOpen(careerDate);
+  const canAfford = row.marketValue <= (assignedOrg ? assignedOrg.budget : 0) && row.marketValue <= (financeAllocation.transfers || 0);
+  // Bug-Fix (Audit, User-Entscheidung): Personal zahlt jetzt laufendes Gehalt
+  // (siehe totalMonthlySalaryCommitment()) -- derselbe Gehälter-Budget-Check,
+  // den scoutingRowHtml() für Spieler bereits hat, fehlte hier bisher.
+  const salaryAffordable = assignedOrg ? (totalMonthlySalaryCommitment(assignedOrg) + playerMonthlySalary(row.person)) <= (financeAllocation.salaries || 0) : true;
+  const canSign = !isOwnOrgRow && isTransferOpen && canAfford && salaryAffordable;
+  let disabledReason = '';
+  if (isOwnOrgRow) disabledReason = 'Bereits dein eigenes Personal';
+  else if (!isTransferOpen) disabledReason = 'Transferfenster geschlossen';
+  else if (!canAfford) disabledReason = 'Budget zu niedrig';
+  else if (!salaryAffordable) disabledReason = 'Nicht genug Geld bei Gehältern';
   const nameCellHtml = (isFreeAgent ? '<div class="dashboard-scouting-row-team">' : '<div class="dashboard-scouting-row-team" data-scouting-person="' + row.org.name + '::' + row.person.name + '::' + row.role + '">') +
       '<div class="dashboard-stats-row-logo" style="background:' + avatar.color + '33;display:flex;align-items:center;justify-content:center;">' + avatar.emoji + '</div>' +
       '<span class="dashboard-transfers-cell-name" title="' + row.person.name + '">' + row.person.name + '</span>' +
@@ -7115,9 +9075,10 @@ function scoutingStaffRowHtml(row) {
       '<span class="dashboard-stats-row-num">★ ' + row.potential.toFixed(1) + '</span>' +
       '<span class="dashboard-transfers-cell">' + (row.person.contractEnd ? formatContractDate(row.person.contractEnd) : '–') + '</span>' +
       '<span class="dashboard-transfers-price">' + formatMoney(row.marketValue) + '</span>' +
+      '<span class="dashboard-transfers-price">' + formatMoney(playerMonthlySalary(row.person)) + '</span>' +
       teamCellHtml +
-      '<button type="button" class="dashboard-scouting-sign-btn" data-scouting-sign-org="' + (row.org ? row.org.name : '') + '" data-scouting-sign-name="' + row.person.name + '" data-scouting-sign-role="' + row.role + '"' +
-        (canSign ? '' : ' disabled') + (disabledReason ? ' title="' + disabledReason + '"' : '') +
+      '<button type="button" class="dashboard-scouting-sign-btn' + (canSign ? '' : ' is-locked') + '" data-scouting-sign-org="' + (row.org ? row.org.name : '') + '" data-scouting-sign-name="' + row.person.name + '" data-scouting-sign-role="' + row.role + '"' +
+        (isOwnOrgRow ? ' disabled' : '') + (disabledReason ? ' title="' + disabledReason + '"' : '') +
       '>Verpflichten</button>' +
     '</div>'
   );
@@ -7166,20 +9127,49 @@ function renderScoutingStaffView() {
   renderScoutingStaffPagination(pageCount);
 }
 
-// Zeigt den Bestätigungsdialog (Preis/Rolle/Bewertung) -- Fenster-/Budget-
-// Prüfung passiert zusätzlich schon hier defensiv (der Button ist bei
-// geschlossenem Fenster/zu niedrigem Budget bereits deaktiviert, siehe
-// scoutingStaffRowHtml(), das hier ist nur ein zweites Sicherheitsnetz,
-// falls sich der Zustand zwischen Render und Klick geändert hat).
-// Runde 121, User-Vorgabe ("Personal soll erstmal gesperrt sein"): der
-// Button ist bereits deaktiviert (scoutingStaffRowHtml()), diese Funktion
-// ist dieselbe Zweitabsicherung wie bei jedem anderen Kauf-Flow in diesem
-// Projekt (Render-Zustand und Klick-Zeitpunkt könnten sonst auseinanderlaufen).
-// Die eigentliche Verpflichtungs-Logik (Fenster-/Budget-Check, Bestätigungs-
-// dialog) bleibt vollständig in executeStaffSigning() erhalten und wird bei
-// einer künftigen Freischaltung wieder direkt nutzbar sein.
+// Personal-Seite (User-Vorgabe): pro Kategorie ist nur EINE Person erlaubt.
+// Ist die Zielrolle bereits besetzt, wird der Kauf nicht stumm verweigert,
+// sondern erklärt ("Limit von 1 ... kündige zuerst") -- mit direktem Sprung
+// zur Personal-Seite, wo das Kündigen tatsächlich passiert (fireStaffMember()).
 function signStaffMember(row) {
-  showConfirmModal('Noch nicht verfügbar', 'Personal-Verpflichtungen kommen in einem späteren Update.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
+  const role = row.role;
+  const isCoach = role === 'Coach';
+  const isOwnOrgRow = row.org && assignedOrg && row.org.name === assignedOrg.name;
+  if (isOwnOrgRow) return; // Button ist für eigene Zeilen nativ disabled, dies ist nur ein zweites Sicherheitsnetz
+  if (!isTransferWindowOpen(careerDate)) {
+    showConfirmModal('Transferfenster geschlossen', 'Personal kann nur während eines offenen Transferfensters verpflichtet werden.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
+    return;
+  }
+  const current = isCoach ? (assignedOrg.roster && assignedOrg.roster.coach) : (assignedOrg.roster && assignedOrg.roster.staff.find((s) => s.role === role));
+  if (current && !current.vacant) {
+    showConfirmModal(
+      'Limit erreicht (1x ' + role + ')',
+      'Du hast bereits ' + current.name + ' als ' + role + ' unter Vertrag -- pro Kategorie ist nur eine Person erlaubt. Kündige zuerst deinen aktuellen ' + role + ' auf der Personal-Seite, um jemand Neues einzustellen.',
+      () => goToPersonalPage(),
+      { confirmLabel: 'Zur Personal-Seite' }
+    );
+    return;
+  }
+  if (row.marketValue > (financeAllocation.transfers || 0) || row.marketValue > assignedOrg.budget) {
+    showConfirmModal('Budget zu niedrig', row.person.name + ' kostet ' + formatMoney(row.marketValue) + ' -- das übersteigt dein Transferbudget oder Gesamtbudget.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
+    return;
+  }
+  // Bug-Fix (Audit, User-Entscheidung): Personal kostet jetzt laufendes
+  // Gehalt (siehe totalMonthlySalaryCommitment()) -- derselbe Gehälter-
+  // Budget-Check, den signScoutingPlayer() für Spieler bereits hat, fehlte
+  // hier bisher komplett.
+  const salary = playerMonthlySalary(row.person);
+  const salaryAfterBuy = totalMonthlySalaryCommitment(assignedOrg) + salary;
+  if (salaryAfterBuy > (financeAllocation.salaries || 0)) {
+    showConfirmModal('Nicht genug Geld bei Gehältern', row.person.name + ' würde ' + formatMoney(salary) + '/Monat kosten -- damit würde dein Gehälter-Budget nicht mehr für den gesamten Kader (inkl. Personal) reichen.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
+    return;
+  }
+  showConfirmModal(
+    'Verpflichtung bestätigen',
+    row.person.name + ' als ' + role + ' für ' + formatMoney(row.marketValue) + ' verpflichten? Gehalt: ' + formatMoney(salary) + '/Monat.',
+    () => executeStaffSigning(row, row.marketValue),
+    {}
+  );
 }
 
 // Führt die Verpflichtung tatsächlich aus: verkaufende Org bekommt SOFORT
@@ -7221,7 +9211,13 @@ function executeStaffSigning(row, price) {
     signedFreeAgentStaff.add(role + '::' + row.person.name);
   }
 
-  const signedPerson = { ...row.person };
+  // Bug-Fix (Audit, vorab -- Feature ist aktuell noch gesperrt): derselbe
+  // fehlende-Vertragsdatum-Bug wie bei executePlayerSigning() -- ohne
+  // frisches contractStart/contractEnd würde die Person entweder den alten,
+  // fast abgelaufenen Bot-Org-Vertrag mitbringen oder (Free Agent) nie
+  // ablaufen. Vorab behoben, damit der Bug bei Freischaltung nicht erneut
+  // auftritt.
+  const signedPerson = { ...row.person, contractStart: careerDate, contractEnd: addMonthsToDateStr(careerDate, Math.round(12 + Math.random() * 24)) };
   if (!isCoach) signedPerson.role = role;
   if (isCoach) {
     assignedOrg.roster.coach = signedPerson;
@@ -7231,21 +9227,60 @@ function executeStaffSigning(row, price) {
   }
   assignedOrg.strength = computeOrgStrengthFromRoster(assignedOrg.roster);
 
-  assignedOrg.budget -= price;
+  // Scout-Effekt (Personal-Seite): guter Scout verhandelt bessere Deals --
+  // Rabatt wird auf den TATSÄCHLICH gezahlten Preis angewendet (row.marketValue
+  // bleibt als Anzeige-Referenz auf der Scouting-Seite unverändert). Wird VOR
+  // dem eigenen Ersatz berechnet (der neue Scout, falls role==='Scout', wirkt
+  // erst beim NÄCHSTEN Kauf, nicht rückwirkend auf den eigenen Einstellungspreis).
+  const finalPrice = Math.round(price * (1 - scoutHireDiscountPct(assignedOrg) / 100));
+
+  assignedOrg.budget -= finalPrice;
   // Bug-Fix (Audit-Runde): derselbe asymmetrische Clamp-Bug wie bei den
   // Gehältern (siehe applyMonthlyClubFinances()-Kommentar) -- ein Math.max(0, ...)
   // hier würde bei einem Kauf, der mehr kostet als aktuell in "Transfers"
-  // eingeteilt ist, einen unsichtbaren Fehlbetrag erzeugen. Aktuell noch nicht
-  // erreichbar (Personal-Verpflichtung ist per canSign=false gesperrt, siehe
-  // scoutingStaffRowHtml()), aber derselbe Fix vorab, damit er bei
-  // Freischaltung nicht erneut auftritt.
-  financeAllocation.transfers = (financeAllocation.transfers || 0) - price;
-  logTransfer(sellerOrg ? sellerOrg.name : 'Free Agent', assignedOrg.name, row.person.name, price);
-  addFinanceMonthlyExpense(price, 'Personal', row.person.name + ' (' + row.role + ') von ' + (sellerOrg ? sellerOrg.name : 'Free Agent'));
+  // eingeteilt ist, einen unsichtbaren Fehlbetrag erzeugen.
+  financeAllocation.transfers = (financeAllocation.transfers || 0) - finalPrice;
+  logTransfer(sellerOrg ? sellerOrg.name : 'Free Agent', assignedOrg.name, row.person.name, finalPrice);
+  addFinanceMonthlyExpense(finalPrice, 'Personal', row.person.name + ' (' + row.role + ') von ' + (sellerOrg ? sellerOrg.name : 'Free Agent'));
+  pushPostMessage('transfers', 'HIGH', 'Personalabteilung', 'Vertragsverhandlung erfolgreich', role + ' ' + row.person.name + ' wurde für ' + formatMoney(finalPrice) + ' verpflichtet.', null, { type: 'openPerson', orgName: assignedOrg.name, personName: row.person.name, role });
 
   renderDashboardScoutingPanel();
   renderDashboardTopbar();
   saveGameState();
+}
+
+// Kündigt einen Mitarbeiter der EIGENEN Org (Personal-Seite) -- macht die
+// Rolle wieder frei (Coach: null, gleiches Muster wie roster.sub, das schon
+// null sein darf; die 8 echten Personal-Rollen: { role, vacant: true }, siehe
+// computeOrgStrengthFromRoster()-Kommentar in data/org-rosters.js für die
+// Begründung dieses Unterschieds). KEIN automatischer Ersatz (anders als beim
+// Abwerben von Bot-Orgs) -- der Spieler muss aktiv über Scouting neu
+// einstellen, das ist der ganze Sinn der Kündigen-Aktion.
+function fireStaffMember(role) {
+  const isCoach = role === 'Coach';
+  const current = isCoach ? assignedOrg.roster.coach : assignedOrg.roster.staff.find((s) => s.role === role);
+  if (!current || current.vacant) return; // Fehlerbehandlung: nichts zu kündigen
+  showConfirmModal(
+    role + ' kündigen?',
+    current.name + ' (' + role + ') wird sofort freigestellt. Die Position bleibt unbesetzt, bis du über Scouting jemand Neues einstellst.',
+    () => {
+      if (isCoach) {
+        assignedOrg.roster.coach = null;
+      } else {
+        const idx = assignedOrg.roster.staff.findIndex((s) => s.role === role);
+        if (idx !== -1) assignedOrg.roster.staff[idx] = { role, vacant: true };
+      }
+      assignedOrg.strength = computeOrgStrengthFromRoster(assignedOrg.roster);
+      renderDashboardPersonalPanel();
+      renderDashboardTopbar();
+      saveGameState();
+    },
+    { danger: true, confirmLabel: 'Kündigen' }
+  );
+}
+
+function goToPersonalPage() {
+  selectDashboardPage('staff');
 }
 
 // { 'orgName::role' -> Ersatzperson-Objekt } für Bot-Orgs, die eine Position
@@ -7376,19 +9411,64 @@ function executePlayerSigning(row, price) {
       // korrekt (financeExpenseTransfers()/-IncomeTransfers() lesen generisch
       // aus transferLog, kein Sonderfall für Bot-Bot-Transfers nötig).
       logTransfer('Free Agent', sellerOrg.name, replacement.name, calculatePrice(replacement.overall));
+    } else {
+      // Bug-Fix (Audit): freeAgentPlayerPool() hat nur eine begrenzte Anzahl
+      // Einträge -- bei sehr aktivem Scouting über viele Saisons kann er
+      // irgendwann komplett verbraucht sein (bestAffordableFreeAgent() liefert
+      // dann null). Ohne diesen Zweig blieb der verkaufte Spieler unverändert
+      // im alten Kader stehen, während gleichzeitig eine Kopie beim Käufer
+      // landete -- derselbe Mensch auf zwei Rostern gleichzeitig, und die
+      // verkaufende Org fälschlich unverändert stark. splice() statt null
+      // beim Starter-Slot, damit roster.starters.length weiterhin die ECHTE
+      // Spieleranzahl widerspiegelt -- ein null-Loch würde stattdessen den
+      // "Cannot read properties of undefined"-Absturz aus Runde 97
+      // zurückbringen (aReady/bReady in simulateBotSeries() prüfen nur
+      // .length, nicht ob jeder Eintrag tatsächlich besetzt ist).
+      if (slotType === 'starters' && idx !== -1) sellerOrg.roster.starters.splice(idx, 1);
+      else sellerOrg.roster.sub = null;
     }
     sellerOrg.strength = computeOrgStrengthFromRoster(sellerOrg.roster);
   } else {
     signedFreeAgentPlayers.add(row.player.name);
   }
 
-  const signedPerson = { ...row.player };
+  // Bug-Fix (Audit): vorher wurde row.player 1:1 kopiert, OHNE einen neuen
+  // Vertrag zu würfeln -- anders als an jeder anderen Signing-Stelle im
+  // Projekt (signFreeAgentPlayer/signFreeAgentStaff/rollReplacementPerson
+  // setzen alle explizit ein frisches contractStart/contractEnd "ab jetzt").
+  // Kam der Spieler von einer Bot-Org, behielt er dadurch deren ALTEN,
+  // teils fast abgelaufenen Vertrag -- checkOwnContractsForWarningsAndExpiry()
+  // konnte ihn dadurch schon kurz nach der 7-Tage-Ankunft wieder ersatzlos
+  // (ohne Rückerstattung) aus dem eigenen Kader entfernen. War er dagegen
+  // bereits ein Free Agent, hatte er laut Design GAR keinen Vertrag
+  // (contractEnd === undefined) -- der Ablauf-Check hätte nie gegriffen,
+  // der Spieler wäre faktisch für immer gebunden gewesen. signFreeAgentPlayer()
+  // würfelt für beide Fälle einheitlich einen echten 12-36-Monats-Vertrag,
+  // der jetzt (careerDate) beginnt.
+  const signedPerson = signFreeAgentPlayer(row.player, careerDate);
   queuePlayerArrival(signedPerson, careerDate);
 
-  assignedOrg.budget -= price;
-  financeAllocation.transfers = Math.max(0, (financeAllocation.transfers || 0) - price);
-  logTransfer(sellerOrg ? sellerOrg.name : 'Free Agent', assignedOrg.name, row.player.name, price);
-  addFinanceMonthlyExpense(price, 'Transfers', row.player.name + ' von ' + (sellerOrg ? sellerOrg.name : 'Free Agent'));
+  // Finanzvorstand-Effekt (Personal-Seite): verhandelt bessere
+  // Transferkonditionen -- Rabatt auf den TATSÄCHLICH gezahlten Preis (row.marketValue
+  // bleibt als Anzeige-Referenz auf der Scouting-Seite unverändert), gleiches
+  // Muster wie der bestehende Scout-Rabatt bei Personal-Verpflichtungen.
+  const finalPrice = Math.round(price * (1 - financeTransferDiscountPct(assignedOrg) / 100));
+
+  assignedOrg.budget -= finalPrice;
+  // Bug-Fix (Audit): dieselbe asymmetrische Clamp-Falle wie bei
+  // applyMonthlyClubFinances()/executeStaffSigning() -- ein Math.max(0, ...)
+  // hier würde einen unsichtbaren Fehlbetrag erzeugen, sobald price jemals
+  // financeAllocation.transfers übersteigen könnte (aktuell durch die
+  // Budget-Prüfung in signScoutingPlayer() verhindert, aber ein künftiger
+  // Änderung an dieser Prüfung sollte diesen Bug nicht durch die Hintertür
+  // zurückbringen).
+  financeAllocation.transfers = (financeAllocation.transfers || 0) - finalPrice;
+  logTransfer(sellerOrg ? sellerOrg.name : 'Free Agent', assignedOrg.name, row.player.name, finalPrice);
+  addFinanceMonthlyExpense(finalPrice, 'Transfers', row.player.name + ' von ' + (sellerOrg ? sellerOrg.name : 'Free Agent'));
+  // Aktion zeigt bewusst auf die Kader-Seite statt direkt auf die Person --
+  // der Spieler erscheint laut Bestätigungsdialog erst in 7 Tagen im Kader
+  // (queuePlayerArrival() oben), eine Person-Verlinkung wäre bis dahin ins Leere.
+  pushPostMessage('transfers', 'HIGH', 'Transferabteilung', 'Transfer abgeschlossen', row.player.name + ' wurde für ' + formatMoney(finalPrice) + ' verpflichtet und trifft in 7 Tagen im Kader ein.', null, { type: 'openPage', page: 'roster' });
 
   renderDashboardScoutingPanel();
   renderDashboardTopbar();
@@ -7406,7 +9486,7 @@ function executePlayerSigning(row, price) {
 }
 
 function renderDashboardScoutingPanel() {
-  const scout = assignedOrg.roster.staff.find((s) => s.role === 'Scout');
+  const scout = assignedOrg.roster.staff.find((s) => s.role === 'Scout' && !s.vacant);
   const scoutAvatarEl = document.getElementById('dashboard-scouting-scout-avatar');
   if (scout) {
     const avatar = CHARACTER_AVATARS.find((a) => a.id === scout.avatarId) || CHARACTER_AVATARS[0];
@@ -8192,7 +10272,16 @@ function buildSingleElimTree(treeId, rounds) {
 //   deren Sieger qualifizieren sich direkt (2 weitere Slots).
 // Kein Grand Final, kein Pokal -- `withTrophy` wird deshalb nicht mehr
 // gebraucht (war an jeder tatsächlichen Aufrufstelle ohnehin immer false).
-function buildStandard8DoubleElim(treeId, bo) {
+// `predeciderCount` (Bug-Fix, Audit): Runde 93 baute bereits Vorentscheidungs-
+// Matches für ungerade Feldgrößen (siehe resolveOpenQualifierEvent()) inkl.
+// eigenem STANDARD8_SLOT_ROUND-Eintrag ('predecider': 1) für die rundenweise
+// Enthüllung -- es gab aber NIE eine DOM-Karte dafür, die Matches wurden
+// simuliert (auch das eigene, falls betroffen -- man spielt sie live im
+// Match-Ticker mit) und im Datenmodell mitgeführt, tauchten im Bracket-Tab
+// danach aber nirgends auf. fillBracketMatches()/fillStandard8BracketPartial()
+// befüllen generisch nach `treeId + '-' + m.slot` -- sobald die Karte hier
+// existiert, funktioniert die Befüllung ohne weitere Änderungen.
+function buildStandard8DoubleElim(treeId, bo, predeciderCount) {
   const connections = [];
   // Runde 75 führte hier testweise eine bunte Debug-Palette ein (jede
   // Linie eine eigene Farbe, um einzelne Verbindungen in Screenshots
@@ -8238,6 +10327,7 @@ function buildStandard8DoubleElim(treeId, bo) {
     return { ids, html: '<div class="bracket-round"><div class="bracket-round-label">✅ Qualifiziert</div><div class="bracket-round-body">' + slotsHtml + '</div></div>' };
   }
 
+  const predecider = predeciderCount > 0 ? buildRound('predecider', 'Vorentscheidung', predeciderCount) : null;
   const ubqf = buildRound('ubqf', 'Oberes Bracket – Viertelfinale', 4);
   const ubsf = buildRound('ubsf', 'Oberes Bracket – Halbfinale', 2);
   const ubQualified = buildQualifiedSlots('ubq', 2);
@@ -8271,6 +10361,7 @@ function buildStandard8DoubleElim(treeId, bo) {
 
   const html = (
     '<div class="bracket-group-wrap" id="' + treeId + '">' +
+      (predecider ? '<div class="bracket-group-row bracket-group-row-predecider">' + predecider.html + '</div>' : '') +
       '<div class="bracket-group-row">' + ubqf.html + ubsf.html + ubQualified.html + '</div>' +
       '<div class="bracket-group-row">' + lbqf.html + lbsf.html + lbQualified.html + '</div>' +
     '</div>'
@@ -8416,8 +10507,8 @@ function buildAflBracket(treeId, shape, bo, withTrophy) {
   return { html, containerId: treeId, connections };
 }
 
-function buildDoubleElimBracket(treeId, shape, bo, withTrophy) {
-  if (shape === 'standard8') return buildStandard8DoubleElim(treeId, bo);
+function buildDoubleElimBracket(treeId, shape, bo, withTrophy, predeciderCount) {
+  if (shape === 'standard8') return buildStandard8DoubleElim(treeId, bo, predeciderCount);
   return buildAflBracket(treeId, shape, bo, withTrophy);
 }
 
@@ -8648,7 +10739,7 @@ function fillMatchCardResult(cardId, teamAName, scoreA, teamBName, scoreB, isFin
     if (!rowEl) return;
     const nameEl = rowEl.querySelector('.tournament-match-card-name');
     const scoreEl = rowEl.querySelector('.tournament-match-card-score');
-    if (nameEl) nameEl.textContent = name;
+    if (nameEl) { nameEl.textContent = name; nameEl.title = name; }
     if (scoreEl) scoreEl.textContent = String(score);
     applyOrgLogoToElement(rowEl.querySelector('.tournament-match-card-logo'), name);
     rowEl.classList.toggle('is-winner', isFinal && isWinner);
@@ -8670,7 +10761,7 @@ function fillMatchCardNamesOnly(cardId, teamAName, teamBName) {
   [[teamRows[0], teamAName], [teamRows[1], teamBName]].forEach(([rowEl, name]) => {
     if (!rowEl) return;
     const nameEl = rowEl.querySelector('.tournament-match-card-name');
-    if (nameEl) nameEl.textContent = name;
+    if (nameEl) { nameEl.textContent = name; nameEl.title = name; }
     applyOrgLogoToElement(rowEl.querySelector('.tournament-match-card-logo'), name);
     rowEl.classList.toggle('is-own-org', isOwnOrgName(name));
   });
@@ -8915,7 +11006,7 @@ function fillRoundRobinResults(instanceId, groupResult) {
 function fillSwissTeamCell(teamEl, teamName) {
   if (!teamEl) return;
   const labelEl = teamEl.querySelector('.swiss-table-team-label');
-  if (labelEl) labelEl.textContent = teamName;
+  if (labelEl) { labelEl.textContent = teamName; labelEl.title = teamName; }
   if (teamName !== 'Freilos') applyOrgLogoToElement(teamEl.querySelector('.swiss-table-team-logo'), teamName);
   teamEl.classList.toggle('is-own-org', isOwnOrgName(teamName));
 }
@@ -9124,7 +11215,6 @@ function flashCascadeElement(el) {
   setTimeout(() => el.classList.remove('is-cascade-revealed'), 900);
 }
 
-const CASCADE_GAME_DELAY_MS = 1000; // Pause zwischen zwei Einzelspielen DERSELBEN Serie
 const CASCADE_MATCH_GAP_MS = 450; // Pause NACH einer fertigen Serie, bevor das nächste Match beginnt
 
 // Spielt EIN Match Spiel für Spiel durch (match.games -- dieselben, schon
@@ -9151,7 +11241,13 @@ function cascadeRevealSingleMatch(stageInstanceId, stage, match, onDone) {
     const isFinal = gameIndex === games.length - 1;
     flashCascadeElement(fillCascadeMatchTally(stageInstanceId, stage, match, winsA, winsB, isFinal));
     if (isFinal) { onDone(); return; }
-    setTimeout(() => playNextGame(gameIndex + 1), CASCADE_GAME_DELAY_MS);
+    // Bug-Fix (Audit): war fest auf 1000ms verdrahtet (CASCADE_GAME_DELAY_MS) --
+    // die "Quick-Sim-Tempo"-Einstellung (Normal/Schnell/Sofort, siehe
+    // SETTINGS_PACE_OPTIONS/quickSimPaceMs()) war im Einstellungen-Menü
+    // wählbar, hatte aber nie eine Wirkung. 'normal' bleibt exakt 1000ms
+    // (unverändertes Standard-Erlebnis), 'fast'/'instant' wirken jetzt
+    // tatsächlich.
+    setTimeout(() => playNextGame(gameIndex + 1), quickSimPaceMs());
   }
   playNextGame(0);
 }
@@ -9550,7 +11646,14 @@ function buildLcqVorrundeBracket(treeId, koPairCount, totalQualifiedCount) {
   return { html: koHtml + qualifiedHtml, koIds, qualifiedIds, connections };
 }
 
-function tournamentStageHtml(stage, stageInstanceId, region) {
+// `stageData` (Bug-Fix, Audit, optional): das bereits vollständig simulierte
+// Ergebnis dieser Stage, falls schon vorhanden -- die Simulation läuft ja
+// laut Instant-Philosophie komplett vorab, nur die ANZEIGE wird gedrosselt
+// enthüllt (siehe renderTournamentFormatTabs()). Wird aktuell nur gebraucht,
+// um bei 'doubleElim'+groupLabels (Open-Qualifier-Gruppenphase) die Anzahl
+// echter Vorentscheidungs-Matches je Gruppe zu kennen, bevor die Karten
+// überhaupt gebaut werden (siehe buildStandard8DoubleElim()).
+function tournamentStageHtml(stage, stageInstanceId, region, stageData) {
   let bodyHtml = '';
   const connectors = [];
   if (stage.visual === 'swissLadder') {
@@ -9576,7 +11679,15 @@ function tournamentStageHtml(stage, stageInstanceId, region) {
   } else if (stage.visual === 'doubleElim') {
     if (stage.groupLabels) {
       stage.groupLabels.forEach((label, gi) => {
-        const built = buildDoubleElimBracket(stageInstanceId + '-de' + gi, stage.shape, stage.bo, false);
+        // Bug-Fix (Audit): siehe buildStandard8DoubleElim()-Kommentar --
+        // ermittelt, ob DIESE Gruppe echte Vorentscheidungs-Matches enthält
+        // (nur group 0 bei open0 kann welche haben, siehe
+        // resolveOpenQualifierEvent()), damit die passende Anzahl Karten
+        // gebaut wird. Bei jedem anderen Turnier/jeder anderen Gruppe liefert
+        // der Filter immer 0, keine Verhaltensänderung dort.
+        const groupResult = stageData && stageData[gi];
+        const predeciderCount = groupResult && groupResult.matches ? groupResult.matches.filter((m) => m.slot && m.slot.indexOf('predecider-') === 0).length : 0;
+        const built = buildDoubleElimBracket(stageInstanceId + '-de' + gi, stage.shape, stage.bo, false, predeciderCount);
         bodyHtml += '<div class="tournament-stage-group-block"><div class="tournament-stage-group-block-label">' + label + '</div>' + built.html + '</div>';
         connectors.push({ containerId: built.containerId, connections: built.connections });
       });
@@ -9718,7 +11829,8 @@ function renderTournamentFormatTabs(event) {
     btn.addEventListener('click', () => selectTournamentDetailTab(tabKey));
     tabsBar.appendChild(btn);
 
-    const built = tournamentStageHtml(stage, 'st' + i, event.eventType === 'lcq' ? orgRegion(assignedOrg.country) : undefined);
+    const stageData = resultForStages && stageKeys[i] ? resultForStages[stageKeys[i]] : null;
+    const built = tournamentStageHtml(stage, 'st' + i, event.eventType === 'lcq' ? orgRegion(assignedOrg.country) : undefined, stageData);
     const contentDiv = document.createElement('div');
     contentDiv.id = 'dashboard-tournament-detail-tab-' + tabKey;
     contentDiv.className = 'dashboard-tournament-detail-tab-content hidden';
@@ -9727,8 +11839,27 @@ function renderTournamentFormatTabs(event) {
 
     tournamentDetailConnectors[tabKey] = built.connectors;
 
-    if (resultForStages && stageKeys[i]) {
-      const stageData = resultForStages[stageKeys[i]];
+    if (stageData) {
+      // Bug-Fix (Audit): siehe correctSingleElimConnections()-Kommentar --
+      // sobald das echte, bereits simulierte Ergebnis dieses Einzel-K.o.-
+      // Brackets vorliegt (Worlds-Playoffs), die zuvor rein strukturell
+      // registrierten Verbindungslinien durch die tatsächlich korrekten
+      // ersetzen (kann durch die Anti-Rematch-Umsortierung von der naiven
+      // Positions-Annahme abweichen).
+      if (stage.visual === 'bracket' && stageData && stageData.matches) {
+        const seTreeId = 'st' + i + '-se';
+        const seEntry = tournamentDetailConnectors[tabKey].find((c) => c.containerId === seTreeId);
+        if (seEntry) seEntry.connections = correctSingleElimConnections(seTreeId, stageData.matches);
+      }
+      // Bug-Fix (Audit): dasselbe für das AFL-Playoffs-Bracket (Open/Major) --
+      // nur die einzelne (nicht gruppierte) Ausprägung nutzt afl8/afl12, die
+      // gruppierte 'standard8'-Variante (Open Qualifier) ist von diesem Bug
+      // nicht betroffen (siehe correctAflBracketConnections()-Kommentar).
+      if (stage.visual === 'doubleElim' && !stage.groupLabels && stage.shape !== 'standard8' && stageData && stageData.matches) {
+        const deTreeId = 'st' + i + '-de';
+        const deEntry = tournamentDetailConnectors[tabKey].find((c) => c.containerId === deTreeId);
+        if (deEntry) deEntry.connections = correctAflBracketConnections(deTreeId, stage.shape, stageData.matches, deEntry.connections);
+      }
       if (isMajor && i === 0) {
         // Gruppenphase-Stage (4 Gruppen A-D): rawStepsRevealed zählt hier
         // direkt die Anzahl bereits enthüllter Gruppen (Tag1=1 Gruppe...
@@ -10221,6 +12352,58 @@ function renderDashboardTournamentsPanel() {
 // als Sicherheitsnetz stehen, sollte aber für eine disqualifizierte Org nie
 // auftreten (findOwnMatchToday() findet dann schlicht keine eigenen Matches
 // mehr).
+// Bug-Fix (Audit Runde 7): fastForwardToNextEventDay()/
+// skipRestOfSeasonToTransferWindow() bleiben bewusst synchron (Umbau auf
+// echtes Chunking/Yielding wäre ein riskanterer Eingriff in die bereits
+// mehrfach verifizierte Turnier-Auflösungslogik) -- an Tagen mit vielen
+// aufgelösten Turnieren können sie aber mehrere Sekunden am Stück blockieren,
+// gemessen (Performance-Audit). Ohne jedes Feedback wirkte das wie ein
+// eingefrorenes/abgestürztes Fenster. Zeigt den Lade-Overlay, wartet zwei
+// requestAnimationFrame-Ticks (damit Chromium ihn wirklich noch malt, BEVOR
+// der blockierende Teil beginnt -- ein einzelner rAF reicht dafür nicht
+// zuverlässig), führt danach die eigentliche Funktion aus und blendet den
+// Overlay wieder aus.
+// Bug-Fix (Audit Runde 8, Regressions-Fund): ohne try/finally hätte eine
+// Exception irgendwo in der langen Tagfortschritts-/Turnierauflösungskette
+// (checkTournamentResolutions()/processDuePrizePayouts()/checkAchievements()
+// usw.) das classList.add('hidden') nie erreicht -- der Overlay (position:
+// fixed, deckt den ganzen Bildschirm ab, kein pointer-events:none) wäre dann
+// PERMANENT stehen geblieben und hätte jeden weiteren Klick blockiert, ohne
+// jede Fehlermeldung -- ein kompletter Softlock, nur per App-Neustart lösbar.
+// Trainingssystem: unterdrückt Stat-Sprung-Toasts (maybeNotifyStatIncrease())
+// während eines Schnellvorlauf-Batches -- über viele übersprungene Tage
+// würden sonst dutzende Toasts gleichzeitig aufploppen. Fortschritt wird
+// trotzdem ganz normal angewendet/gespeichert, nur die Live-Meldung entfällt
+// (dieselbe Stelle deckt beide bestehenden Mehrtage-Schleifen ab, siehe
+// fastForwardToNextEventDay()/skipRestOfSeasonToTransferWindow() unten).
+let trainingToastsSuppressed = false;
+
+function runWithFastForwardOverlay(fn) {
+  const overlay = document.getElementById('fast-forward-overlay');
+  overlay.classList.remove('hidden');
+  trainingToastsSuppressed = true;
+  // Nachrichtensystem: exakt dasselbe Unterdrückungs-Muster wie
+  // trainingToastsSuppressed -- nur die Popup-Anzeige entfällt während eines
+  // Schnellvorlauf-Batches, Zustandsänderung/Nachrichtenerzeugung läuft normal.
+  messagingToastsSuppressed = true;
+  // Postsystem: exakt dasselbe Unterdrückungs-Muster -- Posteinträge selbst
+  // entstehen während eines Schnellvorlauf-Batches ganz normal, nur die
+  // (ohnehin nur bei HIGH/CRITICAL feuernde) Toast-Popup-Anzeige entfällt.
+  postToastsSuppressed = true;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      try {
+        fn();
+      } finally {
+        overlay.classList.add('hidden');
+        trainingToastsSuppressed = false;
+        messagingToastsSuppressed = false;
+        postToastsSuppressed = false;
+      }
+    });
+  });
+}
+
 function skipRestOfSeasonToTransferWindow() {
   let daysAdvanced = 0;
   while (daysAdvanced < FAST_FORWARD_MAX_DAYS) {
@@ -10253,12 +12436,794 @@ function onSeasonSkipClick() {
       showConfirmModal(
         'Wirklich sicher?',
         'Das überspringt alle verbleibenden Tage dieser Saison auf einmal -- das lässt sich nicht rückgängig machen.',
-        skipRestOfSeasonToTransferWindow,
+        () => runWithFastForwardOverlay(skipRestOfSeasonToTransferWindow),
         { confirmLabel: 'Ja, überspringen', danger: true }
       );
     },
     { confirmLabel: 'Weiter' }
   );
+}
+
+// Kapazitäts-Reihenfolge für den EINEN Trainer der Org (siehe
+// applyDailyPlayerTraining()): Starter (Array-Reihenfolge) -> Sub -> Reserve
+// (Array-Reihenfolge) -- IMMER frisch berechnet, nie gespeichert, da sich die
+// Kader-Reihenfolge durch Verkäufe/Verschiebungen jederzeit ändern kann.
+// Reserve zuletzt, damit Bank-Talente nie einem Stammspieler einen
+// Kapazitäts-Slot wegnehmen.
+function trainingOrderedRosterList(org) {
+  const roster = org.roster;
+  return [...(roster.starters || []), roster.sub, ...(roster.reserve || [])].filter(Boolean);
+}
+
+function trainingCapacityMultiplier(index) {
+  if (index === null || index === undefined) return 0;
+  const penalty = TRAINING_CAPACITY_PENALTY[index] !== undefined
+    ? TRAINING_CAPACITY_PENALTY[index]
+    : TRAINING_CAPACITY_PENALTY[TRAINING_CAPACITY_PENALTY.length - 1];
+  return 1 - penalty;
+}
+
+// Baut die Kapazitäts-Zuordnung EINMAL (Reihenfolge siehe
+// trainingOrderedRosterList()) -- gemeinsame Quelle für den täglichen Tick
+// (applyDailyPlayerTraining()) UND die Trainings-Seiten-Anzeige, damit beide
+// GARANTIERT dieselbe Reihenfolge/denselben Kapazitäts-Malus zeigen (keine
+// zwei unabhängigen Implementierungen, die auseinanderlaufen könnten).
+// Spieler ohne aufgelösten Fokus (category:null, mode 'off') belegen KEINEN
+// Kapazitäts-Slot -- sie tauchen mit index:null/capacityFactor:0 auf, damit
+// die UI sie trotzdem konsistent anzeigen kann.
+function trainingCapacityAssignments(org) {
+  let index = 0;
+  return trainingOrderedRosterList(org).map((player) => {
+    const dev = ensurePlayerDevelopment(org.name, player);
+    const category = resolveEffectiveTrainingCategory(org, player, dev);
+    if (!category) return { player, dev, category: null, index: null, capacityFactor: 0 };
+    const assignment = { player, dev, category, index, capacityFactor: trainingCapacityMultiplier(index) };
+    index += 1;
+    return assignment;
+  });
+}
+
+// NEUER, von Matches UNABHÄNGIGER Trainings-Tick (User-Vorgabe: spürbarer
+// Fortschritt auch zwischen Turnieren, nicht nur an Spieltagen) -- läuft NUR
+// für die eigene Org (assignedOrg), derselbe Präzedenzfall wie devBonusFactor
+// in applyPlayerDevelopmentForGame() (Bot-Orgs entwickeln sich unbeeinflusst
+// weiter, reiner Performance-/Fairness-Grund, 454 Orgs täglich wären
+// unnötiger Overhead ohne spielrelevanten Nutzen).
+// Bug-Vermeidung (bewusst hier statt in finishDashboardDayAdvance()
+// verdrahtet): Schnellvorlauf (fastForwardToNextEventDay()) ruft
+// advanceOneCalendarDay() in einer Schleife für JEDEN übersprungenen Tag auf,
+// aber finishDashboardDayAdvance() nur EINMAL am Ende des ganzen Sprungs --
+// wäre dieser Tick dort verdrahtet, würde ein Schnellvorlauf über z.B. 30 Tage
+// nur EINEN Tag Trainingsfortschritt zählen statt 30.
+// Harte Sperre (User-Vorgabe, "kein Training ohne Coach/Trainingsplan"):
+// kein Coach im Kader -> 0 Tages-Fortschritt für JEDEN Spieler (das bereits
+// bestehende match-getriebene Wachstum bleibt davon komplett unberührt --
+// diese Sperre gilt ausschließlich für den NEUEN Tages-Tick). Coach/Trainer
+// wurden zusammengelegt (User-Entscheidung: Coach bleibt) -- vorher prüfte
+// dies findStaffByRole(org,'Trainer'), jetzt direkt org.roster.coach.
+// Guard-Flag gegen Doppel-Post: feuert nur EINMAL beim Übergang "hatte einen
+// Trainer" -> "hat keinen mehr", nicht an jedem einzelnen coachlosen Tag.
+// Bewusst NICHT Teil des Save-State (siehe Abschlussbericht) -- schlimmstenfalls
+// nach einem Neuladen einmalig eine zusätzliche/ausbleibende Warnung.
+let postNoCoachWarned = false;
+
+function applyDailyPlayerTraining() {
+  if (!assignedOrg || !assignedOrg.roster) return;
+  const coach = assignedOrg.roster.coach;
+  if (!coach) {
+    if (!postNoCoachWarned) {
+      postNoCoachWarned = true;
+      pushPostMessage('training', 'HIGH', 'Trainerstab', 'Trainingswarnung', 'Dein Team hat aktuell keinen Trainer -- ohne Trainer findet kein tägliches Training statt.', null, { type: 'openPage', page: 'staff' });
+    }
+    return;
+  }
+  postNoCoachWarned = false;
+
+  const moraleConditionAvg = (effectiveTeamMorale(assignedOrg) + effectiveTeamPhysicalCondition(assignedOrg)) / 2;
+  const moraleConditionFactor = TRAINING_MORALE_CONDITION_MIN_FACTOR
+    + (moraleConditionAvg / 100) * (TRAINING_MORALE_CONDITION_MAX_FACTOR - TRAINING_MORALE_CONDITION_MIN_FACTOR);
+  const trainerBonusFactor = 1 + coachDevelopmentBonusPct(assignedOrg) / 100;
+
+  trainingCapacityAssignments(assignedOrg).forEach(({ player, dev, category, capacityFactor }) => {
+    if (!category) return; // mode 'off' (oder kein auflösbarer Fokus) -> kein Tages-Fortschritt für diesen Spieler
+    const baseChange = TRAINING_DAILY_BASE_GROWTH * playerAgeGrowthFactor(player.age) * moraleConditionFactor * trainerBonusFactor * capacityFactor;
+    PLAYER_STAT_KEYS.forEach((key) => {
+      if (category !== 'general' && category !== key) return;
+      const share = category === 'general' ? baseChange / PLAYER_STAT_KEYS.length : baseChange;
+      const combined = share * playerDevStatPlateauFactor(player[key]);
+      applyPlayerStatDelta(assignedOrg, player, dev, key, combined);
+    });
+    player.overall = Math.round(PLAYER_STAT_KEYS.reduce((s, k) => s + player[k], 0) / PLAYER_STAT_KEYS.length);
+  });
+  assignedOrg.strength = computeOrgStrengthFromRoster(assignedOrg.roster);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── Postsystem ("Post") ──────────────────────────────────────────────────────
+// System-Postfach, konzeptionell GETRENNT vom Nachrichtensystem weiter unten:
+// Post = automatische System-/Firmenkommunikation (Finanzen, Sponsoren, Shop,
+// Transfers, Verträge, Training, Turniere) + eine schlanke Benachrichtigungs-
+// Brücke zu neu eingegangenen Nachrichten-Chats (siehe pushNpcMessage()s
+// opts.postSubject). Nachrichten enthält das eigentliche Gespräch, Post nur
+// eine kurze Vorschau + Aktions-Button dorthin -- keine Dopplung des vollen
+// Chat-Inhalts (Auftragsvorgabe Abschnitt 20).
+//
+// Wie jedes bestehende zentrale Log in diesem Projekt (financeTransactionLog,
+// transferLog, npcRelations[key].messages) wird postInbox durch GENAU EINE
+// Funnel-Funktion befüllt (pushPostMessage()), die direkt von den echten
+// Mutationsstellen der jeweiligen Systeme aufgerufen wird -- bewusst KEIN
+// neues generisches Event-/Signal-Bus-System (existiert nirgends sonst im
+// Projekt), siehe Abschlussbericht.
+const POST_INBOX_CAP = 300; // größer als NPC_MESSAGES_CAP, da Post über ALLE Systeme hinweg über eine ganze Karriere sammelt
+const POST_CATEGORY_LABELS = { finance: 'Finanzen', sponsors: 'Sponsoren', shop: 'Shop', transfers: 'Transfers', training: 'Training', tournaments: 'Turniere', staff: 'Personal', player: 'Spieler', system: 'System' };
+const POST_CATEGORY_ICONS = { finance: '💰', sponsors: '🤝', shop: '🛒', transfers: '🔁', training: '🏋', tournaments: '🏆', staff: '👔', player: '🎮', system: '⚙' };
+
+let postInbox = [];
+let postToastsSuppressed = false; // Vorbild: trainingToastsSuppressed/messagingToastsSuppressed (siehe runWithFastForwardOverlay())
+
+// Wöchentlicher Spielerentwicklungs-Digest (Auftragsabschnitt 23: ähnliche
+// Ereignisse zusammenfassen statt einzeln zu posten). Bewusst NICHT Teil des
+// Save-State (siehe Abschlussbericht) -- reiner Batching-Cursor, kein
+// Datenverlust bei einem Neuladen mitten in der Woche.
+let postDevAccumulator = {}; // 'orgName::playerName' -> true, seit letztem Digest
+let postLastDevSummaryDate = null;
+
+function maybeFlushPostDevSummary() {
+  if (!assignedOrg) return;
+  if (!postLastDevSummaryDate) { postLastDevSummaryDate = careerDate; return; }
+  if (daysBetweenDateStrs(postLastDevSummaryDate, careerDate) < 7) return;
+  const improvedCount = Object.keys(postDevAccumulator).length;
+  if (improvedCount > 0) {
+    pushPostMessage('player', 'NORMAL', 'Trainerstab', 'Spielerentwicklung', improvedCount + (improvedCount === 1 ? ' Spieler hat' : ' Spieler haben') + ' sich seit dem letzten Bericht verbessert.', null, { type: 'openPage', page: 'roster' });
+  }
+  postDevAccumulator = {};
+  postLastDevSummaryDate = careerDate;
+}
+
+// Turnier-Cooldown-Cursor (Auftragsvorgabe: kein Mehrfach-Feuern, falls
+// mehrere Regionen am selben Tag aufgelöst werden). Bewusst NICHT Teil des
+// Save-State, gleiche Begründung wie postDevAccumulator oben.
+let postLastTournamentTriggerDate = null;
+
+// Einzige Erzeugungsstelle für Posteinträge (Vorbild: logTransfer()/
+// addFinanceMonthlyIncome()). Toast bewusst nur bei HIGH/CRITICAL (Auftrags-
+// abschnitt 7: dringende Post soll auffallen) -- NORMAL-Routinebestätigungen
+// erzeugen nur den Badge-Zähler, keinen zusätzlichen Popup, um nicht mit den
+// bestehenden Toasts (Achievements/Stat-Sprung/Nachrichten) zu kollidieren.
+function pushPostMessage(category, priority, sender, subject, preview, body, action) {
+  if (!assignedOrg) return null;
+  const msg = {
+    id: 'post_' + careerDate + '_' + Math.round(Math.random() * 1e6),
+    category, priority: priority || 'NORMAL', sender, subject, preview, body: body || preview,
+    date: careerDate, read: false, action: action || null,
+  };
+  postInbox.unshift(msg);
+  if (postInbox.length > POST_INBOX_CAP) postInbox.length = POST_INBOX_CAP;
+  refreshDashboardSidebarBadges();
+  if (!postToastsSuppressed && msg.priority !== 'NORMAL') showToast(POST_CATEGORY_ICONS[category] || '✉', subject, 'Neue Post');
+  return msg;
+}
+
+function postUnreadCount() {
+  return postInbox.filter((m) => !m.read).length;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── Nachrichtensystem ("Kommunikation") ─────────────────────────────────────
+// Neue Kommunikations-Ebene zwischen Manager und dem EIGENEN Kader
+// (Starter+Sub+Reserve+Personal+Coach) -- nie mit Bot-Orgs (derselbe Grund wie
+// devBonusFactor/Training: 454 Orgs täglich wären unnötiger Overhead ohne
+// Spielwert, siehe applyDailyPlayerTraining()-Kommentar). Es gibt bewusst
+// KEINE persistierte Pro-Spieler-Moral/Zufriedenheit (siehe
+// computeNpcSatisfaction() -- respektiert denselben Grundsatz wie
+// effectiveTeamMorale()/effectiveTeamPhysicalCondition()). Die einzige
+// wirklich NEUE persistierte Größe ist "relationship" (Vertrauen zum
+// Manager) -- alles andere wird live aus bereits bestehenden echten
+// Datenquellen (Matchhistorie, Verträge, playerDevelopment) abgeleitet.
+// ═══════════════════════════════════════════════════════════════════════════
+const NPC_PERSONALITY_AXES = ['ambition', 'loyalty', 'sensitivity', 'confidence', 'communicativeness', 'teamOrientation', 'patience'];
+const NPC_MESSAGES_CAP = 150; // Vorbild: MATCH_HISTORY_CAP-Capping-Muster
+const NPC_CONTACT_COOLDOWN_DAYS = 6; // Mindestabstand zwischen zwei NPC-initiierten Nachrichten derselben Person
+const NPC_MATCH_TRIGGER_COOLDOWN_DAYS = 3;
+const NPC_CONTACT_BASE_CHANCE = 0.10;
+const NPC_CONTACT_MAX_CHANCE = 0.35;
+const NPC_TEMP_BONUS_MAX_ABS_PCT = 3; // Deckel, dieselbe Größenordnung wie andere kleine Boni im additiven orgMatchBonusPct-Kanal
+const NPC_TEMP_BONUS_DURATION_DAYS = 3; // Auftragsvorgabe Abschnitt 77: Kommunikationsboni sind temporär, nicht dauerhaft
+const NPC_QUIT_STAGE_ORDER = ['none', 'grievance', 'warning', 'quit_intent', 'notice', 'quit'];
+// Tage im AKTUELLEN Stadium, bis (bei anhaltend niedriger Zufriedenheit) automatisch eskaliert wird.
+const NPC_QUIT_STAGE_DAYS_BY_STAGE = { none: 10, grievance: 14, warning: 18, quit_intent: 21, notice: 14 };
+// Anzahl gebrochener Versprechen, die eine Eskalation UNABHÄNGIG von der Tageszahl sofort auslöst.
+const NPC_QUIT_PROMISE_ESCALATION_THRESHOLD = { none: 1, grievance: 2 };
+const NPC_QUIT_DEESCALATE_DAYS = 8;
+const NPC_QUIT_SATISFACTION_THRESHOLD = 35;
+const NPC_QUIT_DEESCALATE_SATISFACTION = 55;
+
+let npcRelations = {}; // 'orgName::personName' -> { personality, relationship, quit, openIssues, promises, tempPerformanceBonusPct, ..., messages:[...] }
+let messagingToastsSuppressed = false; // Vorbild: trainingToastsSuppressed (siehe runWithFastForwardOverlay())
+
+function npcRelationKey(orgName, personName) { return orgName + '::' + personName; }
+
+// Kleiner, in sich geschlossener String-Hash + seeded PRNG (mulberry32-
+// Variante) -- bewusst NICHT die globale Liga-Gen-rng-Sequenz (data/org-
+// rosters.js), da Persönlichkeiten LAZY bei erstem Kontakt erzeugt werden,
+// nicht deterministisch beim Liga-Aufbau. Derselbe Key liefert immer
+// dieselbe Persönlichkeit -- reproduzierbar über Save/Load hinweg, ohne
+// die Werte selbst speichern zu MÜSSEN (werden trotzdem gespeichert, damit
+// spätere Balancing-Änderungen an dieser Funktion bestehende Spielstände
+// nicht rückwirkend verändern).
+function npcPersonalitySeedFromKey(key) {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function npcSeededRandom(seed) {
+  let s = seed;
+  return function () {
+    s |= 0; s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function generateNpcPersonality(key) {
+  const rand = npcSeededRandom(npcPersonalitySeedFromKey(key));
+  const personality = {};
+  NPC_PERSONALITY_AXES.forEach((axis) => { personality[axis] = Math.round(20 + rand() * 80); });
+  return personality;
+}
+
+function ensureNpcRelation(org, person) {
+  const key = npcRelationKey(org.name, person.name);
+  if (!npcRelations[key]) {
+    npcRelations[key] = {
+      personality: generateNpcPersonality(key),
+      relationship: 50,
+      quit: { stage: 'none', reason: null, badStreakDays: 0, goodStreakDays: 0 },
+      openIssues: [],
+      promises: [],
+      tempPerformanceBonusPct: 0,
+      tempPerformanceBonusExpiresDate: null,
+      lastContactDate: null,
+      lastMatchTriggerDate: null,
+      unread: 0,
+      messages: [],
+    };
+  }
+  return npcRelations[key];
+}
+
+// Alle über Nachrichten erreichbaren Personen der EIGENEN Org, mit ihrer
+// Rolle (dieselben Rollen-Strings wie resolvePersonByIdentity() erwartet).
+function npcContactableRoster(org) {
+  if (!org || !org.roster) return [];
+  const roster = org.roster;
+  const people = [];
+  (roster.starters || []).forEach((p) => { if (p) people.push({ person: p, role: 'Starter' }); });
+  if (roster.sub) people.push({ person: roster.sub, role: 'Sub' });
+  (roster.reserve || []).forEach((p) => { if (p) people.push({ person: p, role: 'Reserve' }); });
+  if (roster.coach) people.push({ person: roster.coach, role: 'Coach' });
+  (roster.staff || []).forEach((s) => { if (s && !s.vacant) people.push({ person: s, role: s.role }); });
+  return people;
+}
+
+// Zufriedenheit wird LIVE abgeleitet, NIE gespeichert (respektiert denselben
+// Grundsatz wie effectiveTeamMorale()/-Condition(): keine erfundene
+// Pro-Spieler-Moral). teamMorale/teamCondition werden vom Aufrufer EINMAL pro
+// Auswertungslauf berechnet und durchgereicht (nicht pro Person neu) --
+// beide sind team-weit und ändern sich nicht zwischen zwei Personen derselben Org.
+function computeNpcSatisfaction(org, person, role, relation, teamMorale, teamCondition) {
+  // Neutraler Anker bei 50 statt direkter Übernahme von teamMorale/-Condition
+  // -- beide werden nur als ABWEICHUNG von ihrer eigenen 70er-Neutral-Baseline
+  // (TEAM_CHEMISTRY_NEUTRAL_BASELINE) eingerechnet. Ohne diese Dämpfung würde
+  // ein sportlich erfolgreiches Team (Moral/Zustand oft 80-100) die
+  // relationship-Komponente praktisch bedeutungslos machen -- ein Manager
+  // könnte eine Person dann nie allein durch schlechte Kommunikation
+  // verärgern, was dem Auftrag widerspricht (Kommunikation soll ECHTE,
+  // eigenständige Konsequenzen haben, nicht nur bei einem ohnehin schlechten Team).
+  let score = 50;
+  score += ((teamMorale + teamCondition) / 2 - 70) * 0.4;
+  if (person.contractEnd) {
+    const daysLeft = daysBetweenDateStrs(careerDate, person.contractEnd);
+    if (daysLeft >= 0 && daysLeft < 30) score -= (30 - daysLeft) * 0.5;
+  }
+  if (role === 'Reserve') score -= 12;
+  else if (role === 'Sub') score -= 4;
+  const hasStats = PLAYER_STAT_KEYS.every((k) => typeof person[k] === 'number');
+  if (hasStats && role !== 'Coach') {
+    const dev = playerDevelopment[playerDevKey(org.name, person.name)];
+    if (dev && !resolveEffectiveTrainingCategory(org, person, dev)) score -= 15; // Training explizit deaktiviert
+  }
+  score += (relation.relationship - 50) * 0.6;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function npcSatisfactionTier(score) {
+  if (score >= 70) return 'happy';
+  if (score >= 50) return 'neutral';
+  if (score >= 30) return 'unhappy';
+  return 'critical';
+}
+
+// Team-Durchschnitt über Starter+Sub (die tatsächlich spielenden Personen) --
+// match.js kennt nur EINEN Team-Bonus pro Serie, keine Pro-Spieler-
+// Differenzierung (siehe simulateBotSeries()) -- ein Kommunikationsbonus
+// reiht sich deshalb wie Coach-/Analyst-Bonus in denselben additiven Kanal
+// ein, gemittelt über die volle Kaderbreite (nicht nur die betroffenen
+// Spieler) -- verdünnt sich also absichtlich, wenn nicht jeder motiviert ist.
+function communicationMatchBonusPct(org) {
+  if (!org || !org.roster) return 0;
+  const roster = [...(org.roster.starters || []), org.roster.sub].filter(Boolean);
+  if (roster.length === 0) return 0;
+  let sum = 0;
+  roster.forEach((p) => {
+    const rel = npcRelations[npcRelationKey(org.name, p.name)];
+    if (!rel || !rel.tempPerformanceBonusPct) return;
+    if (rel.tempPerformanceBonusExpiresDate && careerDate > rel.tempPerformanceBonusExpiresDate) return;
+    sum += rel.tempPerformanceBonusPct;
+  });
+  return sum / roster.length;
+}
+
+// ── Lokale Dialog-Engine (kein externer API-Zwang, Auftragsvorgabe Abschnitt
+// 10-12/65) -- deutsches Keyword-/Phrasen-Muster-basiertes Intent-System.
+// Bei geringer Erkennungssicherheit -> NEUTRAL (Abschnitt 51: kein
+// zufälliger starker Effekt bei unklarer Nachricht).
+const NPC_INTENT_PATTERNS = [
+  { intent: 'THREAT', sentiment: -0.8, weight: 3, patterns: [/\braus\b/i, /kündig/i, /ersetz/i, /fliegst/i, /keine zukunft/i, /letzte chance/i, /wenn du so weiterspielst/i, /wirst du nicht mehr spielen/i] },
+  { intent: 'CRITICISM_HARSH', sentiment: -0.7, weight: 3, patterns: [/schlecht\b/i, /enttäusch/i, /inakzeptabel/i, /nicht gut genug/i, /so kann das nicht weitergehen/i, /schwach\b/i, /versagt/i] },
+  { intent: 'CRITICISM_CONSTRUCTIVE', sentiment: -0.3, weight: 2, patterns: [/verbesser/i, /konzentrier/i, /achte auf/i, /musst du.*arbeiten/i, /lässt.*zu wünschen übrig/i, /solltest du/i] },
+  { intent: 'PROMISE', sentiment: 0.3, weight: 3, patterns: [/wirst.*(bekommen|spielen|erhalten)/i, /bekommst du/i, /verspreche/i, /werde.*(dafür sorgen|dir geben|ändern|kümmern)/i, /nächste[ns]? (spiel|match)/i] },
+  { intent: 'TRUST', sentiment: 0.6, weight: 2, patterns: [/vertraue dir/i, /glaube an dich/i, /verlasse mich auf dich/i] },
+  { intent: 'MOTIVATION', sentiment: 0.5, weight: 2, patterns: [/du schaffst das/i, /gib alles/i, /kannst es besser/i, /weiter so/i, /kämpf/i, /nächstes mal wird/i] },
+  { intent: 'PRAISE', sentiment: 0.8, weight: 3, patterns: [/stark[e]? leistung/i, /super\b/i, /top[- ]?leistung/i, /genau so/i, /klasse\b/i, /richtig gut/i, /toll gemacht/i, /abgeliefert/i, /beeindruckend/i] },
+  { intent: 'APOLOGY', sentiment: 0.4, weight: 2, patterns: [/tut mir leid/i, /entschuldig/i, /war nicht fair/i] },
+  { intent: 'QUESTION', sentiment: 0, weight: 1, patterns: [/\?\s*$/, /^wie geht/i, /^warum/i, /was ist los/i] },
+];
+
+function analyzeManagerMessage(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return { intent: 'NEUTRAL', sentiment: 0, confidence: 0 };
+  let best = null;
+  NPC_INTENT_PATTERNS.forEach((entry) => {
+    const hit = entry.patterns.some((re) => re.test(trimmed));
+    if (hit && (!best || entry.weight > best.weight)) best = entry;
+  });
+  if (!best) return { intent: 'NEUTRAL', sentiment: 0, confidence: 0 };
+  return { intent: best.intent, sentiment: best.sentiment, confidence: best.weight / 3 };
+}
+
+function classifyPromiseType(text) {
+  const t = (text || '').toLowerCase();
+  if (/spielzeit|einsatzzeit|startelf|spielen/.test(t)) return 'PLAYTIME';
+  if (/train|coach/.test(t)) return 'TRAINING'; // "train" deckt trainieren/Training/Trainer gleichermaßen ab
+  if (/gehalt|geld|bezahl/.test(t)) return 'SALARY';
+  return 'GENERAL';
+}
+const NPC_PROMISE_TYPE_LABELS = { PLAYTIME: 'mehr Spielzeit', TRAINING: 'besseres Training', SALARY: 'Gehalt', GENERAL: 'eine Verbesserung' };
+
+// Die EINZIGE Stelle, die relationship/tempPerformanceBonusPct/promises
+// tatsächlich mutiert (Auftragsvorgabe Abschnitt 86-87: Intent-Erkennung und
+// Konsequenz sauber getrennt) -- gewichtet durch Persönlichkeit (Sensibilität
+// verstärkt/dämpft Kritik/Drohungen) + aktuelle Beziehung.
+const ConsequenceManager = {
+  applyManagerMessage(org, person, role, relation, analysis, rawText) {
+    const p = relation.personality;
+    let relationshipDelta = 0;
+    let bonusDelta = 0;
+    const sensFactor = 1 + (p.sensitivity - 50) / 50; // sensibel -> deutlich stärkere Reaktion auf negative Nachrichten
+    switch (analysis.intent) {
+      case 'PRAISE':
+        relationshipDelta = 3 + (p.communicativeness - 50) / 25;
+        bonusDelta = 1.5;
+        break;
+      case 'TRUST':
+        relationshipDelta = 4;
+        bonusDelta = 1;
+        break;
+      case 'MOTIVATION':
+        relationshipDelta = 2;
+        bonusDelta = 1.5;
+        break;
+      case 'CRITICISM_CONSTRUCTIVE': {
+        // Sensiblere Personen reagieren auch auf FAIRE Kritik spürbarer negativ
+        // -- gleiche Richtung wie sensFactor bei harter Kritik/Drohung, nur
+        // kleinere Grundstärke (konstruktiv statt hart formuliert).
+        relationshipDelta = -0.8 * sensFactor;
+        bonusDelta = 0.4;
+        break;
+      }
+      case 'CRITICISM_HARSH':
+        relationshipDelta = -5 * sensFactor;
+        bonusDelta = -2 * sensFactor;
+        break;
+      case 'THREAT':
+        relationshipDelta = -7 * sensFactor;
+        bonusDelta = -2.5 * sensFactor;
+        break;
+      case 'APOLOGY':
+        relationshipDelta = 2;
+        break;
+      case 'PROMISE': {
+        const type = classifyPromiseType(rawText);
+        // Momentaufnahme der bisherigen Einsätze -- PLAYTIME gilt später als
+        // erfüllt, wenn diese Zahl bis zur Deadline tatsächlich gestiegen ist
+        // (echter Signal statt bloßer Rollenzugehörigkeit, die z.B. bei einem
+        // Sub trivial immer "erfüllt" wäre, ohne dass sich etwas geändert hat).
+        const devSnapshot = playerDevelopment[playerDevKey(org.name, person.name)];
+        relation.promises.push({
+          id: 'promise_' + careerDate + '_' + Math.round(Math.random() * 1e6),
+          type, deadline: addDaysToDateStr(careerDate, 14), fulfilled: null, madeDate: careerDate,
+          madeGamesPlayed: devSnapshot ? devSnapshot.matches : 0,
+        });
+        relationshipDelta = 1;
+        break;
+      }
+      default:
+        relationshipDelta = 0;
+    }
+    relation.relationship = Math.max(0, Math.min(100, Math.round(relation.relationship + relationshipDelta)));
+    if (bonusDelta) {
+      relation.tempPerformanceBonusPct = Math.max(-NPC_TEMP_BONUS_MAX_ABS_PCT, Math.min(NPC_TEMP_BONUS_MAX_ABS_PCT, relation.tempPerformanceBonusPct + bonusDelta));
+      relation.tempPerformanceBonusExpiresDate = addDaysToDateStr(careerDate, NPC_TEMP_BONUS_DURATION_DAYS);
+    }
+    return { relationshipDelta, bonusDelta };
+  },
+};
+
+function pushNpcMessage(org, person, role, relation, from, text, opts) {
+  const msg = {
+    id: 'msg_' + careerDate + '_' + Math.round(Math.random() * 1e6),
+    from, text, date: careerDate,
+    sentiment: (opts && opts.sentiment) || 0, intent: (opts && opts.intent) || 'NEUTRAL',
+    importance: (opts && opts.importance) || 'NORMAL', read: from === 'manager',
+  };
+  relation.messages.push(msg);
+  if (relation.messages.length > NPC_MESSAGES_CAP) relation.messages.splice(0, relation.messages.length - NPC_MESSAGES_CAP);
+  if (from === 'npc') relation.unread += 1;
+  // Postsystem-Brücke (Auftragsabschnitt 20): NUR echte NPC-INITIIERTE
+  // Ereignisse (Versprechen gehalten/gebrochen, Kündigungs-Eskalation,
+  // Tages-/Match-Trigger) bekommen einen Post-Eintrag -- opts.postSubject ist
+  // das explizite Signal dafür. Eine bloße Antwort auf eine gerade vom
+  // Manager im offenen Chat gesendete Nachricht (sendManagerMessageToNpc())
+  // erzeugt bewusst KEINE zusätzliche Post-Benachrichtigung, da der Manager
+  // die Konversation in diesem Moment ohnehin schon aktiv vor sich sieht --
+  // sonst genau die Art von Spam, vor der der Post-Auftrag ausdrücklich warnt.
+  if (from === 'npc' && opts && opts.postSubject && org === assignedOrg) {
+    const isPlayerRole = role === 'Starter' || role === 'Sub' || role === 'Reserve';
+    pushPostMessage(isPlayerRole ? 'player' : 'staff', msg.importance, person.name, opts.postSubject, text.slice(0, 90), text, { type: 'openMessages', orgName: org.name, personName: person.name, role });
+  }
+  return msg;
+}
+
+function npcReplyOpeners(intent) {
+  const pools = {
+    PRAISE: ['Danke, das bedeutet mir wirklich viel.', 'Freut mich, das zu hören!', 'Das motiviert mich richtig.'],
+    TRUST: ['Das gibt mir Sicherheit.', 'Danke für dein Vertrauen.', 'Ich werde es dir zeigen.'],
+    MOTIVATION: ['Verstanden, ich gebe alles.', 'Ich werde dran arbeiten.', 'Danke für den Ansporn.'],
+    CRITICISM_CONSTRUCTIVE: ['Verstehe ich, ich arbeite daran.', 'Fairer Punkt, ich nehme es mit ins Training.', 'Ok, ich konzentriere mich darauf.'],
+    CRITICISM_HARSH: ['Das trifft mich ehrlich gesagt.', 'Ok... ich versuche es besser zu machen.', 'Das war hart, aber angekommen.'],
+    THREAT: ['Ich verstehe den Ernst der Lage.', 'Das macht mir wirklich Sorgen.', 'Ich weiß, dass es eng wird.'],
+    APOLOGY: ['Kein Problem, danke fürs Ansprechen.', 'Ich schätze, dass du das sagst.'],
+    PROMISE: ['Ich nehme dich beim Wort.', 'Gut, darauf freue ich mich.', 'Das würde mir wirklich helfen.'],
+    QUESTION: ['Gute Frage.', 'Lass mich kurz überlegen.'],
+    NEUTRAL: ['Alles klar.', 'Verstanden.', 'Ok.'],
+  };
+  return pools[intent] || pools.NEUTRAL;
+}
+
+// Kurze, variierte NPC-Antwort auf eine Manager-Nachricht -- wortkarge
+// Persönlichkeiten (niedrige communicativeness) antworten öfter nur kurz,
+// nie ein einzelner fixer String pro Intent (Auftragsvorgabe Abschnitt 69).
+function generateNpcReplyText(relation, analysis) {
+  const openers = npcReplyOpeners(analysis.intent);
+  return openers[Math.floor(Math.random() * openers.length)];
+}
+
+// NPC-initiierte Kontaktaufnahme -- Textbausteine je Auslöser, mit echten
+// Daten interpoliert wo vorhanden (z.B. Vertragsrestlaufzeit), nie ein
+// einzelner fixer String (Abschnitt 69).
+function generateNpcInitiatedMessage(org, person, role, relation, trigger) {
+  const templates = {
+    LOW_SATISFACTION: ['Ehrlich gesagt bin ich gerade nicht zufrieden mit meiner Situation.', 'Ich habe das Gefühl, dass sich meine Lage hier nicht verbessert.'],
+    CONTRACT_EXPIRING: ['Mein Vertrag läuft in ' + trigger.daysLeft + ' Tagen aus -- wie sieht die Zukunft aus?', 'Wir sollten über meinen bald auslaufenden Vertrag sprechen.'],
+    NO_TRAINING: ['Warum bekomme ich seit einer Weile kein richtiges Training?', 'Ich würde gerne wieder gezielt trainieren.'],
+    LOSS_STREAK: ['Nach den letzten Niederlagen frage ich mich, ob unsere Vorbereitung noch stimmt.', 'Wir müssen nach dieser Serie etwas ändern.'],
+    WIN_STREAK: ['Die letzten Spiele liefen richtig gut -- das zahlt sich aus.', 'Ich fühle mich gerade richtig stark im Team.'],
+    TOURNAMENT_WIN: ['Wir haben es geschafft! Das war ein großartiges Turnier.', 'Richtig starkes Ergebnis -- danke für das Vertrauen.'],
+    RESERVE: ['Wie sind meine Chancen, bald mehr Einsatzzeit zu bekommen?'],
+    PROGRESS: ['Ich habe das Gefühl, dass ich mich gerade wirklich verbessere.'],
+    PROMISE_BROKEN: ['Du hattest mir etwas anderes versprochen -- das enttäuscht mich ehrlich gesagt.'],
+    QUIT_WARNING: ['Wenn sich meine Situation nicht bald ändert, denke ich ernsthaft über einen Wechsel nach.'],
+  };
+  const pool = templates[trigger.type] || ['Hast du kurz Zeit für mich?'];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+const NPC_QUICK_ACTIONS = [
+  { key: 'praise', label: 'Loben', text: 'Starke Leistung zuletzt -- genau so stelle ich mir das vor.' },
+  { key: 'motivate', label: 'Motivieren', text: 'Ich glaube an dich -- zeig es im nächsten Match.' },
+  { key: 'trust', label: 'Vertrauen aussprechen', text: 'Ich vertraue dir voll und ganz.' },
+  { key: 'criticize', label: 'Kritisieren', text: 'Deine Leistung lässt momentan zu wünschen übrig, daran musst du arbeiten.' },
+  { key: 'warn', label: 'Warnen', text: 'Wenn sich deine Leistung nicht verbessert, wird es eng für dich im Kader.' },
+];
+
+// Öffentlicher Einstiegspunkt für die UI (freier Text ODER Schnellaktion,
+// beide laufen über denselben analyzeManagerMessage()-Pfad, Abschnitt 50).
+function sendManagerMessageToNpc(orgName, personName, role, text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return;
+  const resolved = resolvePersonByIdentity(orgName, personName, role);
+  if (!resolved) return;
+  const { org, person } = resolved;
+  const relation = ensureNpcRelation(org, person);
+  const analysis = analyzeManagerMessage(trimmed);
+  pushNpcMessage(org, person, role, relation, 'manager', trimmed, { sentiment: analysis.sentiment, intent: analysis.intent });
+  ConsequenceManager.applyManagerMessage(org, person, role, relation, analysis, trimmed);
+  relation.lastContactDate = careerDate;
+  // Der Manager hat sich gemeldet -- offene Probleme gelten als angesprochen
+  // (vereinfachte, aber ehrliche Regel: echte "Lösung" hängt am tatsächlichen
+  // Zustand, siehe checkNpcPromiseDeadlines()/computeNpcSatisfaction() -- ein
+  // ignoriertes Problem kommt bei anhaltend niedriger Zufriedenheit einfach wieder).
+  relation.openIssues.forEach((issue) => { issue.resolved = true; });
+  const reply = generateNpcReplyText(relation, analysis);
+  if (reply) pushNpcMessage(org, person, role, relation, 'npc', reply, { intent: analysis.intent });
+  saveGameState();
+}
+
+// ── Versprechen-System ───────────────────────────────────────────────────
+// TRAINING/PLAYTIME werden gegen ECHTE Zustandsänderungen geprüft. SALARY
+// bewusst NICHT real durchsetzbar (kein Pro-Spieler-Gehalts-Override-
+// Mechanismus im Spiel, Gehalt ist rein overall-formelbasiert, siehe
+// playerMonthlySalary()) -- gilt zusammen mit GENERAL nur als
+// Anerkennungs-Flavourtext, disclosed im Abschlussbericht.
+function checkNpcPromiseDeadlines(org, person, role, relation) {
+  relation.promises.forEach((promise) => {
+    if (promise.fulfilled !== null) return;
+    if (careerDate < promise.deadline) return;
+    let fulfilled;
+    if (promise.type === 'TRAINING') {
+      const dev = playerDevelopment[playerDevKey(org.name, person.name)];
+      fulfilled = !!(dev && dev.training && dev.training.mode !== 'off');
+    } else if (promise.type === 'PLAYTIME') {
+      // Echter Einsatz seit dem Versprechen, NICHT bloß "ist Starter/Sub" --
+      // sonst wäre ein PLAYTIME-Versprechen an einen Sub trivial immer
+      // "erfüllt", auch ohne dass sich für ihn irgendetwas geändert hat.
+      const dev = playerDevelopment[playerDevKey(org.name, person.name)];
+      const gamesNow = dev ? dev.matches : 0;
+      fulfilled = gamesNow > (promise.madeGamesPlayed || 0);
+    } else {
+      fulfilled = true;
+    }
+    promise.fulfilled = fulfilled;
+    if (fulfilled) {
+      relation.relationship = Math.min(100, relation.relationship + 5);
+      pushNpcMessage(org, person, role, relation, 'npc', 'Danke, dass du dein Wort gehalten hast.', { intent: 'PROMISE_KEPT', postSubject: person.name + ': Versprechen eingehalten' });
+    } else {
+      relation.relationship = Math.max(0, relation.relationship - 8);
+      pushNpcMessage(org, person, role, relation, 'npc', 'Du hattest mir ' + NPC_PROMISE_TYPE_LABELS[promise.type] + ' versprochen -- das ist nicht passiert, das enttäuscht mich.', { intent: 'PROMISE_BROKEN', importance: 'HIGH', postSubject: person.name + ': Versprechen gebrochen' });
+      relation.openIssues.push({ type: 'PROMISE_BROKEN', raisedDate: careerDate, resolved: false });
+      if (org === assignedOrg && !messagingToastsSuppressed) showToast('💔', person.name + ': gebrochenes Versprechen', 'Vertrauen gesunken');
+    }
+  });
+}
+
+// ── Kündigungs-Engine ────────────────────────────────────────────────────
+// Stufen-Maschine none -> grievance -> warning -> quit_intent -> notice ->
+// quit. "Anhaltend" wird über zwei Streak-Zähler (badStreakDays/
+// goodStreakDays) abgebildet, die bei jedem Tages-Tick entweder hochzählen
+// oder SOFORT auf 0 zurückfallen -- ein einzelner guter Tag setzt eine
+// Verschlechterungssträhne komplett zurück, echte Besserung muss also
+// tatsächlich anhalten, nicht nur einmalig auftreten (Auftragsvorgabe
+// Abschnitt 55-56: Kündigung muss vermeidbar sein, aber ehrlich verdient).
+function updateNpcQuitStage(org, person, role, relation, satisfaction) {
+  const q = relation.quit;
+  if (q.stage === 'quit') return; // sollte nie vorkommen, die Person wurde schon entfernt
+  const hasOpenIssues = relation.openIssues.some((i) => !i.resolved);
+  const brokenPromises = relation.promises.filter((p) => p.fulfilled === false).length;
+  const isBad = satisfaction < NPC_QUIT_SATISFACTION_THRESHOLD;
+  const isGood = satisfaction >= NPC_QUIT_DEESCALATE_SATISFACTION && !hasOpenIssues;
+  q.badStreakDays = isBad ? q.badStreakDays + 1 : 0;
+  q.goodStreakDays = isGood ? q.goodStreakDays + 1 : 0;
+
+  if (q.stage !== 'none' && q.goodStreakDays >= NPC_QUIT_DEESCALATE_DAYS) {
+    const idx = NPC_QUIT_STAGE_ORDER.indexOf(q.stage);
+    q.stage = NPC_QUIT_STAGE_ORDER[Math.max(0, idx - 1)];
+    q.badStreakDays = 0;
+    q.goodStreakDays = 0;
+    if (q.stage === 'none') q.reason = null;
+    return;
+  }
+
+  const requiredDays = NPC_QUIT_STAGE_DAYS_BY_STAGE[q.stage];
+  const promiseThreshold = NPC_QUIT_PROMISE_ESCALATION_THRESHOLD[q.stage];
+  const promiseTriggersEscalation = promiseThreshold !== undefined && brokenPromises >= promiseThreshold;
+  const relationshipTriggersEscalation = q.stage === 'warning' && relation.relationship < 20;
+  const daysTriggersEscalation = requiredDays !== undefined && q.badStreakDays >= requiredDays;
+  if (!(daysTriggersEscalation || promiseTriggersEscalation || relationshipTriggersEscalation)) return;
+
+  const idx = NPC_QUIT_STAGE_ORDER.indexOf(q.stage);
+  if (idx >= NPC_QUIT_STAGE_ORDER.length - 1) return;
+  const nextStage = NPC_QUIT_STAGE_ORDER[idx + 1];
+  q.stage = nextStage;
+  q.badStreakDays = 0;
+  q.goodStreakDays = 0;
+  q.reason = q.reason || 'Anhaltend niedrige Zufriedenheit';
+
+  if (nextStage === 'quit') { executeNpcQuit(org, person, role, relation); return; }
+
+  const stageMsg = {
+    grievance: 'Ich bin ehrlich gesagt mit meiner aktuellen Situation nicht zufrieden.',
+    warning: 'Ich habe dir bereits gesagt, dass ich so nicht weitermachen kann.',
+    quit_intent: 'Wenn sich daran nichts ändert, werde ich das Team verlassen.',
+    notice: 'Ich habe mich entschieden: Ohne echte Veränderung gehe ich bald.',
+  }[nextStage];
+  if (stageMsg && org === assignedOrg) {
+    pushNpcMessage(org, person, role, relation, 'npc', stageMsg, { intent: 'QUIT_ESCALATION', importance: nextStage === 'notice' ? 'CRITICAL' : 'HIGH', postSubject: person.name + ': ' + npcQuitStageLabel(nextStage) });
+    if (!messagingToastsSuppressed) showToast('⚠', person.name + ': Beziehung verschlechtert sich', 'Kritische Situation');
+  }
+}
+
+// Nutzt EXAKT dieselbe Entfernungs-Mechanik wie bereits bestehende Pfade
+// (kein neuer Mechanismus): Spieler wie removeOwnExpiredPerson()/
+// executeSellRosterPlayer() (Splice/Null-Sub, KEIN Ersatz -- Präzedenzfall:
+// eigene Org bekommt nie automatisch einen neuen Spieler zugeteilt), Personal
+// wie fireStaffMember() (Vacant-Slot), Coach -> null.
+function executeNpcQuit(org, person, role, relation) {
+  const roster = org.roster;
+  let removed = false;
+  if (role === 'Starter') {
+    const idx = roster.starters.indexOf(person);
+    if (idx !== -1) { roster.starters.splice(idx, 1); removed = true; }
+  } else if (role === 'Sub') {
+    if (roster.sub === person) { roster.sub = null; removed = true; }
+  } else if (role === 'Reserve') {
+    const idx = (roster.reserve || []).indexOf(person);
+    if (idx !== -1) { roster.reserve.splice(idx, 1); removed = true; }
+  } else if (role === 'Coach') {
+    if (roster.coach === person) { roster.coach = null; removed = true; }
+  } else {
+    const idx = (roster.staff || []).findIndex((s) => s === person);
+    if (idx !== -1) { roster.staff[idx] = { role, vacant: true }; removed = true; }
+  }
+  if (!removed) return;
+  org.strength = computeOrgStrengthFromRoster(roster);
+  logTransfer(org.name, 'Free Agent', person.name, 0, { role, stars: npcStarRating(person.overall), country: person.country });
+  if (org === assignedOrg) {
+    if (!messagingToastsSuppressed) showToast('🚪', person.name + ' hat das Team verlassen.', 'Kündigung');
+    const isPlayerRoleLabel = role === 'Starter' || role === 'Sub' || role === 'Reserve';
+    pushPostMessage(isPlayerRoleLabel ? 'player' : 'staff', 'CRITICAL', 'Personalabteilung', 'Kündigung', person.name + ' (' + role + ') hat das Team im Streit verlassen.', null, { type: 'openPage', page: 'transfers' });
+  }
+}
+
+// ── Trigger-/Event-Engine ────────────────────────────────────────────────
+function npcContactChance(relation, satisfaction) {
+  let chance = NPC_CONTACT_BASE_CHANCE * (0.5 + relation.personality.communicativeness / 100);
+  if (satisfaction < 50) chance += ((50 - satisfaction) / 100) * 0.5;
+  return Math.max(0.02, Math.min(NPC_CONTACT_MAX_CHANCE, chance));
+}
+
+function pickNpcDailyTrigger(org, person, role, relation, satisfaction) {
+  if (relation.quit.stage === 'quit_intent' || relation.quit.stage === 'notice') return { type: 'QUIT_WARNING' };
+  if (person.contractEnd) {
+    const daysLeft = daysBetweenDateStrs(careerDate, person.contractEnd);
+    if (daysLeft >= 0 && daysLeft <= CONTRACT_WARNING_DAYS) return { type: 'CONTRACT_EXPIRING', daysLeft };
+  }
+  const hasStats = PLAYER_STAT_KEYS.every((k) => typeof person[k] === 'number');
+  if (hasStats && role !== 'Coach') {
+    const dev = playerDevelopment[playerDevKey(org.name, person.name)];
+    if (dev && !resolveEffectiveTrainingCategory(org, person, dev)) return { type: 'NO_TRAINING' };
+  }
+  if (role === 'Reserve') return satisfaction < 45 ? { type: 'RESERVE' } : null;
+  if (satisfaction < NPC_QUIT_SATISFACTION_THRESHOLD) return { type: 'LOW_SATISFACTION' };
+  if (satisfaction > 75 && Math.random() < 0.3) return { type: 'PROGRESS' };
+  return null;
+}
+
+const POST_NPC_TRIGGER_SUBJECTS = {
+  QUIT_WARNING: 'Kündigungsandrohung', CONTRACT_EXPIRING: 'Vertrag läuft bald aus', NO_TRAINING: 'Trainingsfrust',
+  LOSS_STREAK: 'Sorge nach Niederlagenserie', WIN_STREAK: 'Positive Stimmung im Team', TOURNAMENT_WIN: 'Freude über Turniersieg',
+  RESERVE: 'Wunsch nach mehr Einsatzzeit', LOW_SATISFACTION: 'Unzufriedenheit geäußert', PROGRESS: 'Positive Entwicklung',
+};
+
+function firePersonInitiatedContact(org, person, role, relation, trigger) {
+  relation.lastContactDate = careerDate;
+  const text = generateNpcInitiatedMessage(org, person, role, relation, trigger);
+  const importance = trigger.type === 'QUIT_WARNING' ? 'CRITICAL' : (trigger.type === 'LOW_SATISFACTION' || trigger.type === 'CONTRACT_EXPIRING') ? 'HIGH' : 'NORMAL';
+  const postSubject = person.name + ': ' + (POST_NPC_TRIGGER_SUBJECTS[trigger.type] || 'Meldung');
+  pushNpcMessage(org, person, role, relation, 'npc', text, { intent: trigger.type, importance, postSubject });
+  if (trigger.type === 'LOW_SATISFACTION' || trigger.type === 'NO_TRAINING' || trigger.type === 'RESERVE') {
+    relation.openIssues.push({ type: trigger.type, raisedDate: careerDate, resolved: false });
+  }
+  if (org === assignedOrg && !messagingToastsSuppressed) showToast('💬', person.name + ': "' + text + '"', 'Neue Nachricht');
+}
+
+// Tagesbasierte Trigger -- Aufruf aus advanceOneCalendarDay() (läuft einmal
+// PRO ECHTEM TAG, auch während Schnellvorlauf, siehe applyDailyPlayerTraining()-
+// Kommentar zur selben Schnellvorlauf-Korrektheits-Anforderung).
+function evaluateNpcDailyContactOpportunities(org) {
+  if (!org || !org.roster) return;
+  const teamMorale = effectiveTeamMorale(org);
+  const teamCondition = effectiveTeamPhysicalCondition(org);
+  npcContactableRoster(org).forEach(({ person, role }) => {
+    const relation = ensureNpcRelation(org, person);
+    const satisfaction = computeNpcSatisfaction(org, person, role, relation, teamMorale, teamCondition);
+    updateNpcQuitStage(org, person, role, relation, satisfaction);
+    if (relation.quit.stage === 'quit') return; // wurde gerade entfernt, keine weiteren Aktionen für diese Person
+    checkNpcPromiseDeadlines(org, person, role, relation);
+
+    const daysSinceContact = relation.lastContactDate ? daysBetweenDateStrs(relation.lastContactDate, careerDate) : Infinity;
+    if (daysSinceContact < NPC_CONTACT_COOLDOWN_DAYS) return;
+    const trigger = pickNpcDailyTrigger(org, person, role, relation, satisfaction);
+    if (!trigger) return;
+    if (Math.random() > npcContactChance(relation, satisfaction)) return;
+    firePersonInitiatedContact(org, person, role, relation, trigger);
+  });
+}
+
+// Match-Ereignis-Trigger -- liest NUR bereits synchron feststehende
+// matchHistory-Einträge des heutigen Tages (kein Hook an playOwnMatchSeriesLive(),
+// das ist nur eine Animation eines längst feststehenden Ergebnisses und läuft
+// nie unter Schnellvorlauf, siehe Architektur-Review).
+function evaluateNpcMatchTriggers(org) {
+  if (!org || !org.roster) return;
+  const todaysMatches = matchHistory.filter((m) => m.date === careerDate && (m.teamA === org.name || m.teamB === org.name));
+  if (todaysMatches.length === 0) return;
+  const wins = todaysMatches.filter((m) => m.winner === org.name).length;
+  const recentTeam = matchesForTeam(org.name).slice(-8);
+  let lossStreak = 0;
+  for (let i = recentTeam.length - 1; i >= 0; i--) {
+    if (recentTeam[i].winner !== org.name) lossStreak++;
+    else break;
+  }
+  const wonFinal = todaysMatches.some((m) => m.round === 'Grand Final' && m.winner === org.name);
+  npcContactableRoster(org).forEach(({ person, role }) => {
+    const relation = ensureNpcRelation(org, person);
+    const daysSince = relation.lastMatchTriggerDate ? daysBetweenDateStrs(relation.lastMatchTriggerDate, careerDate) : Infinity;
+    if (daysSince < NPC_MATCH_TRIGGER_COOLDOWN_DAYS) return;
+    let trigger = null;
+    if (wonFinal) trigger = { type: 'TOURNAMENT_WIN' };
+    else if (lossStreak >= 3) trigger = { type: 'LOSS_STREAK', count: lossStreak };
+    else if (wins > 0 && wins === todaysMatches.length && Math.random() < 0.25) trigger = { type: 'WIN_STREAK' };
+    if (!trigger) return;
+    const satisfaction = computeNpcSatisfaction(org, person, role, relation, effectiveTeamMorale(org), effectiveTeamPhysicalCondition(org));
+    if (Math.random() > npcContactChance(relation, satisfaction) * 1.5) return; // Match-Ereignisse etwas wahrscheinlicher als reine Tages-Trigger
+    relation.lastMatchTriggerDate = careerDate;
+    firePersonInitiatedContact(org, person, role, relation, trigger);
+  });
+}
+
+// Postsystem: dieselbe matchHistory-Auswertung wie evaluateNpcMatchTriggers()
+// oben, aber EINMAL pro Org statt pro Person -- eigener Cooldown-Cursor
+// (min. 2 Tage) gegen Mehrfach-Feuern, falls mehrere Regionen am selben Tag
+// aufgelöst werden (Auftragsvorgabe Abschnitt 19: NICHT nach jedem Match,
+// nur bei wirklich bedeutsamen Ereignissen).
+function evaluatePostTournamentEvents(org) {
+  if (!org || !org.roster) return;
+  const todaysMatches = matchHistory.filter((m) => m.date === careerDate && (m.teamA === org.name || m.teamB === org.name));
+  if (todaysMatches.length === 0) return;
+  const daysSince = postLastTournamentTriggerDate ? daysBetweenDateStrs(postLastTournamentTriggerDate, careerDate) : Infinity;
+  if (daysSince < 2) return;
+  const wonFinal = todaysMatches.some((m) => m.round === 'Grand Final' && m.winner === org.name);
+  const reachedFinal = !wonFinal && todaysMatches.some((m) => m.round === 'Grand Final' && (m.teamA === org.name || m.teamB === org.name));
+  const recentTeam = matchesForTeam(org.name).slice(-8);
+  let lossStreak = 0;
+  for (let i = recentTeam.length - 1; i >= 0; i--) {
+    if (recentTeam[i].winner !== org.name) lossStreak++;
+    else break;
+  }
+  if (wonFinal) {
+    postLastTournamentTriggerDate = careerDate;
+    pushPostMessage('tournaments', 'CRITICAL', 'Turnierleitung', 'Turnier gewonnen!', 'Dein Team hat das Grand Final gewonnen -- ein herausragender Erfolg!', null, { type: 'openPage', page: 'tournaments' });
+  } else if (reachedFinal) {
+    postLastTournamentTriggerDate = careerDate;
+    pushPostMessage('tournaments', 'HIGH', 'Turnierleitung', 'Finale erreicht', 'Dein Team hat das Grand Final erreicht.', null, { type: 'openPage', page: 'tournaments' });
+  } else if (lossStreak >= 3) {
+    postLastTournamentTriggerDate = careerDate;
+    pushPostMessage('tournaments', 'HIGH', 'Trainerstab', 'Niederlagenserie', 'Dein Team hat ' + lossStreak + ' Serien in Folge verloren.', null, { type: 'openPage', page: 'tournaments' });
+  }
 }
 
 // Runde 100, Refactor (für den neuen Schnellvorlauf-Pfeil): reine
@@ -10307,6 +13272,23 @@ function advanceOneCalendarDay() {
   // wird, noch den alten matchHistory-Stand (ein Sieg würde sonst immer
   // erst am nächsten Tagfortschritt im Fortschrittsbalken auftauchen).
   checkSponsorGoals();
+  // Trainingssystem: eigener, von Matches unabhängiger Tages-Tick -- siehe
+  // applyDailyPlayerTraining()-Kommentar für den Grund, warum das hier und
+  // nicht in finishDashboardDayAdvance() hängt (Schnellvorlauf-Korrektheit).
+  applyDailyPlayerTraining();
+  // Nachrichtensystem: Match-Ereignis-Trigger MUSS nach checkTournamentResolutions()
+  // laufen (derselbe Grund wie beim checkSponsorGoals()-Kommentar oben -- sonst
+  // sieht die Prüfung noch den alten matchHistory-Stand), Tages-Trigger danach --
+  // beide NUR für die eigene Org, beide hier statt in finishDashboardDayAdvance()
+  // (Schnellvorlauf-Korrektheit, derselbe Grund wie applyDailyPlayerTraining()).
+  evaluateNpcMatchTriggers(assignedOrg);
+  evaluateNpcDailyContactOpportunities(assignedOrg);
+  // Postsystem: Turnier-Ereignisse (derselbe matchHistory-Zeitpunkt-Grund wie
+  // evaluateNpcMatchTriggers() direkt darüber) und der wöchentliche
+  // Spielerentwicklungs-Digest -- beide NUR für die eigene Org, beide hier
+  // statt in finishDashboardDayAdvance() (Schnellvorlauf-Korrektheit).
+  evaluatePostTournamentEvents(assignedOrg);
+  maybeFlushPostDevSummary();
 
   // Runde 99, User-Meldung ("Weiter während der Anmeldephase wirft sofort ins
   // Match"): ein heute neu enthülltes eigenes Match startet NICHT mehr sofort
@@ -10387,6 +13369,18 @@ function fastForwardToNextEventDay() {
 }
 
 function finishDashboardDayAdvance() {
+  // Bug-Fix (Audit): checkAchievements() hing bisher ausschließlich an
+  // renderAll(), das im gesamten Spiel nur beim Karrierestart und beim
+  // Laden eines Spielstands läuft (der zugehörige Kommentar an
+  // checkAchievements() behauptete fälschlich, "Draft-/Roster-/Turnier-
+  // Bildschirme rendern häufig genug" -- das stimmt für renderAll() selbst
+  // nicht). In einer laufenden Sitzung ohne Neuladen schaltete sich dadurch
+  // NIE ein Erfolg frei, egal wie lange gespielt wurde. finishDashboardDayAdvance()
+  // läuft dagegen bei jedem einzelnen Tagfortschritt -- der zentrale,
+  // garantiert häufige Kern-Loop-Tick, an dem sich praktisch jeder
+  // Erfolgs-relevante Zustand (Budget, Siege, Spielzeit, Transfers, Titel)
+  // ohnehin gerade geändert haben könnte.
+  checkAchievements();
   renderDashboardTopbar();
   // Startseite (Runde 126): Status-Banner/Kader-Zustand/Turnier-Countdown/
   // Ergebnisse/Rangliste sind alle datumsabhängig -- gleiches Live-Refresh-
@@ -10439,6 +13433,30 @@ function finishDashboardDayAdvance() {
   // Finanzen) -- gleiches Live-Refresh-Muster wie oben.
   if (!document.getElementById('dashboard-page-scouting').classList.contains('hidden')) {
     renderDashboardScoutingPanel();
+  }
+  // Nachrichtensystem: Trigger-Engine kann während des Tagfortschritts neue
+  // Nachrichten erzeugen/Kündigungen auslösen -- dieselbe Live-Refresh-Regel
+  // wie oben, damit eine offene Nachrichten-Seite nicht auf altem Stand bleibt.
+  if (!document.getElementById('dashboard-page-messages').classList.contains('hidden')) {
+    renderDashboardMessagesPanel();
+  }
+  // Bug-Fix (Audit): Kader/Personal/Training/Post fehlten bisher komplett in
+  // dieser Live-Refresh-Liste -- eine Kündigung (Nachrichtensystem) konnte
+  // eine offene Kader-/Personal-Seite mit einer bereits entfernten Person
+  // stehen lassen, Trainingsfortschritt/Post-Postfach blieben beim
+  // Tagfortschritt optisch eingefroren, solange die jeweilige Seite schon
+  // offen war (gleiches Muster wie oben bei Sponsoren/Turniere/Transfers).
+  if (!document.getElementById('dashboard-page-roster').classList.contains('hidden')) {
+    renderDashboardKaderPanel();
+  }
+  if (!document.getElementById('dashboard-page-staff').classList.contains('hidden')) {
+    renderDashboardPersonalPanel();
+  }
+  if (!document.getElementById('dashboard-page-training').classList.contains('hidden')) {
+    renderDashboardTrainingPanel();
+  }
+  if (!document.getElementById('dashboard-page-post').classList.contains('hidden')) {
+    renderDashboardPostPanel();
   }
   saveGameState();
 }
@@ -10538,6 +13556,7 @@ function showOrgModal(org) {
     '<div class="org-line">' + org.description + '</div>' +
     '<div class="modal-budget">Startbudget: ' + formatMoney(org.budget) + '</div>';
   document.getElementById('org-modal').classList.remove('hidden');
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
 function confirmOrgAndProceed() {
@@ -10622,6 +13641,21 @@ function confirmOrgAndProceed() {
   financeTransactionLog = [];
   pendingPlayerArrivals = [];
   openQualifierRegistrations = {};
+  // Shop: gleiches Bug-Fix-Muster wie oben -- ohne Neuladen des Renderer-
+  // Prozesses würde eine neue Karriere sonst Inventar/Level der vorherigen
+  // erben (gleiche Electron-Session).
+  shopOwnedItems = {};
+  shopEquippedItems = {};
+  shopFavorites = {};
+  shopCart = {};
+  basecampLevel = 1;
+  // Strategien: gleiches Bug-Fix-Muster -- neue Karriere startet immer mit
+  // Ausgewogen/neutralen Reglern/keinen eigenen Taktiken.
+  activeStrategyMode = 'preset';
+  activeStrategyId = 'balanced';
+  allroundTacticSettings = { offense: 50, rotation: 50, challenge: 50, boost: 50, passing: 50, pressing: 50 };
+  customStrategies = [];
+  activeCustomStrategyId = null;
   // Bug-Fix: bei "Neues Spiel" wurde der Renderer-Prozess nicht neu geladen,
   // dadurch überlebten diese vier Variablen aus einem vorherigen Spielstand
   // (gleiche Electron-Session) und wurden in den neuen Spielstand mit
@@ -10635,6 +13669,7 @@ function confirmOrgAndProceed() {
   seasonTournamentResults = {};
   teamForm = {};
   matchHistory = [];
+  careerWinLossTally = {};
   careerOrgStats = {};
   // Bug-Fix (selbst gefunden): ORGANIZATIONS bleibt über die GESAMTE
   // App-Sitzung im Speicher (wird nur beim App-Start neu aufgebaut, nicht
@@ -10662,6 +13697,12 @@ function confirmOrgAndProceed() {
   pendingOwnMatch = null; // Runde 99: kein Match aus einer vorherigen Karriere darf hier noch anstehen
   pendingPrizePayouts = []; // Runde 101: kein Preisgeld aus einer vorherigen Karriere darf hier noch ausstehen
   seasonSkipUsed = false; // Runde 102: neue Karriere, neue Saison 1 -- Banner darf wieder erscheinen können
+  // Bug-Fix (Audit): fehlte hier bisher (siehe resetSeasonScopedDashboardState()-
+  // Fix) -- App-Neustart ist für eine neue Karriere nicht nötig, dieselben
+  // module-weiten Variablen laufen über "Neue Karriere starten" hinweg weiter.
+  Object.keys(cascadeRoundProgress).forEach((k) => delete cascadeRoundProgress[k]);
+  Object.keys(cascadeResumeCallbacks).forEach((k) => delete cascadeResumeCallbacks[k]);
+  cascadeAnimationActive = false;
   renderAll();
   saveGameState();
   goToDashboard();
@@ -10669,7 +13710,6 @@ function confirmOrgAndProceed() {
 
 // ── Match-Simulation & Text-Ticker ───────────────────────────────────────
 let matchSpeed = 1;
-let matchRunId = 0; // erhöht sich bei jedem neuen Match — stoppt laufende Wiedergaben von vorher
 
 function buildRosterTile(p, team) {
   const tile = document.createElement('div');
@@ -10707,18 +13747,29 @@ function buildBonusChip(pct) {
   return chip;
 }
 
-function renderMatchMeta(coach, sub, teamABonusPct) {
+// Bug-Fix (Audit): coach/sub/ownBonusPct beschreiben immer die EIGENE Org --
+// die kann positionell aber Team A ODER Team B sein (siehe ownIsA in
+// playOwnMatchSeriesLive()). Vorher landeten diese Werte hart in metaA und
+// metaB bekam immer "— Bot-Team", unabhängig davon, wo die eigene Org gerade
+// stand -- bei rund der Hälfte der eigenen Matches (wenn ownIsA===false) zeigte
+// der Ticker damit den eigenen Kader/Bonus im Gegner-Panel an.
+function renderMatchMeta(ownIsA, coach, sub, ownBonusPct) {
+  function personChip(isOwnSide, person) {
+    if (!isOwnSide) return '— Bot-Team';
+    return person ? person.name + ' (' + person.overall + ')' : '— keiner gedraftet';
+  }
+
   const metaA = document.getElementById('roster-meta-a');
   metaA.innerHTML = '';
-  metaA.appendChild(buildMetaChip('Coach', coach ? coach.name + ' (' + coach.overall + ')' : '— keiner gedraftet'));
-  metaA.appendChild(buildMetaChip('Sub', sub ? sub.name + ' (' + sub.overall + ')' : '— keiner gedraftet'));
-  metaA.appendChild(buildBonusChip(teamABonusPct));
+  metaA.appendChild(buildMetaChip('Coach', personChip(ownIsA, coach)));
+  metaA.appendChild(buildMetaChip('Sub', personChip(ownIsA, sub)));
+  metaA.appendChild(buildBonusChip(ownIsA ? ownBonusPct : 0));
 
   const metaB = document.getElementById('roster-meta-b');
   metaB.innerHTML = '';
-  metaB.appendChild(buildMetaChip('Coach', '— Bot-Team'));
-  metaB.appendChild(buildMetaChip('Sub', '— Bot-Team'));
-  metaB.appendChild(buildBonusChip(0));
+  metaB.appendChild(buildMetaChip('Coach', personChip(!ownIsA, coach)));
+  metaB.appendChild(buildMetaChip('Sub', personChip(!ownIsA, sub)));
+  metaB.appendChild(buildBonusChip(!ownIsA ? ownBonusPct : 0));
 }
 
 const FLASH_CLASSES = ['tile-flash-goal', 'tile-flash-save', 'tile-flash-sub'];
@@ -10788,7 +13839,7 @@ function buildSeriesResultEvent(info) {
 // onFinished(scoreA, scoreB) wird aufgerufen, sobald der Ticker fertig ist UND
 // der Nutzer auf "Weiter"/"Nächstes Spiel" klickt. seriesInfo (optional) zeigt
 // den Bo5/Bo7-Serienkontext an (Kopfzeile + Schlusswort im Ticker).
-function playMatchTicker(result, nameA, nameB, playersA, playersB, coach, sub, onFinished, seriesInfo) {
+function playMatchTicker(result, nameA, nameB, playersA, playersB, ownIsA, coach, sub, ownBonusPct, onFinished, seriesInfo) {
   const events = seriesInfo ? [...result.events, buildSeriesResultEvent(seriesInfo)] : result.events;
 
   let cumulative = 0;
@@ -10828,7 +13879,7 @@ function playMatchTicker(result, nameA, nameB, playersA, playersB, coach, sub, o
   setMatchSpeed(1);
 
   renderMatchRosters(playersA, playersB);
-  renderMatchMeta(coach, sub, result.teamABonusPct);
+  renderMatchMeta(ownIsA, coach, sub, ownBonusPct);
 
   const ticker = document.getElementById('match-ticker');
   ticker.innerHTML = '';
@@ -10910,8 +13961,12 @@ function revealMatchEvent(e) {
   }
 
   if (e.type === 'sub') {
-    // Kachel des ausgewechselten Spielers durch den Sub ersetzen
-    const tile = document.querySelector('.player-tile[data-team="A"][data-name="' + e.subOutName + '"]');
+    // Kachel des ausgewechselten Spielers durch den Sub ersetzen. Bug-Fix
+    // (Audit): war hart auf data-team="A" verdrahtet -- seit match.js auch
+    // Team-B-Subs unterstützt (e.team kann jetzt 'B' sein), muss die
+    // Ereignis-eigene Team-Zuordnung verwendet werden, sonst würde ein
+    // Team-B-Sub-Event beim Versuch, die Kachel zu tauschen, ins Leere laufen.
+    const tile = document.querySelector('.player-tile[data-team="' + e.team + '"][data-name="' + e.subOutName + '"]');
     if (tile) {
       tile.dataset.name = e.subInPlayer.name;
       tile.querySelector('.tile-rating').textContent = e.subInPlayer.overall;
@@ -11047,6 +14102,23 @@ function resetSeasonScopedDashboardState() {
   cascadeRevealedSteps = {}; // Runde 102: dito -- neue Saison, neue Event-Keys
   pendingOwnMatch = null; // Runde 99: ein Match der ALTEN Saison darf nie in die neue Saison hinüberhängen
   seasonSkipUsed = false; // Runde 102: neue Saison -- Banner darf wieder erscheinen können, falls wieder disqualifiziert
+  // Bug-Fix (Audit): cascadeRoundProgress/cascadeResumeCallbacks fehlten hier
+  // bisher (nur cascadeRevealedSteps wurde geleert) -- Event-Keys (open1,
+  // major1, worlds, ...) sind über Saisons hinweg identisch, ein Eintrag der
+  // alten Saison könnte also rein theoretisch stehen bleiben. In der Praxis
+  // wird cascadeRevealedSteps[key] als erster Gate-Check in cascadeRevealStep()
+  // gelesen (das jetzt korrekt leer ist), wodurch ein frischer Aufruf den
+  // Rest ohnehin neu initialisiert -- hier trotzdem vorsorglich mitgeräumt,
+  // damit kein alter Zustand je gelesen werden kann.
+  Object.keys(cascadeRoundProgress).forEach((k) => delete cascadeRoundProgress[k]);
+  Object.keys(cascadeResumeCallbacks).forEach((k) => delete cascadeResumeCallbacks[k]);
+  // Bug-Fix (Audit, Regressions-Fund): confirmOrgAndProceed() setzt beim
+  // Aufräumen zusätzlich cascadeAnimationActive = false -- hier fehlte das
+  // bisher (Inkonsistenz). Aktuell nicht ausnutzbar (btn-dashboard-advance-day
+  // ist gesperrt, solange cascadeAnimationActive true ist, siehe
+  // renderDashboardTopbar()), aber der Vollständigkeit halber ergänzt, falls
+  // sich die Button-Gating-Logik künftig ändert.
+  cascadeAnimationActive = false;
 }
 
 // Runde 102, Bug-Fix (User-Meldung: "Schnellvorlauf überspringt immer ganzes
@@ -11088,10 +14160,21 @@ function checkSeasonRolloverIfDue() {
 // schreibt dorthin, bis ein anderer Slot gewählt wird.
 let currentSlotId = null;
 let slotPickerMode = null; // 'new' | 'continue'
+// Bug-Fix (Audit): schnelles Nacheinander-Klicken auf zwei verschiedene
+// Speicherstände in der Slot-Auswahl konnte zwei überlappende
+// loadGameState()-Aufrufe auslösen -- ohne Absicherung schreibt JEDER
+// aufgelöste Aufruf unbedingt in dieselben globalen Variablen, unabhängig
+// davon, ob inzwischen längst eine neuere Anfrage läuft. Je nachdem, welche
+// IPC-Antwort zuerst zurückkam, konnte so am Ende die Karriere von Slot A
+// unter der ID von Slot B aktiv sein -- der nächste Autosave hätte dann
+// Slot B mit Slot-A-Daten überschrieben. loadStateRequestId markiert immer
+// nur die zuletzt gestartete Anfrage als gültig; eine ältere, inzwischen
+// überholte Antwort wird beim Zurückkommen einfach verworfen.
+let loadStateRequestId = 0;
 
 function collectSaveState() {
   return {
-    version: 33, gameMode, careerCharacter, assignedOrg,
+    version: 35, gameMode, careerCharacter, assignedOrg,
     careerState, careerBotTeams, careerRivalRecords,
     transferLog, careerPlaytimeSeconds,
     ceoFireable, achievementsEnabled, consecutivePoorSeasons, careerEnded, transfersLockedUntil, unlockedAchievements,
@@ -11103,6 +14186,7 @@ function collectSaveState() {
     seasonTournamentResults,
     teamForm,
     matchHistory,
+    careerWinLossTally,
     careerOrgStats,
     seasonQualifiedTeams,
     shownOwnMatchSteps,
@@ -11112,29 +14196,92 @@ function collectSaveState() {
     financeMonthlyLedger,
     financeTransactionLog,
     playerDevelopment,
+    npcRelations,
+    postInbox,
     staffTransferReplacements,
     playerTransferReplacements,
     signedFreeAgentPlayers: Array.from(signedFreeAgentPlayers),
     signedFreeAgentStaff: Array.from(signedFreeAgentStaff),
     contractWarningsShown: Array.from(contractWarningsShown),
     pendingPlayerArrivals,
+    shopOwnedItems, shopEquippedItems, shopFavorites, shopCart, basecampLevel,
+    activeStrategyMode, activeStrategyId, allroundTacticSettings, customStrategies, activeCustomStrategyId,
   };
 }
 
-function saveGameState() {
+// Bug-Fix (Audit): ipcRenderer.invoke() liefert ein Promise, das main.js bei
+// einem Schreibfehler (voller Datenträger, keine Schreibrechte, o.ä.) ablehnt
+// -- vorher wurde das nirgends behandelt (unhandled promise rejection), der
+// Spieler bekam von einem fehlgeschlagenen Speichern nie etwas mit, weder
+// beim Autosave noch nach einem wichtigen Ereignis. `saveErrorAlreadyWarned`
+// verhindert, dass bei einer dauerhaften Fehlerursache (z.B. voller
+// Datenträger) alle 30 Sekunden erneut ein Popup aufploppt -- eine Warnung
+// pro zusammenhängender Fehlserie reicht, sie wird zurückgesetzt, sobald ein
+// Speichern wieder klappt.
+let saveErrorAlreadyWarned = false;
+async function saveGameState() {
   if (!currentSlotId) return;
-  window.electronAPI.saveGame(currentSlotId, collectSaveState());
+  try {
+    await window.electronAPI.saveGame(currentSlotId, collectSaveState());
+    saveErrorAlreadyWarned = false;
+  } catch (err) {
+    console.error('Speichern fehlgeschlagen:', err);
+    if (!saveErrorAlreadyWarned) {
+      saveErrorAlreadyWarned = true;
+      showConfirmModal(
+        'Speichern fehlgeschlagen',
+        'Dein Fortschritt konnte gerade nicht gespeichert werden (z.B. kein freier Speicherplatz oder fehlende Schreibrechte). Bitte prüfe das, sonst kann Fortschritt verloren gehen.',
+        () => {},
+        { confirmLabel: 'OK', hideCancel: true }
+      );
+    }
+  }
 }
 
 async function loadGameState() {
+  const requestId = ++loadStateRequestId;
   const data = await window.electronAPI.loadGame(currentSlotId);
+  if (requestId !== loadStateRequestId) return; // eine neuere Ladeanfrage lief inzwischen los -- diese hier ist überholt
   if (!data) return;
+  // Bug-Fix (Audit): main.js liefert jetzt { corrupted: true } statt null,
+  // wenn die Datei zwar existiert, aber nicht mehr als JSON lesbar ist
+  // (abgeschnitten durch einen Absturz während eines früheren Speicherns).
+  // Ohne diese Prüfung würde der Code darunter versuchen, aus diesem
+  // Platzhalter-Objekt einen Kader/Charakter/Kalender zu rekonstruieren --
+  // mit lauter undefined-Werten, die still zu einem kaputten Dashboard
+  // führen würden, statt dem Spieler ehrlich zu sagen, dass die Datei hin ist.
+  if (data.corrupted) {
+    showConfirmModal(
+      'Speicherstand beschädigt',
+      'Dieser Speicherstand konnte nicht gelesen werden (vermutlich durch einen Absturz beim letzten Speichern beschädigt). Er kann leider nicht fortgesetzt werden.',
+      () => {},
+      { confirmLabel: 'OK', hideCancel: true }
+    );
+    return;
+  }
 
   assignedOrg = data.assignedOrg;
   // v1-v32-Spielstände kannten die Reserve-Kategorie noch nicht (Runde 122) --
   // assignedOrg wird als volles Objekt geladen (s.o.), roster.reserve fehlt
   // bei solchen alten Ständen deshalb komplett statt leer zu sein.
   if (assignedOrg && assignedOrg.roster && !assignedOrg.roster.reserve) assignedOrg.roster.reserve = [];
+  // Bug-Fix/Zusammenlegung (User-Meldung: "Coach und Trainer sind dasselbe,
+  // eines davon entfernen"): 'Trainer' ist keine der 8 Personal-Rollen mehr
+  // (ORG_ROSTER_STAFF_ROLES, data/org-rosters.js) -- ältere Spielstände können
+  // aber noch einen 'Trainer'-Eintrag in roster.staff mitbringen (vakant oder
+  // sogar real eingestellt). ORGANIZATIONS (alle 454 Bot-Orgs) wird bei jedem
+  // App-Start ohnehin frisch aus den Rohdaten aufgebaut und bekommt dadurch
+  // automatisch nie wieder einen Trainer -- NUR assignedOrg selbst (wird 1:1
+  // aus dem Speicherstand geladen) braucht diese explizite Migration. Ein
+  // ECHTER (nicht-vakanter) Trainer verschwindet dabei ersatzlos -- die
+  // beiden Rollen haben unterschiedliche Datenmodelle (4 Rollen-Attribute vs.
+  // 6 echte Statachsen), eine automatische "Übernahme" der Person in den
+  // Coach-Slot wäre nicht seriös möglich.
+  if (assignedOrg && assignedOrg.roster && assignedOrg.roster.staff) {
+    const hadRealTrainer = assignedOrg.roster.staff.some((s) => s && s.role === 'Trainer' && !s.vacant);
+    assignedOrg.roster.staff = assignedOrg.roster.staff.filter((s) => !s || s.role !== 'Trainer');
+    if (hadRealTrainer) assignedOrg.strength = computeOrgStrengthFromRoster(assignedOrg.roster);
+  }
   gameMode = data.gameMode || 'career'; // ältere Spielstände (v1-v7) kannten nur Karriere
   // ältere Spielstände (v1-v8) kannten noch keinen Charakter, v9 kannte noch
   // das alte pathId-System statt Trait-Reglern -- in beiden Fällen fehlt
@@ -11209,6 +14356,12 @@ async function loadGameState() {
   // v1-v20-Spielstände kannten die kanonische Match-Datenbank noch nicht
   // (Runde 89).
   matchHistory = data.matchHistory || [];
+  // Bug-Fix (Audit): v1-v33-Spielstände kannten careerWinLossTally noch nicht
+  // (die Statistiken-Seite las bisher IMMER frisch aus der kompletten
+  // matchHistory) -- einmalige Migration aus der (bei diesen alten Ständen
+  // noch ungedeckelten) geladenen matchHistory, danach läuft die Pflege nur
+  // noch inkrementell weiter (siehe recordMatchHistoryForEvent()).
+  careerWinLossTally = data.careerWinLossTally || rebuildCareerWinLossTallyFromHistory();
   // v1-v27-Spielstände kannten die karrierelangen Org-Statistiken (Majors/
   // Worlds gewonnen, Playoff-Teilnahmen) noch nicht -- Statistiken-Seite, diese Runde.
   careerOrgStats = data.careerOrgStats || {};
@@ -11236,7 +14389,22 @@ async function loadGameState() {
   // Entwicklungs-Deltas auf den falschen, unentwickelten Baseline-Werten
   // aufbauen.
   playerDevelopment = data.playerDevelopment || {};
+  // Bug-Fix (Trainingssystem): Migration von dev.delta (EIN Skalar) zu
+  // dev.deltas (pro Stat) MUSS hier, als vollständiger Durchlauf über ALLE
+  // Einträge, laufen -- VOR reapplyPlayerDevelopmentToRosters(), das direkt
+  // im Anschluss dev.deltas[k] liest (siehe migratePlayerDevelopmentDeltas()-Kommentar).
+  migratePlayerDevelopmentDeltas();
   reapplyPlayerDevelopmentToRosters();
+  // v1-v33-Spielstände kannten das Nachrichtensystem noch nicht (siehe
+  // ensureNpcRelation()). Keine Migration/Reihenfolge-Abhängigkeit nötig --
+  // npcRelations ist eine eigenständige Side-Map, die NICHTS auf Roster-
+  // Objekte zurückschreibt (anders als playerDevelopment), wird nur on-demand
+  // gelesen (computeNpcSatisfaction()/communicationMatchBonusPct()/UI).
+  npcRelations = data.npcRelations || {};
+  // v1-v34-Spielstände kannten das Postsystem noch nicht -- ebenfalls ein
+  // eigenständiges Side-Array (siehe pushPostMessage()), keine Reihenfolge-
+  // Abhängigkeit zu anderen Feldern.
+  postInbox = data.postInbox || [];
   // v1-v29-Spielstände kannten noch keine Personal-Verpflichtungen (Runde 117)
   // -- betrifft NUR fremde Bot-Orgs (assignedOrg wird ja bereits komplett als
   // Objekt geladen, siehe oben), dieselbe Notwendigkeit wie bei
@@ -11250,6 +14418,35 @@ async function loadGameState() {
   signedFreeAgentPlayers = new Set(data.signedFreeAgentPlayers || []);
   signedFreeAgentStaff = new Set(data.signedFreeAgentStaff || []);
   contractWarningsShown = new Set(data.contractWarningsShown || []);
+  // Shop (diese Runde): v1-v33-Spielstände kannten den Shop noch nicht --
+  // sichere Default-Werte (leeres Inventar, Level 1, kein bestehender
+  // Spielstand bricht). reapplyShopEquipmentIntegrity() räumt Verweise auf
+  // Items auf, die es in SHOP_ITEMS nicht (mehr) gibt.
+  shopOwnedItems = data.shopOwnedItems || {};
+  shopEquippedItems = data.shopEquippedItems || {};
+  shopFavorites = data.shopFavorites || {};
+  shopCart = data.shopCart || {};
+  basecampLevel = data.basecampLevel || 1;
+  reapplyShopEquipmentIntegrity();
+  // Strategien (diese Runde): v1-v33-Spielstände (und alle Shop-fähigen
+  // Spielstände von vor dieser Runde) kannten noch keine Strategien -- sichere
+  // Defaults (Ausgewogen, neutrale Allround-Regler, keine eigenen Taktiken).
+  activeStrategyMode = data.activeStrategyMode || 'preset';
+  activeStrategyId = data.activeStrategyId || 'balanced';
+  allroundTacticSettings = data.allroundTacticSettings || { offense: 50, rotation: 50, challenge: 50, boost: 50, passing: 50, pressing: 50 };
+  customStrategies = data.customStrategies || [];
+  activeCustomStrategyId = data.activeCustomStrategyId || null;
+  // Fehlerbehandlung: zeigt der geladene Zustand auf eine nicht (mehr)
+  // existierende Quelle (gelöschte eigene Taktik, unbekannte Preset-ID durch
+  // einen beschädigten Spielstand), fällt getActiveStrategyResolved() zwar
+  // ohnehin sicher auf 'balanced' zurück -- hier zusätzlich der SICHTBARE
+  // Zustand korrigiert, damit die UI nicht dauerhaft eine tote Referenz zeigt.
+  if (activeStrategyMode === 'preset' && !strategyById(activeStrategyId)) activeStrategyId = 'balanced';
+  if (activeStrategyMode === 'custom' && !customStrategies.some((c) => c.id === activeCustomStrategyId)) {
+    activeStrategyMode = 'preset';
+    activeStrategyId = 'balanced';
+    activeCustomStrategyId = null;
+  }
   // Nachhol-Sicherheitsnetz: falls beim Speichern ein fälliges Turnier noch
   // nicht aufgelöst war (z.B. sehr alte Spielstände von vor Runde 85), wird
   // das beim Laden sofort nachgeholt statt dauerhaft offen zu bleiben.
@@ -11338,7 +14535,13 @@ window.addEventListener('resize', centerMenuLogoOverNav);
 async function initContinueButton() {
   const slots = await window.electronAPI.listSaveSlots();
   const btn = document.getElementById('btn-continue');
-  const existing = slots.find((s) => s.exists);
+  // Bug-Fix (Audit, Regressions-Fund): list-save-slots liefert für einen
+  // beschädigten Slot ebenfalls exists:true -- ohne den corrupted-Ausschluss
+  // hier wählte "Fortsetzen" den ERSTEN existierenden Slot nach Reihenfolge,
+  // auch wenn das der beschädigte war, während ein anderer Slot einen völlig
+  // intakten Spielstand enthielt. Der Hauptmenü-Button zeigte dann "als
+  // Beschädigter Speicherstand — ?" statt des echten, spielbaren Fortschritts.
+  const existing = slots.find((s) => s.exists && !s.corrupted);
 
   if (!existing) {
     btn.classList.add('hidden');
@@ -11403,6 +14606,7 @@ function openFeedbackModal() {
   renderFeedbackStars(0);
   document.getElementById('btn-feedback-send').disabled = false;
   document.getElementById('feedback-modal').classList.remove('hidden');
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
 function hideFeedbackModal() {
@@ -11457,11 +14661,18 @@ function renderSettingsModal() {
   const musicVolumeSlider = document.getElementById('settings-music-volume');
   musicVolumeSlider.value = musicVolumePct;
   document.getElementById('settings-music-volume-value').textContent = musicVolumePct + '%';
-  document.getElementById('bg-music').volume = draftSettings.musicVolume;
+  // Bug-Fix (Audit Runde 5): HTMLMediaElement.volume wirft eine DOMException,
+  // sobald der Wert außerhalb [0,1] liegt -- appSettings/draftSettings kommen
+  // ungeprüft aus settings.json (loadSettingsSync() merged nur, validiert
+  // nicht). Eine manuell editierte/korrupte Datei (z.B. musicVolume:2) ließ
+  // renderSettingsModal() hier VOR showScreen('screen-settings') abstürzen --
+  // der Einstellungen-Button wirkte dann komplett tot, ohne Fehlermeldung.
+  // Derselbe Clamp wie bereits bei startBackgroundMusic()/finishIntro() weiter oben.
+  document.getElementById('bg-music').volume = Math.max(0, Math.min(1, draftSettings.musicVolume));
   musicVolumeSlider.oninput = () => {
     draftSettings.musicVolume = Number(musicVolumeSlider.value) / 100;
     document.getElementById('settings-music-volume-value').textContent = musicVolumeSlider.value + '%';
-    document.getElementById('bg-music').volume = draftSettings.musicVolume;
+    document.getElementById('bg-music').volume = Math.max(0, Math.min(1, draftSettings.musicVolume));
   };
 
   const displayWrap = document.getElementById('settings-display-mode-options');
@@ -11584,7 +14795,7 @@ function cancelSettingsModal() {
   closeSettingsSidebar(() => {
     // Musik-Live-Vorschau (siehe renderSettingsModal()) auf den zuletzt
     // gespeicherten Wert zurücksetzen, da der Entwurf jetzt verworfen wird.
-    document.getElementById('bg-music').volume = appSettings.musicVolume;
+    document.getElementById('bg-music').volume = Math.max(0, Math.min(1, appSettings.musicVolume));
     draftSettings = null;
     goToMenu();
   });
@@ -11697,7 +14908,34 @@ async function renderSlotsList() {
   const existingSlots = slots.filter((s) => s.exists);
   existingSlots.forEach((slot) => {
     const card = document.createElement('div');
-    card.className = 'slot-card';
+    card.className = 'slot-card' + (slot.corrupted ? ' slot-card-corrupted' : '');
+
+    // Bug-Fix (Audit): beschädigte Speicherdateien werden jetzt weiterhin als
+    // Karte angezeigt (statt wie ein leerer Slot zu verschwinden), damit der
+    // Spieler sie bewusst löschen/überschreiben kann statt versehentlich
+    // Fortschritt zu verlieren, ohne je davon erfahren zu haben.
+    if (slot.corrupted) {
+      card.innerHTML =
+        '<div class="slot-card-logo slot-card-logo-badge" style="background:#7a3030;">⚠</div>' +
+        '<div class="slot-card-info">' +
+          '<div class="slot-card-user">Beschädigter Speicherstand</div>' +
+          '<div class="slot-org">Konnte nicht gelesen werden</div>' +
+        '</div>';
+      const delBtn = document.createElement('button');
+      delBtn.className = 'slot-delete-btn';
+      delBtn.textContent = '✕';
+      delBtn.title = 'Speicherstand löschen';
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await window.electronAPI.deleteSave(slot.slotId);
+        renderSlotsList();
+        initContinueButton();
+      });
+      card.appendChild(delBtn);
+      card.addEventListener('click', () => onSlotChosen(slot));
+      container.appendChild(card);
+      return;
+    }
 
     // Logo direkt aus dem Spielstand (slot.orgLogo/-LogoUrl) statt über
     // findOrgByName() -- siehe initContinueButton() für denselben Fix/Grund.
@@ -11752,6 +14990,15 @@ async function renderSlotsList() {
 
 function onSlotChosen(slot) {
   if (slotPickerMode === 'new') {
+    if (slot.corrupted) {
+      showConfirmModal(
+        'Beschädigten Speicherstand ersetzen?',
+        'Speicherstand ' + slot.slotId + ' konnte nicht gelesen werden und kann nicht fortgesetzt werden. Hier eine neue Karriere beginnen?',
+        () => { currentSlotId = slot.slotId; goToCharacterCreation(); },
+        { confirmLabel: 'Neue Karriere beginnen', danger: true }
+      );
+      return;
+    }
     if (slot.exists) {
       showConfirmModal(
         'Speicherstand überschreiben?',
@@ -11781,6 +15028,12 @@ function onSlotChosen(slot) {
 // stillschweigend zu verschwinden.
 let confirmModalQueue = [];
 let confirmModalOpen = false;
+// Bug-Fix (Audit Runde 5): vom globalen Escape-Handler (siehe dort) genutzt,
+// um zwischen einem echten Ja/Nein-Dialog (per Escape wie "Abbrechen"
+// schließbar) und einer reinen Pflicht-Bestätigung ohne Abbrechen-Button
+// (hideCancel:true, z.B. "Verstanden") zu unterscheiden -- Escape darf deren
+// onConfirm()-Seiteneffekt nicht stillschweigend umgehen.
+let confirmModalHideCancelActive = false;
 
 function showConfirmModal(title, bodyText, onConfirm, opts) {
   if (confirmModalOpen) {
@@ -11793,6 +15046,14 @@ function showConfirmModal(title, bodyText, onConfirm, opts) {
 function displayConfirmModal(title, bodyText, onConfirm, opts) {
   confirmModalOpen = true;
   opts = opts || {};
+  confirmModalHideCancelActive = !!opts.hideCancel;
+  // Bug-Fix (Audit Runde 5): Modals bekommen im ganzen Projekt nie aktiv den
+  // Fokus -- der auslösende Hintergrund-Button (Chromium belässt nach einem
+  // Mausklick den Fokus dort) blieb bisher fokussiert, obwohl er jetzt visuell
+  // verdeckt ist. Ein reflexartiges Enter/Space löste dadurch erneut IHN aus,
+  // statt einen der Modal-Buttons. blur() entfernt den Fokus wieder -- kein
+  // vollständiger Fokus-Trap, aber verhindert die konkrete Fehlauslösung.
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   document.getElementById('confirm-modal-title').textContent = title;
   document.getElementById('confirm-modal-body').textContent = bodyText;
   const wrap = document.getElementById('confirm-modal-buttons');
@@ -11821,6 +15082,13 @@ function hideConfirmModal() {
   if (confirmModalQueue.length > 0) {
     const next = confirmModalQueue.shift();
     displayConfirmModal(next[0], next[1], next[2], next[3]);
+  } else if (deferredUpdateAvailableInfo) {
+    // Bug-Fix (Audit): siehe onUpdateAvailable()-Kommentar -- erst jetzt, wo
+    // wirklich keine confirm-modal-Meldung mehr aussteht, das zurückgehaltene
+    // Update-Popup nachholen.
+    const info = deferredUpdateAvailableInfo;
+    deferredUpdateAvailableInfo = null;
+    showUpdateAvailableModal(info);
   }
 }
 
@@ -11831,6 +15099,7 @@ function showUpdateModal(title, bodyHtml) {
   document.getElementById('update-modal-title').textContent = title;
   document.getElementById('update-modal-body').innerHTML = bodyHtml;
   document.getElementById('update-modal').classList.remove('hidden');
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
 function hideUpdateModal() {
@@ -11893,7 +15162,17 @@ function showUpdateDownloadError(message) {
   ]);
 }
 
-window.electronAPI.onUpdateAvailable((info) => {
+// Bug-Fix (Audit): update-modal und confirm-modal sind zwei unabhängige
+// .modal-overlay-Elemente mit demselben z-index -- der automatische
+// Update-Check (main.js, läuft asynchron kurz nach dem Start) konnte sein
+// "Update verfügbar"-Popup jederzeit über ein bereits offenes confirm-modal
+// (z.B. eine Vertragswarnung direkt beim Laden eines Spielstands) legen und
+// dessen Buttons verdecken. deferredUpdateAvailableInfo hält das Popup
+// zurück, bis kein confirm-modal (auch keins aus der Warteschlange) mehr
+// aussteht -- siehe hideConfirmModal().
+let deferredUpdateAvailableInfo = null;
+
+function showUpdateAvailableModal(info) {
   lastUpdateInfo = info;
   showUpdateModal(
     'Update verfügbar — v' + info.version,
@@ -11903,6 +15182,11 @@ window.electronAPI.onUpdateAvailable((info) => {
     ['Jetzt aktualisieren', true, startUpdateDownload],
     ['Später', false, hideUpdateModal],
   ]);
+}
+
+window.electronAPI.onUpdateAvailable((info) => {
+  if (confirmModalOpen) { deferredUpdateAvailableInfo = info; return; }
+  showUpdateAvailableModal(info);
 });
 
 window.electronAPI.onUpdateProgress((pct) => {
@@ -11935,7 +15219,13 @@ window.electronAPI.onUpdateError((msg) => {
 async function manualCheckForUpdates() {
   showUpdateCheckStatus('Suche nach Updates…');
   const result = await window.electronAPI.checkForUpdates();
-  if (result.skipped) showUpdateCheckStatus('Update-Prüfung nur in installierten Versionen verfügbar.');
+  // Bug-Fix (Audit, Regressions-Fund): main.js unterscheidet jetzt per
+  // `reason`, WARUM übersprungen wurde -- vorher zeigte "busy" (eine
+  // Prüfung läuft schon/hängt fest) dieselbe irreführende "nur in
+  // installierten Versionen verfügbar"-Meldung wie der echte Dev-Build-Fall.
+  if (result.skipped) {
+    showUpdateCheckStatus(result.reason === 'busy' ? 'Es läuft bereits eine Update-Prüfung.' : 'Update-Prüfung nur in installierten Versionen verfügbar.');
+  }
 }
 
 document.getElementById('btn-check-update').addEventListener('click', manualCheckForUpdates);
@@ -11973,7 +15263,7 @@ document.getElementById('btn-quit').addEventListener('click', () => window.elect
 document.getElementById('btn-back-to-menu-intro').addEventListener('click', goToMenu);
 document.getElementById('btn-back-to-menu-character').addEventListener('click', closeCharacterOverlay);
 document.getElementById('btn-back-to-menu-orgselect').addEventListener('click', goToOrgModeSelect);
-document.getElementById('btn-org-mode-back').addEventListener('click', goToCharacterCreation);
+document.getElementById('btn-org-mode-back').addEventListener('click', backToCharacterFromOrgMode);
 document.getElementById('org-mode-existing').addEventListener('click', (e) => selectOrgMode('existing', e.currentTarget));
 document.getElementById('org-mode-create').addEventListener('click', (e) => selectOrgMode('create', e.currentTarget));
 document.getElementById('btn-org-mode-continue').addEventListener('click', () => {
@@ -12036,7 +15326,7 @@ document.getElementById('btn-dashboard-advance-day').addEventListener('click', (
 // Runde 100: Schnellvorlauf-Pfeil -- ist ohnehin ausgeblendet, solange
 // pendingOwnMatch offen ist (siehe renderDashboardTopbar()), der Guard in
 // fastForwardToNextEventDay() selbst ist nur eine zusätzliche Absicherung.
-document.getElementById('btn-dashboard-fast-forward').addEventListener('click', fastForwardToNextEventDay);
+document.getElementById('btn-dashboard-fast-forward').addEventListener('click', () => runWithFastForwardOverlay(fastForwardToNextEventDay));
 document.getElementById('btn-season-skip').addEventListener('click', onSeasonSkipClick);
 document.getElementById('btn-dashboard-home-season-skip').addEventListener('click', onSeasonSkipClick);
 document.querySelectorAll('.dashboard-sidebar-item').forEach((btn) => {
@@ -12045,19 +15335,19 @@ document.querySelectorAll('.dashboard-sidebar-item').forEach((btn) => {
 document.getElementById('dashboard-settings-music-volume').addEventListener('input', (e) => {
   appSettings.musicVolume = Number(e.target.value) / 100;
   document.getElementById('dashboard-settings-music-volume-value').textContent = e.target.value + '%';
-  document.getElementById('bg-music').volume = appSettings.musicVolume; // Live-Vorschau, läuft ja bereits
+  document.getElementById('bg-music').volume = Math.max(0, Math.min(1, appSettings.musicVolume)); // Live-Vorschau, läuft ja bereits
 });
-document.getElementById('dashboard-settings-music-volume').addEventListener('change', persistAppSettings);
+document.getElementById('dashboard-settings-music-volume').addEventListener('change', persistAppSettingsOnly);
 document.getElementById('dashboard-settings-sound-volume').addEventListener('input', (e) => {
   appSettings.soundVolume = Number(e.target.value) / 100;
   document.getElementById('dashboard-settings-sound-volume-value').textContent = e.target.value + '%';
 });
-document.getElementById('dashboard-settings-sound-volume').addEventListener('change', persistAppSettings);
+document.getElementById('dashboard-settings-sound-volume').addEventListener('change', persistAppSettingsOnly);
 document.getElementById('dashboard-settings-intro-volume').addEventListener('input', (e) => {
   appSettings.introVideoVolume = Number(e.target.value) / 100;
   document.getElementById('dashboard-settings-intro-volume-value').textContent = e.target.value + '%';
 });
-document.getElementById('dashboard-settings-intro-volume').addEventListener('change', persistAppSettings);
+document.getElementById('dashboard-settings-intro-volume').addEventListener('change', persistAppSettingsOnly);
 document.getElementById('dashboard-settings-window-size').addEventListener('change', (e) => {
   appSettings.windowSize = e.target.value;
   persistAppSettings();
@@ -12067,9 +15357,37 @@ document.getElementById('dashboard-settings-ui-scale').addEventListener('change'
   persistAppSettings();
 });
 document.getElementById('dashboard-settings-fullscreen').addEventListener('click', () => {
-  appSettings.displayMode = appSettings.displayMode === 'fullscreen' ? 'windowed' : 'fullscreen';
-  renderDashboardSettingsPanel();
-  persistAppSettings();
+  // Bug-Fix (Audit): der Toggle prüfte bisher nur `=== 'fullscreen'` --
+  // appSettings.displayMode kann aber auch 'borderless' sein (nur über das
+  // alte Hauptmenü-Einstellungsfenster erreichbar, siehe draftSettings/
+  // screen-settings). Ein Klick von 'borderless' aus setzte dadurch
+  // fälschlich 'fullscreen' statt 'windowed' -- der Spieler landete nach
+  // dem erzwungenen Fensterneuaufbau (siehe main.js ensureWindowMatches-
+  // DisplaySettings()) im falschen Modus und musste ein zweites Mal klicken.
+  const goingToWindowed = appSettings.displayMode !== 'windowed';
+  const newMode = goingToWindowed ? 'windowed' : 'fullscreen';
+  const applyToggle = () => {
+    appSettings.displayMode = newMode;
+    renderDashboardSettingsPanel();
+    persistAppSettings();
+  };
+  // Bug-Fix (Audit): main.js muss bei JEDEM Wechsel von/zu 'borderless' das
+  // komplette BrowserWindow neu erzeugen (Electron kann `frame` nicht
+  // nachträglich ändern) -- das lädt index.html neu (Intro spielt erneut,
+  // zurück ins Hauptmenü) und reißt damit mitten aus der laufenden Karriere.
+  // Anders als der träge Ein-Klick-Toggle hier passierte das bisher OHNE
+  // jede Rückfrage. Nur in genau diesem (borderless-verlassenden) Fall wird
+  // jetzt vorher bestätigt.
+  if (appSettings.displayMode === 'borderless') {
+    showConfirmModal(
+      'Fenstermodus wechseln?',
+      'Der Wechsel aus dem rahmenlosen Vollbildmodus erfordert einen kurzen Fensterneuaufbau -- du landest danach wieder im Hauptmenü und musst deine Karriere über "Fortsetzen" erneut öffnen. Fortfahren?',
+      applyToggle,
+      { confirmLabel: 'Fortfahren' }
+    );
+    return;
+  }
+  applyToggle();
 });
 // User-Wunsch: "Beenden zum Menü" speichert automatisch den Spielstand und
 // führt direkt zurück ins Hauptmenü.
@@ -12108,6 +15426,33 @@ document.querySelectorAll('.dashboard-sponsors-subtab').forEach((btn) => {
 });
 document.querySelectorAll('.dashboard-sponsors-tier-btn').forEach((btn) => {
   btn.addEventListener('click', () => selectSponsorTier(btn.dataset.tier));
+});
+// Bug-Vermeidung (gleiches Muster wie bei .dashboard-stats-tab, siehe dortigen
+// Kommentar): .dashboard-shop-tab wird jetzt AUCH von den Basecamp-Seite-Tabs
+// wiederverwendet (rein visuell) -- Attribut-Selektor statt reiner Klasse,
+// damit hier NICHT versehentlich auch die Basecamp-Tabs (data-basecamp-tab,
+// kein data-shopTab) mit selectShopCategory(undefined) verdrahtet werden.
+document.querySelectorAll('[data-shop-tab]').forEach((btn) => {
+  btn.addEventListener('click', () => selectShopCategory(btn.dataset.shopTab));
+});
+document.querySelectorAll('[data-basecamp-tab]').forEach((btn) => {
+  btn.addEventListener('click', () => { if (btn.dataset.basecampTab !== 'overview') goToShopCategory(btn.dataset.basecampTab); });
+});
+document.getElementById('dashboard-basecamp-hero').addEventListener('click', () => goToShopCategory('basecamp'));
+document.querySelectorAll('[data-tactics-main-tab]').forEach((btn) => {
+  btn.addEventListener('click', () => selectTacticsMainTab(btn.dataset.tacticsMainTab));
+});
+document.querySelectorAll('[data-tactics-cat]').forEach((btn) => {
+  btn.addEventListener('click', () => selectStrategyCategory(btn.dataset.tacticsCat));
+});
+document.getElementById('btn-dashboard-cart').addEventListener('click', (e) => { e.stopPropagation(); toggleCartPanelOpen(); });
+document.getElementById('btn-dashboard-cart-clear').addEventListener('click', clearCart);
+document.getElementById('btn-dashboard-cart-checkout').addEventListener('click', checkoutCart);
+// Klick außerhalb des Warenkorb-Dropdowns schließt es (gleiches Muster wie der
+// bestehende globale .char-dropdown-Click-Listener weiter oben).
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('dashboard-cart-wrap');
+  if (wrap && !wrap.contains(e.target)) closeCartPanel();
 });
 document.getElementById('btn-tournament-cal-prev').addEventListener('click', () => shiftTournamentCalendarMonth(-1));
 document.getElementById('btn-tournament-cal-next').addEventListener('click', () => shiftTournamentCalendarMonth(1));
@@ -12219,9 +15564,20 @@ document.getElementById('dashboard-scouting-filter-age').addEventListener('chang
 // (Starter/Sub/Reserve) zwei explizite Ziel-Buttons zu den jeweils ANDEREN
 // beiden Kategorien, analog zum bereits bestehenden Reserve-Muster (Runde
 // 124). Siehe moveKaderPerson().
+// User-Vorgabe ("fehlt Alter und Vertragsdauer, das selbe bei Spieler auch"):
+// Alter + Vertragsende jetzt direkt auf JEDER Personen-Karte sichtbar (Kader
+// UND Personal), nicht mehr erst auf der Detailseite. Guard gegen fehlenden
+// Vertrag ist hier defensiv (auf dem eigenen Kader/Personal gibt es faktisch
+// nie einen freien Agenten ohne Vertrag), aber dasselbe "NaN.NaN.NaN"-Muster
+// wie bei renderPersonInfoPanel() wollen wir kategorisch nirgends mehr riskieren.
+function personCardMetaHtml(person) {
+  const contractText = person.contractEnd ? 'bis ' + formatContractDate(person.contractEnd) : 'Kein Vertrag';
+  return '<div class="dashboard-roster-card-meta">' + person.age + ' Jahre · ' + contractText + '</div>';
+}
+
 function kaderCardHtml(person, isStarter, starterIndex) {
   const avatar = CHARACTER_AVATARS.find((a) => a.id === person.avatarId) || CHARACTER_AVATARS[0];
-  const isHappy = computeTeamMorale(assignedOrg) >= 60;
+  const isHappy = effectiveTeamMorale(assignedOrg) >= 60;
   const fromSlot = isStarter ? 'starters::' + starterIndex : 'sub::0';
   const moveButtons = isStarter
     ? '<button type="button" class="dashboard-roster-move-action-btn" data-kader-move-from="' + fromSlot + '" data-kader-move-to="sub" title="Auf die Ersatzbank (Sub) setzen">→ Sub</button>' +
@@ -12236,7 +15592,8 @@ function kaderCardHtml(person, isStarter, starterIndex) {
       '<button type="button" class="dashboard-roster-card-info-btn" data-kader-info="' + person.name + '" data-kader-role="' + (isStarter ? 'Starter' : 'Sub') + '" title="Profil ansehen">?</button>' +
       '<div class="dashboard-roster-card-avatar" style="background:' + avatar.color + '33">' + avatar.emoji + '</div>' +
       '<img class="dashboard-roster-card-flag" src="assets/flags/' + (person.country || '').toLowerCase() + '.svg" alt="">' +
-      '<div class="dashboard-roster-card-name">' + person.name + '</div>' +
+      '<div class="dashboard-roster-card-name" title="' + person.name + '">' + person.name + '</div>' +
+      personCardMetaHtml(person) +
       '<div class="dashboard-roster-card-pills">' +
         '<span class="dashboard-roster-card-pill ' + (isStarter ? 'is-active' : 'is-bench') + '">' + (isStarter ? 'Aktiv' : 'Ersatzbank') + '</span>' +
         '<span class="dashboard-roster-card-pill ' + (isHappy ? 'is-happy' : 'is-unhappy') + '">' + (isHappy ? 'Glücklich' : 'Unzufrieden') + '</span>' +
@@ -12264,7 +15621,8 @@ function kaderReserveCardHtml(person, index) {
       '<button type="button" class="dashboard-roster-card-info-btn" data-kader-info="' + person.name + '" data-kader-role="Reserve" title="Profil ansehen">?</button>' +
       '<div class="dashboard-roster-card-avatar" style="background:' + avatar.color + '33">' + avatar.emoji + '</div>' +
       '<img class="dashboard-roster-card-flag" src="assets/flags/' + (person.country || '').toLowerCase() + '.svg" alt="">' +
-      '<div class="dashboard-roster-card-name">' + person.name + '</div>' +
+      '<div class="dashboard-roster-card-name" title="' + person.name + '">' + person.name + '</div>' +
+      personCardMetaHtml(person) +
       '<div class="dashboard-roster-card-pills">' +
         '<span class="dashboard-roster-card-pill is-bench">Reserve</span>' +
       '</div>' +
@@ -12290,7 +15648,7 @@ function kaderPendingArrivalHtml(entry) {
     '<div class="dashboard-roster-pending-item">' +
       '<div class="dashboard-roster-pending-avatar" style="background:' + avatar.color + '33">' + avatar.emoji + '</div>' +
       '<img class="dashboard-roster-pending-flag" src="assets/flags/' + (entry.player.country || '').toLowerCase() + '.svg" alt="">' +
-      '<span class="dashboard-roster-pending-name">' + entry.player.name + '</span>' +
+      '<span class="dashboard-roster-pending-name" title="' + entry.player.name + '">' + entry.player.name + '</span>' +
       '<span class="dashboard-roster-pending-eta">Ankunft: ' + formatContractDate(entry.availableDate) + '</span>' +
     '</div>'
   );
@@ -12300,7 +15658,9 @@ function renderDashboardKaderPanel() {
   const org = assignedOrg;
   document.getElementById('dashboard-roster-header-logo').innerHTML = statsRowLogoHtml(org);
   document.getElementById('dashboard-roster-header-flag').src = 'assets/flags/' + (org.country || '').toLowerCase() + '.svg';
-  document.getElementById('dashboard-roster-header-name').textContent = org.name;
+  const rosterHeaderNameEl = document.getElementById('dashboard-roster-header-name');
+  rosterHeaderNameEl.textContent = org.name;
+  rosterHeaderNameEl.title = org.name;
   const region = orgRegion(org.country);
   const rows = statsTeamRows(region);
   const rank = rows.findIndex((r) => r.org.name === org.name) + 1;
@@ -12309,8 +15669,8 @@ function renderDashboardKaderPanel() {
   document.getElementById('dashboard-roster-header-points').textContent = points + ' Pkt.';
   document.getElementById('dashboard-roster-header-stars').innerHTML = starsHtml(orgStarRating(org.strength));
 
-  const condition = computeTeamPhysicalCondition(org);
-  const morale = computeTeamMorale(org);
+  const condition = effectiveTeamPhysicalCondition(org);
+  const morale = effectiveTeamMorale(org);
   const language = computeTeamLanguageUnderstanding(org);
   document.getElementById('dashboard-roster-chem-condition-value').textContent = condition + '%';
   document.getElementById('dashboard-roster-chem-condition-fill').style.width = condition + '%';
@@ -12353,6 +15713,622 @@ function renderDashboardKaderPanel() {
     });
   });
 }
+
+// ── Personal-Seite ───────────────────────────────────────────────────────────
+// 1:1 nach dem Vorbild der Kader-Seite oben (gleiche dashboard-roster-*-
+// Bausteine/Karten-Optik) -- ABER kein Sub/Reserve, stattdessen genau EIN
+// Slot je Kategorie: Coach (roster.coach, eigenständiges Objekt) + die 8
+// ORG_ROSTER_STAFF_ROLES (roster.staff, siehe data/org-rosters.js).
+const PERSONAL_CATEGORIES = ['Coach', ...ORG_ROSTER_STAFF_ROLES];
+
+function personalSlotPerson(role) {
+  if (role === 'Coach') return (assignedOrg.roster && assignedOrg.roster.coach) || null;
+  const s = assignedOrg.roster && assignedOrg.roster.staff.find((x) => x.role === role);
+  return (s && !s.vacant) ? s : null;
+}
+
+function personalCardHtml(role) {
+  const person = personalSlotPerson(role);
+  if (!person) {
+    return (
+      '<div class="dashboard-roster-card dashboard-staff-card is-empty" data-staff-hire-goto="' + role + '" title="Über Scouting einstellen">' +
+        '<div class="dashboard-roster-card-avatar dashboard-staff-card-avatar-empty">＋</div>' +
+        '<div class="dashboard-roster-card-name">Nicht besetzt</div>' +
+        '<div class="dashboard-roster-card-pills"><span class="dashboard-roster-card-pill">' + role + '</span></div>' +
+        '<div class="dashboard-staff-empty-hint">Über Scouting einstellen</div>' +
+      '</div>'
+    );
+  }
+  const avatar = CHARACTER_AVATARS.find((a) => a.id === person.avatarId) || CHARACTER_AVATARS[0];
+  // Gleiche Team-weite Moral wie bei den Spielerkarten (kaderCardHtml()) --
+  // es gibt (wie bei Spielern) keinen PRO-PERSON-Moralwert, nur den echten
+  // Team-Moral-Wert (jetzt inkl. Psychologe-Bonus, siehe effectiveTeamMorale()).
+  const isHappy = effectiveTeamMorale(assignedOrg) >= 60;
+  return (
+    '<div class="dashboard-roster-card dashboard-staff-card">' +
+      '<button type="button" class="dashboard-roster-card-info-btn" data-staff-info="' + person.name + '" data-staff-role="' + role + '" title="Profil ansehen">?</button>' +
+      '<div class="dashboard-roster-card-avatar" style="background:' + avatar.color + '33">' + avatar.emoji + '</div>' +
+      '<img class="dashboard-roster-card-flag" src="assets/flags/' + (person.country || '').toLowerCase() + '.svg" alt="">' +
+      '<div class="dashboard-roster-card-name" title="' + person.name + '">' + person.name + '</div>' +
+      personCardMetaHtml(person) +
+      '<div class="dashboard-roster-card-pills">' +
+        '<span class="dashboard-roster-card-pill is-active">' + role + '</span>' +
+        '<span class="dashboard-roster-card-pill ' + (isHappy ? 'is-happy' : 'is-unhappy') + '">' + (isHappy ? 'Glücklich' : 'Unzufrieden') + '</span>' +
+      '</div>' +
+      '<button type="button" class="dashboard-roster-card-sell-btn" data-staff-fire="' + role + '" title="Kündigen">✕ Kündigen</button>' +
+    '</div>'
+  );
+}
+
+function goToScoutingStaffTab() {
+  selectDashboardPage('scouting');
+  selectScoutingTab('staff');
+}
+
+function renderDashboardPersonalPanel() {
+  const org = assignedOrg;
+  document.getElementById('dashboard-staff-header-logo').innerHTML = statsRowLogoHtml(org);
+  document.getElementById('dashboard-staff-header-flag').src = 'assets/flags/' + (org.country || '').toLowerCase() + '.svg';
+  const nameEl = document.getElementById('dashboard-staff-header-name');
+  nameEl.textContent = org.name;
+  nameEl.title = org.name;
+  const region = orgRegion(org.country);
+  const rows = statsTeamRows(region);
+  const rank = rows.findIndex((r) => r.org.name === org.name) + 1;
+  const points = seasonPoints[org.name] || 0;
+  document.getElementById('dashboard-staff-header-rank').textContent = '#' + (rank || '-');
+  document.getElementById('dashboard-staff-header-points').textContent = points + ' Pkt.';
+  document.getElementById('dashboard-staff-header-stars').innerHTML = starsHtml(orgStarRating(org.strength));
+
+  const condition = effectiveTeamPhysicalCondition(org);
+  const morale = effectiveTeamMorale(org);
+  const language = computeTeamLanguageUnderstanding(org);
+  document.getElementById('dashboard-staff-chem-condition-value').textContent = condition + '%';
+  document.getElementById('dashboard-staff-chem-condition-fill').style.width = condition + '%';
+  document.getElementById('dashboard-staff-chem-morale-value').textContent = morale + '%';
+  document.getElementById('dashboard-staff-chem-morale-fill').style.width = morale + '%';
+  document.getElementById('dashboard-staff-chem-language-value').textContent = language + '%';
+  document.getElementById('dashboard-staff-chem-language-fill').style.width = language + '%';
+
+  document.getElementById('dashboard-staff-cards').innerHTML = PERSONAL_CATEGORIES.map(personalCardHtml).join('');
+
+  document.querySelectorAll('#dashboard-staff-cards [data-staff-info]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openPersonInfo(org.name, btn.dataset.staffInfo, btn.dataset.staffRole, { page: 'staff' }); });
+  });
+  document.querySelectorAll('#dashboard-staff-cards [data-staff-fire]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); fireStaffMember(btn.dataset.staffFire); });
+  });
+  document.querySelectorAll('#dashboard-staff-cards [data-staff-hire-goto]').forEach((card) => {
+    card.addEventListener('click', () => goToScoutingStaffTab());
+  });
+}
+
+// ── Trainings-Seite ─────────────────────────────────────────────────────────
+// Folgt demselben Header-/Karten-Aufbau wie Kader/Personal oben, erweitert um
+// eine 4er-Übersichtsleiste, eine Trainer-Zusammenfassungskarte (KEIN Zuweisungs-
+// Dropdown -- es gibt nur EINEN Coach pro Org, Einstellen/Kündigen bleibt
+// Sache der Personal-Seite, siehe trainingCoachCardHtml()) und je Spieler eine
+// Trainingsfokus-Steuerung (Auto/Manuell/Aus + Kategorie) mit echtem
+// Fortschrittsbalken.
+// Bug-Fix/Zusammenlegung (User-Meldung: "Coach und Trainer sind dasselbe,
+// eines davon entfernen"): die eigene Personal-Rolle "Trainer" (4 erfundene
+// Attribute fitness/trainingsplanung/motivation/geduld) ist weg -- Coach
+// (org.roster.coach, echte 6 Statachsen über rollPlayer()) übernimmt jetzt
+// BEIDE Boni (Match via coachMatchBonusPct(), Entwicklung via
+// coachDevelopmentBonusPct()) und wird hier entsprechend mit seinen echten
+// Statachsen statt erfundener Rollen-Attribute angezeigt.
+function trainingCoachCardHtml(org, trainedCount) {
+  const coach = org.roster.coach;
+  if (!coach) {
+    return (
+      '<div class="dashboard-training-coach-card is-empty" data-training-hire-goto title="Über Scouting einstellen">' +
+        '<div class="dashboard-roster-card-avatar dashboard-staff-card-avatar-empty">＋</div>' +
+        '<div>' +
+          '<div class="dashboard-roster-card-name">Kein Coach eingestellt</div>' +
+          '<div class="dashboard-training-reason">Ohne Coach läuft kein täglicher Trainings-Tick -- über Scouting einstellen.</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+  const avatar = CHARACTER_AVATARS.find((a) => a.id === coach.avatarId) || CHARACTER_AVATARS[0];
+  const matchBonusPct = coachMatchBonusPct(org);
+  const devBonusPct = coachDevelopmentBonusPct(org);
+  const overloaded = trainedCount > TRAINING_COACH_CAPACITY;
+  const capacityLabel = trainedCount + '/' + TRAINING_COACH_CAPACITY + (overloaded ? ' (überlastet)' : '');
+  return (
+    '<div class="dashboard-training-coach-card">' +
+      '<div class="dashboard-training-coach-card-head">' +
+        '<div class="dashboard-roster-card-avatar" style="background:' + avatar.color + '33">' + avatar.emoji + '</div>' +
+        '<div class="dashboard-training-coach-card-text">' +
+          '<div class="dashboard-roster-card-name">' + coach.name + '</div>' +
+          '<div class="dashboard-training-reason">Match-Bonus ' + (matchBonusPct >= 0 ? '+' : '') + matchBonusPct.toFixed(1) + '% · Entwicklungsbonus ' +
+            (devBonusPct >= 0 ? '+' : '') + devBonusPct.toFixed(1) + '% · Kapazität ' + capacityLabel + '</div>' +
+        '</div>' +
+        '<button type="button" class="dashboard-training-coach-goto-btn" data-training-goto-personal>Zur Personal-Seite</button>' +
+      '</div>' +
+      '<div class="dashboard-training-coach-card-attrs">' +
+        PLAYER_STAT_KEYS.map((key) => (
+          '<div class="dashboard-person-info-stat-row is-wide-label">' +
+            '<span class="dashboard-person-info-stat-label">' + TRAINING_CATEGORY_LABELS[key] + '</span>' +
+            '<div class="dashboard-person-info-stat-track"><div class="dashboard-person-info-stat-fill" style="width:' + coach[key] + '%;"></div></div>' +
+            '<span class="dashboard-person-info-stat-value">' + coach[key] + '</span>' +
+          '</div>'
+        )).join('') +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function trainingPlayerCardHtml(org, assignment, slotLabel) {
+  const { player, dev, category, index, capacityFactor } = assignment;
+  const avatar = CHARACTER_AVATARS.find((a) => a.id === player.avatarId) || CHARACTER_AVATARS[0];
+  const t = dev.training || { mode: 'auto', category: null };
+  const autoInfo = computeAutoTrainingCategory(org, player);
+  const reason = t.mode === 'off' ? 'Kein Trainingsfokus -- nur allgemeine Entwicklung durchs Spielen.'
+    : t.mode === 'auto' ? autoInfo.reason
+    : 'Manuell auf ' + (TRAINING_CATEGORY_LABELS[category] || category) + ' festgelegt.';
+  const slotInfo = category
+    ? (index < TRAINING_COACH_CAPACITY
+      ? 'Slot ' + (index + 1) + '/' + TRAINING_COACH_CAPACITY
+      : 'Slot ' + (index + 1) + ' -- überlastet (-' + Math.round((1 - capacityFactor) * 100) + '%)')
+    : 'Kein Slot belegt';
+  // Echte Bucket-Position statt erfundenem Level/XP (siehe renderPersonInfoPanel()-
+  // Kommentar) -- nur sinnvoll für eine EINZELNE Kategorie, nicht 'general'
+  // (dort wachsen alle 6 gleichmäßig, kein einzelner Balken aussagekräftig).
+  let progressPct = null;
+  if (category && category !== 'general') {
+    const raw = dev.baseline[category] + dev.deltas[category];
+    progressPct = Math.round(Math.max(0, Math.min(1, raw - (player[category] - 0.5))) * 100);
+  }
+  const categoryOptions = ['general', ...PLAYER_STAT_KEYS].map((k) =>
+    '<option value="' + k + '"' + (t.category === k ? ' selected' : '') + '>' + TRAINING_CATEGORY_LABELS[k] + '</option>'
+  ).join('');
+
+  return (
+    '<div class="dashboard-roster-card dashboard-training-player-card">' +
+      '<button type="button" class="dashboard-roster-card-info-btn" data-training-info="' + player.name + '" data-training-role="' + slotLabel + '" title="Profil ansehen">?</button>' +
+      '<div class="dashboard-roster-card-avatar" style="background:' + avatar.color + '33">' + avatar.emoji + '</div>' +
+      '<img class="dashboard-roster-card-flag" src="assets/flags/' + (player.country || '').toLowerCase() + '.svg" alt="">' +
+      '<div class="dashboard-roster-card-name" title="' + player.name + '">' + player.name + '</div>' +
+      '<div class="dashboard-roster-card-meta">GES ' + player.overall + ' · ' + slotInfo + '</div>' +
+      '<div class="dashboard-training-mode-toggle">' +
+        ['auto', 'manual', 'off'].map((m) =>
+          '<button type="button" class="dashboard-training-mode-btn' + (t.mode === m ? ' is-active' : '') + '" data-training-set-mode="' + player.name + '::' + slotLabel + '::' + m + '">' +
+            (m === 'auto' ? 'Auto' : m === 'manual' ? 'Manuell' : 'Aus') +
+          '</button>'
+        ).join('') +
+      '</div>' +
+      (t.mode === 'manual'
+        ? '<select class="dashboard-training-category-select" data-training-set-category="' + player.name + '::' + slotLabel + '">' + categoryOptions + '</select>'
+        : '') +
+      (progressPct !== null
+        ? '<div class="dashboard-person-info-stat-track"><div class="dashboard-person-info-stat-fill" style="width:' + progressPct + '%;"></div></div>'
+        : '') +
+      '<div class="dashboard-training-reason">' + reason + '</div>' +
+    '</div>'
+  );
+}
+
+function setPlayerTrainingMode(playerName, slotLabel, mode) {
+  const resolved = resolvePersonByIdentity(assignedOrg.name, playerName, slotLabel);
+  if (!resolved) return;
+  const dev = ensurePlayerDevelopment(assignedOrg.name, resolved.person);
+  dev.training.mode = mode;
+  if (mode !== 'manual') dev.training.category = null;
+  renderDashboardTrainingPanel();
+  refreshDashboardSidebarBadges();
+  saveGameState();
+}
+
+function setPlayerTrainingCategoryValue(playerName, slotLabel, category) {
+  const resolved = resolvePersonByIdentity(assignedOrg.name, playerName, slotLabel);
+  if (!resolved) return;
+  const dev = ensurePlayerDevelopment(assignedOrg.name, resolved.person);
+  dev.training.category = category;
+  renderDashboardTrainingPanel();
+  saveGameState();
+}
+
+function renderDashboardTrainingPanel() {
+  const org = assignedOrg;
+  document.getElementById('dashboard-training-header-logo').innerHTML = statsRowLogoHtml(org);
+  document.getElementById('dashboard-training-header-flag').src = 'assets/flags/' + (org.country || '').toLowerCase() + '.svg';
+  const nameEl = document.getElementById('dashboard-training-header-name');
+  nameEl.textContent = org.name;
+  nameEl.title = org.name;
+  const region = orgRegion(org.country);
+  const rows = statsTeamRows(region);
+  const rank = rows.findIndex((r) => r.org.name === org.name) + 1;
+  const points = seasonPoints[org.name] || 0;
+  document.getElementById('dashboard-training-header-rank').textContent = '#' + (rank || '-');
+  document.getElementById('dashboard-training-header-points').textContent = points + ' Pkt.';
+  document.getElementById('dashboard-training-header-stars').innerHTML = starsHtml(orgStarRating(org.strength));
+
+  const assignments = trainingCapacityAssignments(org);
+  const trainedAssignments = assignments.filter((a) => a.category);
+  const trainer = org.roster.coach;
+  const starters = org.roster.starters || [];
+  const sub = org.roster.sub;
+  const coreRoster = [...starters, sub].filter(Boolean);
+
+  // 4 echte Übersichtswerte (keine Platzhalter):
+  const activityPct = coreRoster.length > 0
+    ? Math.round((trainedAssignments.filter((a) => coreRoster.includes(a.player)).length / coreRoster.length) * 100)
+    : 0;
+  // Vereinfachte Anzeige derselben zwei Hauptfaktoren, die applyDailyPlayerTraining()
+  // tatsächlich verwendet (Moral/Zustand + durchschnittlicher Kapazitäts-Malus) --
+  // Alter/Plateau variieren pro Spieler/Stat und würden die Kachel unübersichtlich machen.
+  const moraleConditionAvg = (effectiveTeamMorale(org) + effectiveTeamPhysicalCondition(org)) / 2;
+  const moraleConditionFactor = TRAINING_MORALE_CONDITION_MIN_FACTOR
+    + (moraleConditionAvg / 100) * (TRAINING_MORALE_CONDITION_MAX_FACTOR - TRAINING_MORALE_CONDITION_MIN_FACTOR);
+  const avgCapacityFactor = trainedAssignments.length > 0
+    ? trainedAssignments.reduce((s, a) => s + a.capacityFactor, 0) / trainedAssignments.length
+    : 1;
+  const qualityPct = trainer ? Math.round(Math.min(1, moraleConditionFactor * avgCapacityFactor) * 100) : 0;
+  const morale = effectiveTeamMorale(org);
+  const capacityPct = Math.round(Math.min(1, trainedAssignments.length / TRAINING_COACH_CAPACITY) * 100);
+
+  document.getElementById('dashboard-training-summary-activity-value').textContent = activityPct + '%';
+  document.getElementById('dashboard-training-summary-activity-fill').style.width = activityPct + '%';
+  document.getElementById('dashboard-training-summary-quality-value').textContent = qualityPct + '%';
+  document.getElementById('dashboard-training-summary-quality-fill').style.width = qualityPct + '%';
+  document.getElementById('dashboard-training-summary-morale-value').textContent = morale + '%';
+  document.getElementById('dashboard-training-summary-morale-fill').style.width = morale + '%';
+  document.getElementById('dashboard-training-summary-capacity-value').textContent = trainedAssignments.length + '/' + TRAINING_COACH_CAPACITY;
+  document.getElementById('dashboard-training-summary-capacity-fill').style.width = capacityPct + '%';
+
+  document.getElementById('dashboard-training-coach-card').innerHTML = trainingCoachCardHtml(org, trainedAssignments.length);
+
+  const cardsHtml = assignments.map((a) => {
+    const slotLabel = starters.includes(a.player) ? 'Starter' : (a.player === sub ? 'Sub' : 'Reserve');
+    return trainingPlayerCardHtml(org, a, slotLabel);
+  }).join('');
+  document.getElementById('dashboard-training-cards').innerHTML = cardsHtml || '<div class="dashboard-team-info-results-empty">Noch keine Spieler im Kader.</div>';
+
+  document.querySelectorAll('#dashboard-training-cards [data-training-info]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openPersonInfo(org.name, btn.dataset.trainingInfo, btn.dataset.trainingRole, { page: 'training' }); });
+  });
+  document.querySelectorAll('#dashboard-training-cards [data-training-set-mode]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const [name, slot, mode] = btn.dataset.trainingSetMode.split('::');
+      setPlayerTrainingMode(name, slot, mode);
+    });
+  });
+  document.querySelectorAll('#dashboard-training-cards [data-training-set-category]').forEach((sel) => {
+    sel.addEventListener('click', (e) => e.stopPropagation());
+    sel.addEventListener('change', () => {
+      const [name, slot] = sel.dataset.trainingSetCategory.split('::');
+      setPlayerTrainingCategoryValue(name, slot, sel.value);
+    });
+  });
+  const goToPersonalBtn = document.querySelector('#dashboard-training-coach-card [data-training-goto-personal]');
+  if (goToPersonalBtn) goToPersonalBtn.addEventListener('click', () => selectDashboardPage('staff'));
+  const hireGotoCard = document.querySelector('#dashboard-training-coach-card[data-training-hire-goto]');
+  if (hireGotoCard) hireGotoCard.addEventListener('click', () => selectDashboardPage('staff'));
+}
+
+// ── Dashboard-Seite "Nachrichten" ───────────────────────────────────────────
+// Folgt demselben Header-losen Zwei-Spalten-Aufbau (Kontaktliste links, Chat
+// rechts) -- Karten-/Panel-Klassen der Kader-/Personal-/Trainings-Seite
+// wiederverwendet, kein eigenes visuelles Vokabular erfunden.
+let messagesSelectedContact = null; // { orgName, personName, role }
+let messagesFilterTab = 'all'; // 'all' | 'players' | 'staff'
+let messagesSearchQuery = '';
+
+function messagesContactStatusInfo(org, person, role) {
+  const relation = ensureNpcRelation(org, person);
+  const satisfaction = computeNpcSatisfaction(org, person, role, relation, effectiveTeamMorale(org), effectiveTeamPhysicalCondition(org));
+  return { relation, satisfaction, tier: npcSatisfactionTier(satisfaction) };
+}
+
+function goToMessagesPage(orgName, personName, role) {
+  messagesSelectedContact = { orgName, personName, role };
+  selectDashboardPage('messages');
+}
+
+function messagesFilteredContacts(org) {
+  const query = messagesSearchQuery.trim().toLowerCase();
+  return npcContactableRoster(org).filter(({ person, role }) => {
+    const isPlayerRole = role === 'Starter' || role === 'Sub' || role === 'Reserve';
+    if (messagesFilterTab === 'players' && !isPlayerRole) return false;
+    if (messagesFilterTab === 'staff' && isPlayerRole) return false; // Coach + die 8 Personal-Rollen zählen als "Personal"
+    if (query && !person.name.toLowerCase().includes(query)) return false;
+    return true;
+  });
+}
+
+function messagesContactRowHtml(org, entry) {
+  const { person, role } = entry;
+  const { relation, tier } = messagesContactStatusInfo(org, person, role);
+  const avatar = CHARACTER_AVATARS.find((a) => a.id === person.avatarId) || CHARACTER_AVATARS[0];
+  const lastMsg = relation.messages[relation.messages.length - 1];
+  const preview = lastMsg ? (lastMsg.from === 'manager' ? 'Du: ' : '') + lastMsg.text : 'Noch kein Gespräch.';
+  const isSelected = messagesSelectedContact && messagesSelectedContact.orgName === org.name && messagesSelectedContact.personName === person.name && messagesSelectedContact.role === role;
+  const critical = relation.quit.stage === 'quit_intent' || relation.quit.stage === 'notice';
+  return (
+    '<div class="dashboard-messages-contact-row' + (isSelected ? ' is-selected' : '') + '" data-messages-contact="' + person.name + '::' + role + '">' +
+      '<div class="dashboard-roster-card-avatar dashboard-messages-contact-avatar" style="background:' + avatar.color + '33">' + avatar.emoji + '</div>' +
+      '<span class="dashboard-messages-status-dot is-' + tier + '"></span>' +
+      '<div class="dashboard-messages-contact-text">' +
+        '<div class="dashboard-messages-contact-name-row">' +
+          '<span class="dashboard-messages-contact-name">' + person.name + '</span>' +
+          (critical ? '<span class="dashboard-messages-contact-critical" title="Kündigung droht">⚠</span>' : '') +
+        '</div>' +
+        '<div class="dashboard-messages-contact-role">' + role + '</div>' +
+        '<div class="dashboard-messages-contact-preview">' + preview + '</div>' +
+      '</div>' +
+      (relation.unread > 0 ? '<span class="dashboard-messages-unread-badge">' + relation.unread + '</span>' : '') +
+    '</div>'
+  );
+}
+
+function npcQuitStageLabel(stage) {
+  return { none: 'Stabil', grievance: 'Unzufrieden', warning: 'Ernste Beschwerde', quit_intent: 'Kündigung angedroht', notice: 'Kündigungsfrist läuft', quit: 'Gegangen' }[stage] || stage;
+}
+
+function messagesQuickActionsHtml() {
+  return NPC_QUICK_ACTIONS.map((a) => '<button type="button" class="dashboard-messages-quick-btn" data-messages-quick="' + a.key + '">' + a.label + '</button>').join('');
+}
+
+function messagesChatBubbleHtml(msg) {
+  return (
+    '<div class="dashboard-messages-bubble is-' + msg.from + '">' +
+      '<div class="dashboard-messages-bubble-text">' + msg.text.replace(/</g, '&lt;') + '</div>' +
+      '<div class="dashboard-messages-bubble-date">' + formatContractDate(msg.date) + '</div>' +
+    '</div>'
+  );
+}
+
+function renderMessagesChatPane(org) {
+  const empty = document.getElementById('dashboard-messages-chat-empty');
+  const active = document.getElementById('dashboard-messages-chat-active');
+  if (!messagesSelectedContact || messagesSelectedContact.orgName !== org.name) {
+    empty.classList.remove('hidden');
+    active.classList.add('hidden');
+    return;
+  }
+  const resolved = resolvePersonByIdentity(messagesSelectedContact.orgName, messagesSelectedContact.personName, messagesSelectedContact.role);
+  if (!resolved) {
+    messagesSelectedContact = null;
+    empty.classList.remove('hidden');
+    active.classList.add('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  active.classList.remove('hidden');
+  const { person, role } = resolved;
+  const { relation, satisfaction, tier } = messagesContactStatusInfo(org, person, role);
+  relation.messages.forEach((m) => { if (m.from === 'npc') m.read = true; });
+  relation.unread = 0;
+
+  const avatar = CHARACTER_AVATARS.find((a) => a.id === person.avatarId) || CHARACTER_AVATARS[0];
+  const avatarEl = document.getElementById('dashboard-messages-chat-avatar');
+  avatarEl.innerHTML = avatar.emoji;
+  avatarEl.style.background = avatar.color + '33';
+  document.getElementById('dashboard-messages-chat-name').textContent = person.name;
+  document.getElementById('dashboard-messages-chat-meta').textContent = role + ' · GES ' + person.overall + ' · Zufriedenheit ' + satisfaction + '% · ' + npcQuitStageLabel(relation.quit.stage);
+  const statusPill = document.getElementById('dashboard-messages-chat-status');
+  statusPill.textContent = tier === 'happy' ? 'Glücklich' : tier === 'neutral' ? 'Neutral' : tier === 'unhappy' ? 'Unzufrieden' : 'Kritisch';
+  statusPill.classList.toggle('is-happy', tier === 'happy');
+  statusPill.classList.toggle('is-unhappy', tier === 'unhappy' || tier === 'critical');
+
+  const log = document.getElementById('dashboard-messages-chat-log');
+  log.innerHTML = relation.messages.length > 0
+    ? relation.messages.map(messagesChatBubbleHtml).join('')
+    : '<div class="dashboard-messages-chat-empty-log">Noch keine Nachrichten -- schreib ' + person.name + ' etwas, oder warte auf Kontaktaufnahme.</div>';
+  log.scrollTop = log.scrollHeight;
+
+  document.getElementById('dashboard-messages-quick-actions').innerHTML = messagesQuickActionsHtml();
+  document.querySelectorAll('#dashboard-messages-quick-actions [data-messages-quick]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const action = NPC_QUICK_ACTIONS.find((a) => a.key === btn.dataset.messagesQuick);
+      if (action) sendManagerMessageFromUi(action.text);
+    });
+  });
+}
+
+function sendManagerMessageFromUi(presetText) {
+  if (!messagesSelectedContact) return;
+  const input = document.getElementById('dashboard-messages-input');
+  const text = presetText !== undefined ? presetText : input.value;
+  if (!text || !text.trim()) return;
+  sendManagerMessageToNpc(messagesSelectedContact.orgName, messagesSelectedContact.personName, messagesSelectedContact.role, text);
+  input.value = '';
+  renderDashboardMessagesPanel();
+}
+
+function renderDashboardMessagesPanel() {
+  const org = assignedOrg;
+  if (!org) return;
+  // Reihenfolge wichtig: renderMessagesChatPane() setzt relation.unread des
+  // GERADE geöffneten Kontakts auf 0 (Nachrichten gelten als gelesen) --
+  // MUSS vor dem Bau der Kontaktliste laufen, sonst zeigt deren Badge noch
+  // kurz den alten Stand, bis zum nächsten Render-Aufruf.
+  renderMessagesChatPane(org);
+
+  const contacts = messagesFilteredContacts(org);
+  document.getElementById('dashboard-messages-contact-list').innerHTML = contacts.length > 0
+    ? contacts.map((entry) => messagesContactRowHtml(org, entry)).join('')
+    : '<div class="dashboard-team-info-results-empty">Keine Kontakte gefunden.</div>';
+
+  document.querySelectorAll('#dashboard-messages-contact-list [data-messages-contact]').forEach((row) => {
+    row.addEventListener('click', () => {
+      const [personName, role] = row.dataset.messagesContact.split('::');
+      messagesSelectedContact = { orgName: org.name, personName, role };
+      renderDashboardMessagesPanel();
+    });
+  });
+
+  refreshDashboardSidebarBadges();
+}
+
+document.querySelectorAll('.dashboard-messages-filter-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    messagesFilterTab = btn.dataset.messagesFilter;
+    document.querySelectorAll('.dashboard-messages-filter-btn').forEach((b) => b.classList.toggle('is-active', b === btn));
+    renderDashboardMessagesPanel();
+  });
+});
+document.getElementById('dashboard-messages-search').addEventListener('input', (e) => {
+  messagesSearchQuery = e.target.value;
+  renderDashboardMessagesPanel();
+});
+document.getElementById('btn-dashboard-messages-send').addEventListener('click', () => sendManagerMessageFromUi());
+document.getElementById('dashboard-messages-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendManagerMessageFromUi(); }
+});
+
+// ── Post-UI ──────────────────────────────────────────────────────────────
+let postSelectedFolder = 'all';
+let postSelectedMessageId = null;
+
+const POST_FOLDERS = [
+  { id: 'all', label: 'Alle' },
+  { id: 'unread', label: 'Ungelesen' },
+  { id: 'important', label: 'Wichtig' },
+  { id: 'player', label: 'Spieler' },
+  { id: 'staff', label: 'Personal' },
+  { id: 'finance', label: 'Finanzen' },
+  { id: 'sponsors', label: 'Sponsoren' },
+  { id: 'shop', label: 'Shop' },
+  { id: 'transfers', label: 'Transfers' },
+  { id: 'training', label: 'Training' },
+  { id: 'tournaments', label: 'Turniere' },
+  { id: 'system', label: 'System' },
+];
+
+function postMatchesFolder(msg, folderId) {
+  if (folderId === 'all') return true;
+  if (folderId === 'unread') return !msg.read;
+  if (folderId === 'important') return msg.priority !== 'NORMAL';
+  return msg.category === folderId;
+}
+
+function postFilteredMessages() {
+  return postInbox.filter((m) => postMatchesFolder(m, postSelectedFolder));
+}
+
+function postFolderListHtml() {
+  return POST_FOLDERS.map((f) => {
+    const count = postInbox.filter((m) => postMatchesFolder(m, f.id)).length;
+    const isUrgent = f.id === 'unread' && count > 0;
+    return '<button type="button" class="dashboard-post-folder-btn' + (postSelectedFolder === f.id ? ' is-active' : '') + '" data-post-folder="' + f.id + '">' +
+      '<span>' + f.label + '</span>' +
+      '<span class="dashboard-post-folder-count' + (isUrgent ? ' is-urgent' : '') + '">' + count + '</span>' +
+    '</button>';
+  }).join('');
+}
+
+function postMessageRowHtml(msg) {
+  const priorityClass = msg.priority === 'CRITICAL' ? ' is-priority-critical' : msg.priority === 'HIGH' ? ' is-priority-high' : '';
+  return '<button type="button" class="dashboard-post-message-row' + (!msg.read ? ' is-unread' : '') + priorityClass + '" data-post-message="' + msg.id + '">' +
+    '<span class="dashboard-post-message-icon">' + (POST_CATEGORY_ICONS[msg.category] || '✉') + '</span>' +
+    '<span class="dashboard-post-message-text">' +
+      '<span class="dashboard-post-message-subject-row">' + (!msg.read ? '<span class="dashboard-post-unread-dot"></span>' : '') + '<span class="dashboard-post-message-subject">' + escapeHtml(msg.subject) + '</span></span>' +
+      '<span class="dashboard-post-message-sender">' + escapeHtml(msg.sender) + '</span>' +
+      '<span class="dashboard-post-message-preview">' + escapeHtml(msg.preview) + '</span>' +
+    '</span>' +
+    '<span class="dashboard-post-message-date">' + formatContractDate(msg.date) + '</span>' +
+  '</button>';
+}
+
+// Aktions-Button der Detailansicht -- prüft VOR der Anzeige, ob das Ziel
+// (Person/Seite) noch real existiert (Auftragsabschnitt 34: kein Crash bei
+// einer gelöschten/verkauften/gekündigten Entity, stattdessen ein ehrlicher
+// Hinweistext statt des Buttons). Nutzt dieselbe resolvePersonByIdentity()
+// wie das Nachrichtensystem/Person-Info, keine neue Such-Logik.
+function postActionButtonHtml(action) {
+  if (!action) return '';
+  if (action.type === 'openPage') {
+    const label = DASHBOARD_PAGE_LABELS[action.page] || action.page;
+    return '<button type="button" class="menu-btn menu-btn-primary" data-post-action-open-page="' + action.page + '">' + label + ' öffnen</button>';
+  }
+  if (action.type === 'openPerson' || action.type === 'openMessages') {
+    const resolved = resolvePersonByIdentity(action.orgName, action.personName, action.role);
+    if (!resolved) {
+      return '<div class="dashboard-post-detail-action-note">' + escapeHtml(action.personName) + ' ist nicht mehr im Kader verfügbar.</div>';
+    }
+    if (action.type === 'openPerson') {
+      return '<button type="button" class="menu-btn menu-btn-primary" data-post-action-open-person="' + action.orgName + '::' + action.personName + '::' + action.role + '">Profil öffnen</button>';
+    }
+    return '<button type="button" class="menu-btn menu-btn-primary" data-post-action-open-messages="' + action.orgName + '::' + action.personName + '::' + action.role + '">Nachricht öffnen</button>';
+  }
+  return '';
+}
+
+function postDetailHtml(msg) {
+  const priorityClass = msg.priority === 'CRITICAL' ? ' is-priority-critical' : msg.priority === 'HIGH' ? ' is-priority-high' : '';
+  const priorityLabel = msg.priority === 'CRITICAL' ? 'Dringend' : msg.priority === 'HIGH' ? 'Wichtig' : 'Normal';
+  return (
+    '<div class="dashboard-post-detail-category' + priorityClass + '">' + (POST_CATEGORY_LABELS[msg.category] || msg.category) + ' · ' + priorityLabel + '</div>' +
+    '<div class="dashboard-post-detail-subject">' + escapeHtml(msg.subject) + '</div>' +
+    '<div class="dashboard-post-detail-meta"><span>Von: ' + escapeHtml(msg.sender) + '</span><span>' + formatContractDate(msg.date) + '</span></div>' +
+    '<div class="dashboard-post-detail-body">' + escapeHtml(msg.body) + '</div>' +
+    postActionButtonHtml(msg.action)
+  );
+}
+
+function renderDashboardPostPanel() {
+  const org = assignedOrg;
+  if (!org) return;
+
+  document.getElementById('dashboard-post-folder-list').innerHTML = postFolderListHtml();
+  document.querySelectorAll('#dashboard-post-folder-list [data-post-folder]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      postSelectedFolder = btn.dataset.postFolder;
+      postSelectedMessageId = null;
+      renderDashboardPostPanel();
+    });
+  });
+
+  const folderLabel = (POST_FOLDERS.find((f) => f.id === postSelectedFolder) || POST_FOLDERS[0]).label;
+  document.getElementById('dashboard-post-list-title').textContent = folderLabel;
+
+  const selectedMsg = postSelectedMessageId ? postInbox.find((m) => m.id === postSelectedMessageId) : null;
+  document.getElementById('dashboard-post-list-view').classList.toggle('hidden', !!selectedMsg);
+  document.getElementById('dashboard-post-detail-view').classList.toggle('hidden', !selectedMsg);
+
+  if (selectedMsg) {
+    // Gelesen-Markierung beim Öffnen (Auftragsabschnitt 8), gleiches Prinzip
+    // wie renderMessagesChatPane() im Nachrichtensystem.
+    if (!selectedMsg.read) { selectedMsg.read = true; saveGameState(); }
+    const detailContent = document.getElementById('dashboard-post-detail-content');
+    detailContent.innerHTML = postDetailHtml(selectedMsg);
+    document.getElementById('btn-dashboard-post-back').onclick = () => { postSelectedMessageId = null; renderDashboardPostPanel(); };
+    const pageBtn = detailContent.querySelector('[data-post-action-open-page]');
+    if (pageBtn) pageBtn.addEventListener('click', () => selectDashboardPage(pageBtn.dataset.postActionOpenPage));
+    const personBtn = detailContent.querySelector('[data-post-action-open-person]');
+    if (personBtn) personBtn.addEventListener('click', () => {
+      const [orgName, personName, role] = personBtn.dataset.postActionOpenPerson.split('::');
+      openPersonInfo(orgName, personName, role, { page: 'post' });
+    });
+    const messagesBtn = detailContent.querySelector('[data-post-action-open-messages]');
+    if (messagesBtn) messagesBtn.addEventListener('click', () => {
+      const [orgName, personName, role] = messagesBtn.dataset.postActionOpenMessages.split('::');
+      goToMessagesPage(orgName, personName, role);
+    });
+  } else {
+    const list = postFilteredMessages();
+    document.getElementById('dashboard-post-message-list').innerHTML = list.length > 0
+      ? list.map((msg) => postMessageRowHtml(msg)).join('')
+      : '<div class="dashboard-post-empty">Keine Posteinträge in diesem Ordner.</div>';
+    document.querySelectorAll('#dashboard-post-message-list [data-post-message]').forEach((row) => {
+      row.addEventListener('click', () => {
+        postSelectedMessageId = row.dataset.postMessage;
+        renderDashboardPostPanel();
+      });
+    });
+  }
+
+  refreshDashboardSidebarBadges();
+}
+
+document.getElementById('btn-dashboard-post-mark-all-read').addEventListener('click', () => {
+  postInbox.forEach((m) => { m.read = true; });
+  saveGameState();
+  renderDashboardPostPanel();
+});
 
 // User-Auftrag ("nicht das System auto wechselt Sub mit Main, sondern der
 // Spieler soll jeden Spieler selbst manuell einzeln ... zu MAIN, SUB,
@@ -12438,9 +16414,20 @@ function sellRosterPlayer(slotType, index) {
     return;
   }
   const price = calculatePrice(person.overall);
+  // Bug-Fix (Audit): der Verkauf selbst warnte nie, wenn danach die
+  // Turnier-Mindestgröße (3 Starter, siehe rosterMeetsTournamentMinimum())
+  // unterschritten wird -- man merkte es bisher erst beim nächsten
+  // Anmeldeversuch ("notEnoughPlayers"), ohne dass der auslösende Verkauf je
+  // gewarnt hätte. Kein Softlock (das System fängt es ab), aber eine
+  // vermeidbare Frustfalle -- nur beim Verkauf eines STARTERS relevant, Sub/
+  // Reserve zählen nicht zur Mindestgröße.
+  const wouldDropBelowMinimum = slotType === 'starters' && assignedOrg.roster.starters.length <= 3;
+  const warningNote = wouldDropBelowMinimum
+    ? ' ACHTUNG: Danach hast du weniger als 3 Starter und kannst dich für kein Turnier mehr anmelden, bis du nachverpflichtest.'
+    : '';
   showConfirmModal(
     person.name + ' verkaufen?',
-    'Du erhältst ' + formatMoney(price) + ' (Marktwert). ' + person.name + ' verlässt deinen Kader sofort und steht keinem anderen Team zur Verfügung.',
+    'Du erhältst ' + formatMoney(price) + ' (Marktwert). ' + person.name + ' verlässt deinen Kader sofort und steht keinem anderen Team zur Verfügung.' + warningNote,
     () => executeSellRosterPlayer(slotType, index),
     { confirmLabel: 'Verkaufen' }
   );
@@ -12461,6 +16448,7 @@ function executeSellRosterPlayer(slotType, index) {
   // Rolle/Bewertung/Nation nicht mehr finden ("-" statt echter Werte).
   logTransfer(assignedOrg.name, 'Free Agent', person.name, price, { role: roleLabel, stars: npcStarRating(person.overall), country: person.country });
   addFinanceMonthlyIncome(price, 'Transfers', person.name + ' verkauft');
+  pushPostMessage('transfers', 'NORMAL', 'Transferabteilung', 'Spieler verkauft', person.name + ' wurde für ' + formatMoney(price) + ' verkauft.', null, { type: 'openPage', page: 'transfers' });
   assignedOrg.strength = computeOrgStrengthFromRoster(roster);
   saveGameState();
   renderDashboardKaderPanel();
@@ -12508,6 +16496,45 @@ document.addEventListener('click', (e) => {
       if (menu) menu.classList.add('hidden');
     }
   });
+});
+
+// Bug-Fix (Audit Runde 5): im gesamten Projekt gab es bisher KEINEN einzigen
+// Tastatur-Event-Listener -- jedes der 5 Popups (org-modal/update-modal/
+// feedback-modal/sponsor-request-modal/confirm-modal) ließ sich ausschließlich
+// per Mausklick schließen, Escape tat nichts. Kein Geschmacksthema, sondern
+// eine in praktisch jeder Desktop-App erwartete Grundfunktion. confirm-modal
+// mit hideCancel (reine Pflicht-Bestätigung ohne Abbrechen-Button, z.B.
+// "Verstanden") bewusst AUSGENOMMEN -- deren einziger Button führt neben dem
+// Schließen noch onConfirm() aus, das Escape nicht stillschweigend umgehen
+// darf. update-modal bleibt auch während eines laufenden Downloads schließbar
+// (rein visuell -- der Download selbst hängt nicht an der Sichtbarkeit,
+// siehe armUpdateStallTimeout()).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
+    if (!confirmModalHideCancelActive) hideConfirmModal();
+    return;
+  }
+  if (!document.getElementById('sponsor-request-modal').classList.contains('hidden')) { closeSponsorRequestPopup(); return; }
+  if (!document.getElementById('feedback-modal').classList.contains('hidden')) { hideFeedbackModal(); return; }
+  // Bug-Fix (Audit Runde 6, Regressions-Fund): alle 5 Modals teilen denselben
+  // z-index (.modal-overlay) -- bei Gleichstand bestimmt die DOM-Reihenfolge
+  // in index.html die visuelle Stapelung (org-modal -> update-modal ->
+  // feedback-modal -> sponsor-request-modal -> confirm-modal, letzteres
+  // liegt also optisch OBEN). Die Prüf-Reihenfolge hier muss dem entsprechen
+  // (oberstes zuerst) -- ursprünglich stand update-modal NACH org-modal,
+  // obwohl es im DOM darüber liegt: war org-modal offen UND kam währenddessen
+  // (z.B. stiller Update-Check beim Start) das sichtbare update-modal
+  // hinzu, schloss Escape unsichtbar das darunterliegende org-modal statt
+  // des tatsächlich sichtbaren update-modal.
+  if (!document.getElementById('update-modal').classList.contains('hidden')) { hideUpdateModal(); return; }
+  if (!document.getElementById('org-modal').classList.contains('hidden')) { document.getElementById('org-modal').classList.add('hidden'); return; }
+  // Warenkorb-Dropdown ist kein echtes Overlay-Modal (niedrigerer z-index als
+  // die 5 obigen), daher erst NACH ihnen geprüft -- ein während offenem
+  // Warenkorb ausgelöster confirm-modal (z.B. Checkout-Bestätigung) muss zuerst
+  // schließen, bevor Escape den Warenkorb selbst zumacht.
+  const cartPanel = document.getElementById('dashboard-cart-panel');
+  if (cartPanel && !cartPanel.classList.contains('hidden')) { closeCartPanel(); return; }
 });
 document.getElementById('char-birthday-day').addEventListener('change', updateCharacterContinueState);
 document.getElementById('char-birthday-month').addEventListener('change', updateCharacterContinueState);
