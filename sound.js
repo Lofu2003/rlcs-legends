@@ -51,13 +51,26 @@ function playTone(freq, durationMs, volumeMultiplier, type, volumeOverride) {
 }
 
 // Bug-Fix (Audit): schnelles Überstreichen mehrerer Buttons hintereinander
-// (Sponsoren-Karten, Kalendertage, Kader-Kacheln) ließ jede neue
-// playHoverSound()-Instanz unabhängig bis zum Ende ihrer eigenen Hüllkurve
-// weiterlaufen -- bei kurzem Button-Abstand klangen dadurch mehrere
-// 45ms-Töne hörbar überlagert. currentHoverVoice merkt sich die zuletzt
-// gestartete Instanz; ein neuer Hover-Ton bricht eine noch laufende zuerst
-// sanft ab (kurzer exponentieller Fade statt hartem Abschneiden, um ein
-// Knacken zu vermeiden).
+// (Sponsoren-Karten, Kalendertage, Kader-Kacheln, Sidebar-Kategorien) ließ
+// jede neue playHoverSound()-Instanz unabhängig bis zum Ende ihrer eigenen
+// Hüllkurve weiterlaufen -- bei kurzem Button-Abstand klangen dadurch
+// mehrere 45ms-Töne hörbar überlagert. currentHoverVoice merkt sich die
+// zuletzt gestartete Instanz; ein neuer Hover-Ton bricht eine noch laufende
+// zuerst ab.
+//
+// Bug-Fix (Masterprompt-Audit): Der ursprüngliche Abbruch ließ die alte
+// Instanz noch 30-40ms sanft ausklingen, während der neue Ton bereits
+// innerhalb von 5ms auf vollen Pegel hochfuhr -- für dieses Zeitfenster
+// hingen zwei Gain-Nodes gleichzeitig an ctx.destination, deren Pegel sich
+// (Web-Audio-typisch) ADDIEREN, was beim sehr schnellen Überstreichen
+// mehrerer eng benachbarter Buttons zu kurzzeitig deutlich lauteren,
+// gestapelten Tönen führte. Fix hat zwei Teile: (1) der Abbruch der
+// vorherigen Instanz ist jetzt praktisch sofort (kein hörbares Knacken bei
+// einem 45ms-Sinuston), sodass beim Start des neuen Tons kein alter Pegel
+// mehr aktiv ist; (2) ein sehr kurzes Rate-Limit verhindert, dass bei
+// extrem schnellem Hovern (mehr als ~20 Buttons/Sekunde) überhaupt neue
+// Töne angestoßen werden -- normales Hover-Tempo (Button-Wechsel typ.
+// deutlich über 45ms auseinander) bleibt davon komplett unberührt.
 let currentHoverVoice = null;
 function stopHoverVoice() {
   if (!currentHoverVoice) return;
@@ -66,13 +79,18 @@ function stopHoverVoice() {
     const now = getAudioContext().currentTime;
     gain.gain.cancelScheduledValues(now);
     gain.gain.setValueAtTime(gain.gain.value, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
-    osc.stop(now + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.006);
+    osc.stop(now + 0.008);
   } catch {}
   currentHoverVoice = null;
 }
 
+let lastHoverSoundAt = 0;
+const HOVER_SOUND_MIN_INTERVAL_MS = 45;
 function playHoverSound() {
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  if (now - lastHoverSoundAt < HOVER_SOUND_MIN_INTERVAL_MS) return;
+  lastHoverSoundAt = now;
   stopHoverVoice();
   currentHoverVoice = playTone(720, 45, 0.5, 'sine');
 }

@@ -294,6 +294,25 @@ function starsToOverall(stars) {
   return Math.round(45 + stars * 10);
 }
 
+// Masterprompt-Feature (Alterung/Entwicklung): "Potenzial" war bisher NUR
+// eine reine Anzeige-Projektion (scoutingPotentialStars() in renderer.js,
+// wirkte NIE auf die tatsächliche Entwicklungs-Obergrenze). Jetzt ein ECHTES,
+// beim Erzeugen einmalig gewürfeltes und dauerhaft gespeichertes Feld --
+// dasselbe Overall-Skala (45-99) wie `overall` selbst, damit
+// applyPlayerStatDelta()/applyStaffStatDelta() (renderer.js) es direkt als
+// harten Pro-Person-Deckel verwenden können ("Potenzial ist das absolute
+// Maximum"). Jüngere Personen bekommen mehr Kopfraum als ältere, IMMER
+// mindestens `minHeadroom` über dem aktuellen Overall -- das verhindert, dass
+// eine einzelne, um den Overall gestreute Statachse (±4 bei Spielern, ±8 bei
+// Mitarbeitern) das Potenzial durch Zufall gleich beim Erzeugen überschreitet.
+function rollPotentialForOverall(overall, age, rng, minHeadroom) {
+  const safeAge = (typeof age === 'number' && !Number.isNaN(age)) ? age : 26;
+  const safeOverall = (typeof overall === 'number' && !Number.isNaN(overall)) ? overall : 45;
+  const ageFactor = Math.max(0, (27 - safeAge) / 13); // ~0 ab 27, ~0.77 bei 17 (jüngstes Spieler-Alter)
+  const headroom = 4 + ageFactor * 26 + (rng() * 2 - 1) * 5;
+  return Math.max(safeOverall, Math.min(99, Math.round(safeOverall + Math.max(minHeadroom || 5, headroom))));
+}
+
 // User-Korrektur (nach einer ersten, falschen Version dieses Systems): NICHT
 // die Org-Stärke soll die Sterne der Spieler/Mitarbeiter bestimmen, sondern
 // UMGEKEHRT -- jeder Spieler/Mitarbeiter bekommt unabhängig von seiner Org
@@ -510,14 +529,16 @@ function generateOrgRoster(org) {
       stats[key] = Math.max(45, Math.min(95, Math.round(v)));
     });
     const overall = Math.round(ROSTER_STAT_KEYS.reduce((sum, k) => sum + stats[k], 0) / ROSTER_STAT_KEYS.length);
+    const age = pickPlayerAge();
     return {
       name: realName || uniqueNickname(),
       country: (realName && REAL_PLAYER_NATIONS[realName]) || pickNation(),
       avatarId: pickAvatarId(),
-      age: pickPlayerAge(),
+      age,
       ...rollContractDates(),
       ...stats,
       overall,
+      potential: rollPotentialForOverall(overall, age, rng, 5),
     };
   }
 
@@ -532,14 +553,16 @@ function generateOrgRoster(org) {
     const overall = attrKeys.length > 0
       ? Math.round(attrKeys.reduce((sum, k) => sum + attrs[k], 0) / attrKeys.length)
       : targetOverall;
+    const age = pickStaffAge();
     return {
       name: realName || uniqueStaffName(),
       country: pickNation(),
       avatarId: pickAvatarId(),
-      age: pickStaffAge(),
+      age,
       ...rollContractDates(),
       ...attrs,
       overall,
+      potential: rollPotentialForOverall(overall, age, rng, 9),
     };
   }
 
@@ -576,16 +599,38 @@ function generateOrgRoster(org) {
 // wird vom Aufrufer übergeben (das ECHTE aktuelle careerDate, das
 // renderer.js kennt, org-rosters.js aber nicht) -- der neue Vertrag beginnt
 // dadurch realistisch "jetzt", nicht am festen Karriere-Startanker.
-function rollReplacementPerson(centerStars, role, contractDateAnchor) {
+// `opts` (Masterprompt-Feature, Runde: Alterung/Ersatzspieler-System,
+// optional -- der einzige bestehende Aufrufer, executeStaffSigning() in
+// renderer.js, übergibt weiterhin nur die ersten 3 Argumente und verhält sich
+// dadurch UNVERÄNDERT): erlaubt dem Karriereende-/Ersatz-System, das
+// Potenzial UND die Altersspanne des Ersatzes gezielt zu steuern --
+// "gleiche Qualitätsklasse, gleiche Potenzialklasse, aber neue
+// Zufallseigenschaften UND jung genug für eine echte Karriereperspektive"
+// (Auftrag). Ohne opts bleibt das Verhalten exakt wie zuvor (Potenzial
+// organisch aus Overall+Alter, Alterspanne wie gehabt für Coach/Personal).
+function rollReplacementPerson(centerStars, role, contractDateAnchor, opts) {
+  opts = opts || {};
   const stars = clampToStarTier(centerStars + (Math.random() * 2 - 1) * 1.2);
   const targetOverall = starsToOverall(stars);
   const nations = CHARACTER_NATIONS.map((n) => n.code);
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const isCoachRole = role === 'Coach';
-  const name = isCoachRole
+  // Masterprompt-Erweiterung: rollReplacementPerson() kannte bisher nur
+  // Coach (rollPlayer()-Statachsen) und die 8 STAFF_ROLE_ATTRIBUTES-Rollen --
+  // der bisherige einzige Aufrufer (Personal-Abwerbung) übergibt nie
+  // 'Starter'/'Sub'/'Reserve'. Das neue Karriereende-System braucht aber
+  // GENAU diesen Fall (ein Spieler geht in Rente) -- echte Spielerpositionen
+  // bekommen dieselben ROSTER_STAT_KEYS wie Coach, rein additiv, ändert am
+  // bestehenden Coach-/Personal-Verhalten nichts.
+  const isPlayerLikeRole = isCoachRole || role === 'Starter' || role === 'Sub' || role === 'Reserve';
+  const name = isPlayerLikeRole
     ? pick(ROSTER_NICK_PREFIXES) + pick(ROSTER_NICK_SUFFIXES)
     : (Math.random() < 0.5 ? pick(ROSTER_STAFF_FIRST_NAMES_M) : pick(ROSTER_STAFF_FIRST_NAMES_F)) + ' ' + pick(ROSTER_STAFF_LAST_NAMES);
-  const age = isCoachRole ? Math.round(17 + Math.random() * 15) : Math.round(24 + Math.random() * 31);
+  const defaultAgeMin = isPlayerLikeRole ? 17 : 24;
+  const defaultAgeMax = isPlayerLikeRole ? 32 : 55;
+  const ageMin = opts.ageMin !== undefined ? opts.ageMin : defaultAgeMin;
+  const ageMax = opts.ageMax !== undefined ? opts.ageMax : defaultAgeMax;
+  const age = Math.round(ageMin + Math.random() * (ageMax - ageMin));
   const contractStart = contractDateAnchor;
   const contractEnd = addMonthsToDateStr(contractStart, Math.round(12 + Math.random() * 24));
   // Bug-Fix (Personal-Seite, per Live-Test gefunden): ein abgeworbener Coach
@@ -593,12 +638,13 @@ function rollReplacementPerson(centerStars, role, contractDateAnchor) {
   // rollenspezifische Attribute -- die Person-Info-Seite hätte für einen
   // ersetzten Coach danach gar keine Statachsen mehr angezeigt (hasStats-
   // Check schlägt fehl). Jetzt genau wie beim initialen Kaderaufbau: Coach
-  // bekommt ROSTER_STAT_KEYS um targetOverall gestreut, die 8 echten
-  // Personal-Rollen bekommen ihre STAFF_ROLE_ATTRIBUTES -- Overall wird aus
-  // den tatsächlichen Werten abgeleitet (konsistent mit rollStaff()/rollPlayer()).
+  // (und, neu, echte Spielerpositionen) bekommt ROSTER_STAT_KEYS um
+  // targetOverall gestreut, die 8 echten Personal-Rollen bekommen ihre
+  // STAFF_ROLE_ATTRIBUTES -- Overall wird aus den tatsächlichen Werten
+  // abgeleitet (konsistent mit rollStaff()/rollPlayer()).
   let extra = {};
   let overall = targetOverall;
-  if (isCoachRole) {
+  if (isPlayerLikeRole) {
     ROSTER_STAT_KEYS.forEach((key) => {
       extra[key] = Math.max(45, Math.min(95, Math.round(targetOverall + (Math.random() * 2 - 1) * 4)));
     });
@@ -608,7 +654,16 @@ function rollReplacementPerson(centerStars, role, contractDateAnchor) {
     const keys = Object.keys(extra);
     overall = keys.length > 0 ? Math.round(keys.reduce((sum, k) => sum + extra[k], 0) / keys.length) : targetOverall;
   }
-  return { name, country: pick(nations), avatarId: pick(CHARACTER_AVATARS).id, age, ...extra, overall, contractStart, contractEnd };
+  const minHeadroom = isPlayerLikeRole ? 5 : 9;
+  // Potenzial-Klasse: wenn der Aufrufer eine ZIEL-Potenzial-Sternebewertung
+  // vorgibt (Karriereende-Ersatz), wird direkt um DIESEN Wert gestreut (leichte
+  // Zufallsstreuung ±0,6 Sterne, damit der Ersatz nicht exakt identisch
+  // wirkt) -- garantiert mindestens overall, sonst (normale Abwerbung ohne
+  // Vorgabe) organisch aus Overall+Alter wie beim initialen Kaderaufbau.
+  const potential = opts.potentialStars !== undefined
+    ? Math.max(overall, Math.min(99, starsToOverall(clampToStarTier(opts.potentialStars + (Math.random() * 2 - 1) * 0.6))))
+    : rollPotentialForOverall(overall, age, Math.random, minHeadroom);
+  return { name, country: pick(nations), avatarId: pick(CHARACTER_AVATARS).id, age, ...extra, overall, potential, contractStart, contractEnd };
 }
 
 // ── Freie Agenten (Runde 120, User-Vorgabe: "bei scouting sollen auch die
@@ -635,6 +690,14 @@ function hydrateFreeAgentIdentity(entry, isPlayerAgeRange, role) {
     if (role && STAFF_ROLE_ATTRIBUTES[role]) {
       Object.assign(entry, generateStaffAttributes(role, entry.overall, Math.random));
     }
+    // Masterprompt-Feature: dieselbe In-Place-Cache-Regel wie Land/Alter/Avatar
+    // oben -- Potenzial wird beim ersten Scouting-Aufruf einmalig gewürfelt und
+    // bleibt danach stabil (wichtig, weil executePlayerSigning()/signStaffMember()
+    // diesen exakten Pool-Eintrag später per Spread kopiert, siehe
+    // signFreeAgentPlayer()/signFreeAgentStaff() -- ohne Cache würde jeder
+    // Aufruf ein anderes Potenzial würfeln, bevor der Spieler überhaupt
+    // verpflichtet wird).
+    entry.potential = rollPotentialForOverall(entry.overall, entry.age, Math.random, role && STAFF_ROLE_ATTRIBUTES[role] ? 9 : 5);
   }
   return entry;
 }

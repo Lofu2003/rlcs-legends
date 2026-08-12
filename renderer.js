@@ -165,7 +165,14 @@ let careerEnded = false;          // true nach triggerCeoFired() -- verhindert W
 let transfersLockedUntil = null;  // ISO-Datumsstring oder null -- "Transfers für KI-Teams sperren"
 let unlockedAchievements = [];    // Liste freigeschalteter Achievement-IDs
 
-function formatContractDate(date) {
+// Eigener Name (statt formatContractDate), weil weiter unten (Runde 117)
+// eine zweite Funktion namens formatContractDate() für careerDate-Strings
+// entstand -- zwei function-Deklarationen mit demselben Namen im selben
+// Scope überschreiben sich, die spätere gewinnt für ALLE Aufrufer im ganzen
+// File. Das ließ den einzigen verbliebenen Aufrufer dieser (Date-Objekt-)
+// Variante -- die Org-Vertragsseite beim Karrierestart -- "NaN.NaN.NaN"
+// anzeigen, weil new Date() an die String-Variante durchgereicht wurde.
+function formatContractSignDate(date) {
   const dd = String(date.getDate()).padStart(2, '0');
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   return dd + '.' + mm + '.' + date.getFullYear();
@@ -181,7 +188,7 @@ function formatContractDate(date) {
 // stillschweigend ein Tag verschluckt. Fix: konsequent UTC verwenden (Suffix
 // 'Z' beim Parsen + UTC-Methoden bei jeder Arithmetik), dann bleibt alles in
 // sich konsistent, unabhängig von der Systemzeitzone. Gilt NUR für
-// careerDate-artige reine Kalendertage -- formatContractDate() oben bleibt
+// careerDate-artige reine Kalendertage -- formatContractSignDate() oben bleibt
 // bewusst auf Ortszeit (für echte "jetzt"-Zeitpunkte wie das Vertragsdatum
 // beim Unterschreiben, wo die lokale Zeit tatsächlich gewünscht ist).
 function parseCareerDate(str) {
@@ -1154,7 +1161,7 @@ async function randomizeOrgCreateAll() {
 // budget/roster{starters,sub,coach,staff}/strength) -- dadurch brauchen
 // goToOrgContract() und confirmOrgAndProceed() keine Sonderfälle für selbst
 // erstellte Orgas.
-const ORG_CREATE_DIFFICULTY_BUDGET = { hard: 30000, normal: 100000, easy: 1000000, casual: 10000000 };
+const ORG_CREATE_DIFFICULTY_BUDGET = { hard: 50000, normal: 100000, easy: 1000000, casual: 10000000 };
 const ORG_CREATE_DIFFICULTY_STAFF_COUNT = { hard: 0, normal: 2, easy: 4, casual: 6 };
 const ORG_CREATE_START_PLAYER_COUNT = 3; // User-Wunsch: 3 Spieler statt vorher 5
 
@@ -1193,8 +1200,18 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
   // bestehenden Orgas, deren Sub ebenfalls nie aus der Datenbank kommt).
   let starters = [];
   if (orgCreateFillAgents) {
+    // Bug-Fix (Masterprompt-Audit, Alterungssystem): FREE_AGENT_PLAYERS
+    // (data/free-agents.js) enthält nur Name+Statwerte, KEIN Alter -- ohne
+    // diesen Zusatz hätten selbst erstellte Orgas Spieler ohne `age`, die das
+    // neue Saison-Alterungssystem (ageAndRetireRosterForSeason()) stillschweigend
+    // übersprungen hätte (nie älter, nie in Rente). Gleiche Spanne wie
+    // rollPlayer() (data/org-rosters.js), Potenzial über dieselbe
+    // rollPotentialForOverall()-Formel wie überall sonst im Spiel.
     starters = shuffledCopy(FREE_AGENT_PLAYERS, rng).slice(0, ORG_CREATE_START_PLAYER_COUNT)
-      .map((p) => ({ ...p, country: pickNation(), avatarId: pickAvatarId(), ...rollFreshContract() }));
+      .map((p) => {
+        const age = Math.round(17 + rng() * 15);
+        return { ...p, country: pickNation(), avatarId: pickAvatarId(), age, potential: rollPotentialForOverall(p.overall, age, rng, 5), ...rollFreshContract() };
+      });
   }
 
   // Team-Mitarbeiter-Anzahl skaliert mit der Startinvestition (siehe
@@ -1205,7 +1222,8 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
   const staff = shuffledCopy(ORG_ROSTER_STAFF_ROLES, rng).slice(0, staffCount).map((role) => {
     const pool = FREE_AGENT_STAFF[role];
     const person = pool[Math.floor(rng() * pool.length)];
-    return { role, name: person.name, overall: person.overall, country: pickNation(), avatarId: pickAvatarId(), ...rollFreshContract() };
+    const age = Math.round(24 + rng() * 31);
+    return { role, name: person.name, overall: person.overall, country: pickNation(), avatarId: pickAvatarId(), age, potential: rollPotentialForOverall(person.overall, age, rng, 9), ...rollFreshContract() };
   });
 
   // Kein Free-Agent-Pool für Coaches vorhanden (die Datenbank kennt nur die
@@ -1219,11 +1237,15 @@ function buildCustomOrgFromForm(shortname, fullname, description) {
   // Jetzt an dieselbe Bedingung gekoppelt: kein Personal-Bonus == auch kein
   // Coach beim Start (muss wie jede andere Rolle erst über Scouting verpflichtet werden).
   const coachFirstNames = rng() < 0.5 ? ROSTER_STAFF_FIRST_NAMES_M : ROSTER_STAFF_FIRST_NAMES_F;
+  const coachAge = Math.round(17 + rng() * 15);
+  const coachOverall = starsToOverall(2.5);
   const coach = staffCount > 0 ? {
     name: coachFirstNames[Math.floor(rng() * coachFirstNames.length)] + ' ' + ROSTER_STAFF_LAST_NAMES[Math.floor(rng() * ROSTER_STAFF_LAST_NAMES.length)],
     country: pickNation(),
     avatarId: pickAvatarId(),
-    overall: starsToOverall(2.5),
+    age: coachAge,
+    overall: coachOverall,
+    potential: rollPotentialForOverall(coachOverall, coachAge, rng, 5),
     ...rollFreshContract(),
   } : null;
 
@@ -1617,7 +1639,7 @@ function goToOrgContract(org, backScreen) {
   bgPattern.style.backgroundImage = logoUrl ? 'url("' + logoUrl + '")' : 'none';
   bgPattern.classList.toggle('has-logo', !!logoUrl);
 
-  document.getElementById('org-contract-date').textContent = formatContractDate(new Date());
+  document.getElementById('org-contract-date').textContent = formatContractSignDate(new Date());
 
   document.getElementById('opt-ceo-fireable').classList.add('is-active');
   document.querySelectorAll('.org-contract-lock-option').forEach((b) => b.classList.toggle('is-active', b.dataset.value === '1'));
@@ -7202,9 +7224,20 @@ const PLAYER_DEV_STAT_MAX = 99;
 // (3) eine Niederlage zieht etwas ab, ABER: viel geleistet -> der Abzug wird
 // bis auf 0 abgefedert (kann durch die Grundzunahme + Aktionsbonus sogar
 // trotzdem netto besser werden), kaum/nichts geleistet -> voller Abzug.
-const PLAYER_DEV_BASE_GROWTH = 0.03;
-const PLAYER_DEV_ACTION_WEIGHT = 0.015;
-const PLAYER_DEV_LOSS_PENALTY_BASE = 0.15;
+// Masterprompt-Feature (Alterung/Entwicklung), User-Vorgabe "deutlich
+// schneller -- man muss INNERHALB EINER SAISON eine klar erkennbare
+// Veränderung sehen": Grundwachstum, Aktionsbonus und tägliches Training
+// (TRAINING_DAILY_BASE_GROWTH leitet sich unten automatisch von
+// PLAYER_DEV_BASE_GROWTH ab) auf das 5-Fache angehoben, die Niederlage-Strafe
+// nur auf etwas mehr als das Doppelte -- sonst würde eine Verlustserie die
+// neue, viel schnellere Entwicklung wieder komplett auffressen. Per Live-Test
+// verifiziert (siehe Abschlussbericht): ein aktiv trainierter, noch nicht
+// nahe am Potenzial stehender Spieler legt bei durchgehender Aktivität
+// innerhalb einer Saison mehrere Punkte auf seinem Trainingsfokus zu, statt
+// wie zuvor Bruchteile eines einzigen Punkts.
+const PLAYER_DEV_BASE_GROWTH = 0.15;
+const PLAYER_DEV_ACTION_WEIGHT = 0.075;
+const PLAYER_DEV_LOSS_PENALTY_BASE = 0.35;
 const PLAYER_DEV_LOSS_OFFSET_THRESHOLD = 6; // Aktionspunkte, ab denen die Niederlage-Strafe komplett aufgehoben ist
 const PLAYER_DEV_RECENT_GAMES_MAX = 8;
 
@@ -7266,15 +7299,43 @@ function migratePlayerDevelopmentDeltas() {
   });
 }
 
-// Sanftes Abflachen nahe der Obergrenze (PLAYER_DEV_STAT_MAX=99) -- volle
-// Rate bis TRAINING_PLATEAU_START, danach linear runter auf
-// TRAINING_PLATEAU_MIN_RATE. Kein harter Deckel (der existiert schon über den
-// PLAYER_DEV_STAT_MIN/MAX-Clamp) -- nur ein weicher Dämpfer, damit die
-// letzten Punkte spürbar schwerer fallen als die ersten.
-function playerDevStatPlateauFactor(currentValue) {
-  if (currentValue <= TRAINING_PLATEAU_START) return 1;
-  const span = PLAYER_DEV_STAT_MAX - TRAINING_PLATEAU_START;
-  const progress = Math.min(1, (currentValue - TRAINING_PLATEAU_START) / span);
+// Masterprompt-Feature (Alterung/Entwicklung), User-Vorgabe "Potenzial ist
+// das absolute Maximum": lazy Self-Heal statt einer separaten Save-Migration
+// (dasselbe Prinzip wie ensurePlayerDevelopment() für NEUE Einträge) --
+// jede Person, die den Deckel tatsächlich BRAUCHT (Entwicklung, Karriereende-
+// Sterne-Klasse), bekommt ihn hier garantiert, egal ob sie aus einem alten
+// Save (v35 und früher kannten `potential` noch nicht), einem selbst
+// erstellten Kader oder einem der 454 prozeduralen Orgas stammt.
+function ensurePersonHasPotential(person) {
+  if (!person || person.vacant) return;
+  if (typeof person.potential === 'number' && !Number.isNaN(person.potential)) return;
+  person.potential = rollPotentialForOverall(person.overall || 45, person.age, Math.random, 5);
+}
+
+// Effektiver Pro-Person-Deckel für EINEN Stat: nie über PLAYER_DEV_STAT_MAX
+// (99, technische Obergrenze der Skala) UND nie über dem individuellen
+// Potenzial dieser Person. Da `overall` der Durchschnitt aller PLAYER_STAT_KEYS
+// ist, hält dieser Deckel PRO EINZELNEM STAT automatisch auch den Gesamtwert
+// unter dem Potenzial -- kein separater Overall-Clamp nötig.
+function personEffectiveStatCap(person) {
+  ensurePersonHasPotential(person);
+  return Math.min(PLAYER_DEV_STAT_MAX, person.potential);
+}
+
+// Sanftes Abflachen nahe der individuellen Obergrenze (`cap`, siehe
+// personEffectiveStatCap() -- vorher immer der feste PLAYER_DEV_STAT_MAX) --
+// volle Rate bis `cap - PLATEAU-Spanne`, danach linear runter auf
+// TRAINING_PLATEAU_MIN_RATE GENAU AM Deckel. Kein harter Clamp (der existiert
+// schon separat über applyPlayerStatDelta()s Math.min(cap, ...)) -- nur ein
+// weicher Dämpfer, damit die letzten Punkte vor dem PERSÖNLICHEN Maximum
+// spürbar schwerer fallen als die ersten, unabhängig davon, ob dieses Maximum
+// bei 99 oder (geringeres Potenzial) z.B. schon bei 70 liegt.
+function playerDevStatPlateauFactor(currentValue, cap) {
+  const effectiveCap = cap !== undefined ? cap : PLAYER_DEV_STAT_MAX;
+  const plateauStart = effectiveCap - (PLAYER_DEV_STAT_MAX - TRAINING_PLATEAU_START);
+  if (currentValue <= plateauStart) return 1;
+  const span = Math.max(1, effectiveCap - plateauStart);
+  const progress = Math.min(1, (currentValue - plateauStart) / span);
   return 1 - progress * (1 - TRAINING_PLATEAU_MIN_RATE);
 }
 
@@ -7299,7 +7360,11 @@ function maybeNotifyStatIncrease(org, player, key, before, after) {
 function applyPlayerStatDelta(org, player, dev, key, rawDeltaChange) {
   const before = player[key];
   dev.deltas[key] += rawDeltaChange;
-  const next = Math.max(PLAYER_DEV_STAT_MIN, Math.min(PLAYER_DEV_STAT_MAX, Math.round(dev.baseline[key] + dev.deltas[key])));
+  // Masterprompt-Feature ("Potenzial ist das absolute Maximum"): Deckel ist
+  // jetzt personEffectiveStatCap(player) statt des festen PLAYER_DEV_STAT_MAX
+  // -- siehe dortigen Kommentar, warum ein Pro-Stat-Deckel automatisch auch
+  // den Gesamtwert (Durchschnitt) unter dem Potenzial hält.
+  const next = Math.max(PLAYER_DEV_STAT_MIN, Math.min(personEffectiveStatCap(player), Math.round(dev.baseline[key] + dev.deltas[key])));
   player[key] = next;
   if (next !== before) {
     maybeNotifyStatIncrease(org, player, key, before, next);
@@ -7416,12 +7481,13 @@ function applyPlayerDevelopmentDelta(org, player, deltaChange, actionTally, isWi
   dev.goals += actionTally.goals;
   if (isWinner) dev.wins += 1; else dev.losses += 1;
   const focusCategory = resolveEffectiveTrainingCategory(org, player, dev);
+  const cap = personEffectiveStatCap(player);
   PLAYER_STAT_KEYS.forEach((key) => {
     const passive = deltaChange * TRAINING_PASSIVE_SHARE / PLAYER_STAT_KEYS.length;
     let focused = 0;
     if (focusCategory === 'general') focused = deltaChange * TRAINING_FOCUSED_SHARE / PLAYER_STAT_KEYS.length;
     else if (focusCategory === key) focused = deltaChange * TRAINING_FOCUSED_SHARE;
-    const combined = (passive + focused) * playerDevStatPlateauFactor(player[key]);
+    const combined = (passive + focused) * playerDevStatPlateauFactor(player[key], cap);
     applyPlayerStatDelta(org, player, dev, key, combined);
   });
   player.overall = Math.round(PLAYER_STAT_KEYS.reduce((s, k) => s + player[k], 0) / PLAYER_STAT_KEYS.length);
@@ -7519,8 +7585,15 @@ function reapplyPlayerDevelopmentToRosters() {
     const player = roster.find((p) => p.name === playerName);
     if (!player) return;
     const dev = playerDevelopment[key];
+    // Masterprompt-Feature: derselbe Pro-Person-Potenzial-Deckel wie
+    // applyPlayerStatDelta() (statt des vorher festen PLAYER_DEV_STAT_MAX) --
+    // sonst könnte ein gespeicherter, historisch übers Potenzial hinaus
+    // "überschossener" delta-Wert (siehe personEffectiveStatCap()-Kommentar)
+    // nach einem Neuladen kurzzeitig wieder über dem eigentlichen Maximum
+    // dieser Person landen.
+    const cap = personEffectiveStatCap(player);
     PLAYER_STAT_KEYS.forEach((k) => {
-      player[k] = Math.max(PLAYER_DEV_STAT_MIN, Math.min(PLAYER_DEV_STAT_MAX, Math.round(dev.baseline[k] + dev.deltas[k])));
+      player[k] = Math.max(PLAYER_DEV_STAT_MIN, Math.min(cap, Math.round(dev.baseline[k] + dev.deltas[k])));
     });
     player.overall = Math.round(PLAYER_STAT_KEYS.reduce((s, k) => s + player[k], 0) / PLAYER_STAT_KEYS.length);
     touchedOrgs.add(org);
@@ -8785,7 +8858,18 @@ function matchesScoutingAgeFilter(age) {
   return age >= min && age <= max;
 }
 
+// Masterprompt-Feature (Alterung/Entwicklung): `potential` ist inzwischen ein
+// ECHTES, gespeichertes Feld und der tatsächlich durchgesetzte Entwicklungs-
+// Deckel (siehe personEffectiveStatCap() -- vorher war diese Funktion hier
+// die EINZIGE Potenzial-Quelle im Spiel, eine reine Alters-Projektion ohne
+// jede Wirkung). Zeigt jetzt den echten Wert an, sobald vorhanden -- die
+// alte alters-basierte Projektion bleibt NUR als Fallback für den (nach
+// ensurePersonHasPotential()-Self-Heal praktisch nie mehr auftretenden) Fall
+// einer Person ganz ohne `potential`-Feld.
 function scoutingPotentialStars(player) {
+  if (typeof player.potential === 'number' && !Number.isNaN(player.potential)) {
+    return npcStarRating(player.potential);
+  }
   // Bug-Fix (User-Meldung: "bei potential steht noch nan"): npcStarRating()
   // ist jetzt zwar selbst schon gegen undefined/NaN overall abgesichert, aber
   // ein undefined/NaN `age` hätte hier direkt in ageFactor NaN erzeugt und
@@ -11202,6 +11286,35 @@ function fillCascadeMatchTally(stageInstanceId, stage, match, winsA, winsB, isFi
   return document.getElementById(domId);
 }
 
+// Bug-Fix (Masterprompt-Audit): pauseForOwnMatch() setzte bisher NUR
+// pendingOwnMatch/den MATCH-Button, ohne die Bracket-Karte selbst zu
+// befüllen -- die Karte blieb beim "TBD"-Platzhalter aus
+// tournamentMatchCardHtml() stehen, bis das eigene Match fertig war UND ein
+// Re-Render die Karte nachträglich füllte (was bei Runde-1-Matches wegen der
+// doneRounds>0-Guard in cascadeRevealStep() oft gar nicht griff). Sowohl das
+// eigene Team als auch der Gegner verschwanden dadurch für die komplette
+// Dauer des laufenden eigenen Matches. Bot-Matches hatten dieses Problem
+// nie, weil cascadeRevealSingleMatch() für sie direkt fillMatchCardResult()
+// mit echten Namen aufruft. Dieselbe "Namen sofort eintragen"-Logik jetzt
+// auch beim PAUSIEREN für ein eigenes Match -- analog zu
+// fillMatchCardNamesOnly(), das an anderer Stelle (Round-Robin/LCQ-
+// Vorrunde) bereits fürs "Teilnehmer stehen fest, Ergebnis noch nicht"-
+// Zwischenstadium existiert.
+function fillCascadeMatchNamesOnly(stageInstanceId, stage, match) {
+  const domId = domIdForCascadeMatch(stageInstanceId, stage, match);
+  if (!domId) return;
+  if (stage.visual === 'swissLadder') {
+    const rowEl = document.getElementById(domId);
+    if (!rowEl) return;
+    const teamEls = rowEl.querySelectorAll('.swiss-table-team');
+    fillSwissTeamCell(teamEls[0], match.a);
+    fillSwissTeamCell(teamEls[1], match.b === null ? 'Freilos' : match.b);
+    return;
+  }
+  if (stage.visual === 'roundRobin') fillMatchCardNamesOnly(domId, match.a, match.b);
+  else fillMatchCardNamesOnly(domId, match.teamAName, match.teamBName);
+}
+
 // Kurzer, neutraler Aufblitz-Effekt (.is-cascade-revealed, siehe style.css) --
 // entfernt/erzwungener Reflow davor, damit ein wiederholtes Aufblitzen
 // desselben Elements (mehrere Einzelspiele hintereinander) die Animation
@@ -11348,9 +11461,19 @@ function cascadeRevealStep(event, step, stage, stageInstanceId, stageData, round
       // event/step, damit die Partial-Fill-Funktion pro Match selbst
       // entscheidet: Bot-Matches und schon gezeigte eigene Matches bekommen
       // ihr Ergebnis, ein noch offenes eigenes Match bleibt namens-only.
-      if (doneRounds > 0 || groupRevealCount !== undefined) {
-        fillStageResults(stage, stageInstanceId, stageData, doneRounds, groupRevealCount, event, step);
-      }
+      //
+      // Bug-Fix (Masterprompt-Audit): Für Bracket/DoubleElim/Standard8/
+      // SwissLadder-Stages (kein groupRevealCount) wurde fillStageResults()
+      // bei doneRounds===0 GAR NICHT aufgerufen -- pausiert das eigene Match
+      // in der allerersten Runde einer Stage, ließ ein Re-Render (Tab
+      // wechseln + zurück, tournamentStageHtml() baut die Karten neu aus dem
+      // "TBD"-Default) die komplette Runde leer, inklusive längst fertiger
+      // Bot-Ergebnisse. fillBracketMatchesPartial()/fillStandard8BracketPartial()/
+      // fillSwissLadderResultsPartial() akzeptieren roundDepth=0 aber
+      // problemlos (füllen dann Runde 1 als "nur Namen", identisch zu
+      // pauseForOwnMatch()s eigenem fillCascadeMatchNamesOnly()-Aufruf oben)
+      // -- der Aufruf muss also immer passieren, nicht nur ab doneRounds>0.
+      fillStageResults(stage, stageInstanceId, stageData, doneRounds, groupRevealCount, event, step);
       return;
     }
     finish();
@@ -11414,6 +11537,11 @@ function cascadeRevealStep(event, step, stage, stageInstanceId, stageData, round
         ? ownRaw
         : { teamAName: ownRaw.a, teamBName: ownRaw.b, scoreA: ownRaw.winsA, scoreB: ownRaw.winsB, games: ownRaw.games, isOwnMatch: ownRaw.isOwnMatch, ownIsA: ownRaw.ownIsA };
       const ownKey = ownMatchKey(event, step, ownRaw);
+      // Bug-Fix (Masterprompt-Audit): Karte sofort mit echten Namen befüllen,
+      // statt auf einen späteren Re-Render zu warten (siehe
+      // fillCascadeMatchNamesOnly()-Kommentar) -- verhindert, dass eigenes
+      // Team + Gegner während des laufenden eigenen Matches unsichtbar sind.
+      fillCascadeMatchNamesOnly(stageInstanceId, stage, ownRaw);
       // Diese Runde selbst gilt erst als "fertig" (cascadeRoundProgress),
       // sobald ALLE ihre eigenen Matches gespielt wurden -- bis dahin bleibt
       // roundNumbers[idx] TBD für Re-Renders (siehe fillBracketMatchesPartial()/
@@ -12527,15 +12655,242 @@ function applyDailyPlayerTraining() {
   trainingCapacityAssignments(assignedOrg).forEach(({ player, dev, category, capacityFactor }) => {
     if (!category) return; // mode 'off' (oder kein auflösbarer Fokus) -> kein Tages-Fortschritt für diesen Spieler
     const baseChange = TRAINING_DAILY_BASE_GROWTH * playerAgeGrowthFactor(player.age) * moraleConditionFactor * trainerBonusFactor * capacityFactor;
+    const cap = personEffectiveStatCap(player);
     PLAYER_STAT_KEYS.forEach((key) => {
       if (category !== 'general' && category !== key) return;
       const share = category === 'general' ? baseChange / PLAYER_STAT_KEYS.length : baseChange;
-      const combined = share * playerDevStatPlateauFactor(player[key]);
+      const combined = share * playerDevStatPlateauFactor(player[key], cap);
       applyPlayerStatDelta(assignedOrg, player, dev, key, combined);
     });
     player.overall = Math.round(PLAYER_STAT_KEYS.reduce((s, k) => s + player[k], 0) / PLAYER_STAT_KEYS.length);
   });
   assignedOrg.strength = computeOrgStrengthFromRoster(assignedOrg.roster);
+}
+
+// ── Personalentwicklung (Masterprompt-Feature) ─────────────────────────────
+// Es gab bisher KEINERLEI Entwicklungssystem für Personal (Coach/Scout/
+// Analyst/...) -- Overall/Attribute änderten sich nach der Erzeugung nie
+// wieder, weder durchs Spielen noch durch Zeit. Bewusst ANALOG zum
+// bestehenden playerDevelopment aufgebaut (dieselbe baseline+deltas-
+// Architektur, derselbe Potenzial-Deckel über personEffectiveStatCap(), kein
+// neues Parallel-Konzept) -- Coach nutzt (wie schon beim initialen
+// Kaderaufbau, siehe rollPlayer() in data/org-rosters.js) dieselben
+// PLAYER_STAT_KEYS, die 8 echten Personal-Rollen ihre rollenspezifischen
+// STAFF_ROLE_ATTRIBUTES (data/org-rosters.js) -- das sind bereits die im
+// Auftrag verlangten "je nach Rolle unterschiedlichen Kategorien" (Scout:
+// Talentgespür/Netzwerk/Datenanalyse/Verhandlung usw.), nur mit den im Spiel
+// bereits etablierten (deutschen) Namen statt neu erfundener Begriffe.
+// Läuft NUR für die eigene Org (Bots haben ohnehin keinen täglichen
+// Trainings-Tick, siehe applyDailyPlayerTraining()-Kommentar) und NUR mit
+// Coach im Kader -- dieselbe "kein Trainerumfeld = keine Entwicklung"-Kopplung
+// wie bei Spielern (Auftrag: "nicht durch Zeit allein, nur durch echte
+// Aktivität/ein funktionierendes Umfeld").
+let staffDevelopment = {}; // 'orgName::role::personName' -> { baseline:{...}, deltas:{...}, statKeys:[...] }
+const STAFF_DEV_DAILY_BASE_GROWTH = TRAINING_DAILY_BASE_GROWTH * 0.8; // leicht gedämpft ggü. Spielern (kein Sieg-/Aktions-Match-Bonus möglich)
+
+function staffStatKeysForRole(role) {
+  if (role === 'Coach') return PLAYER_STAT_KEYS;
+  return STAFF_ROLE_ATTRIBUTES[role] || [];
+}
+
+function staffDevKey(orgName, role, personName) { return orgName + '::' + role + '::' + personName; }
+
+function ensureStaffDevelopment(orgName, role, person) {
+  const key = staffDevKey(orgName, role, person.name);
+  if (!staffDevelopment[key]) {
+    const statKeys = staffStatKeysForRole(role);
+    const baseline = {};
+    const deltas = {};
+    statKeys.forEach((k) => { baseline[k] = person[k]; deltas[k] = 0; });
+    staffDevelopment[key] = { baseline, deltas, statKeys };
+  }
+  return staffDevelopment[key];
+}
+
+// Analog zu applyPlayerStatDelta() (derselbe Potenzial-Deckel), aber ohne
+// Toast/Post-Digest -- Personal-Fortschritt ist kein im Auftrag verlangtes
+// Benachrichtigungsereignis (nur "muss sichtbar/spielerisch relevant sein",
+// erfüllt durch die tatsächlich steigenden Werte auf der Personal-Seite).
+function applyStaffStatDelta(person, dev, key, rawDeltaChange) {
+  dev.deltas[key] += rawDeltaChange;
+  const cap = personEffectiveStatCap(person);
+  person[key] = Math.max(PLAYER_DEV_STAT_MIN, Math.min(cap, Math.round(dev.baseline[key] + dev.deltas[key])));
+}
+
+function applyDailyStaffTraining() {
+  if (!assignedOrg || !assignedOrg.roster || !assignedOrg.roster.coach) return;
+  const slots = [{ role: 'Coach', person: assignedOrg.roster.coach }];
+  (assignedOrg.roster.staff || []).forEach((s) => { if (s && !s.vacant) slots.push({ role: s.role, person: s }); });
+  slots.forEach(({ role, person }) => {
+    const statKeys = staffStatKeysForRole(role);
+    if (statKeys.length === 0) return;
+    const dev = ensureStaffDevelopment(assignedOrg.name, role, person);
+    const cap = personEffectiveStatCap(person);
+    statKeys.forEach((key) => {
+      const combined = STAFF_DEV_DAILY_BASE_GROWTH * playerDevStatPlateauFactor(person[key], cap);
+      applyStaffStatDelta(person, dev, key, combined);
+    });
+    person.overall = Math.round(statKeys.reduce((s, k) => s + person[k], 0) / statKeys.length);
+  });
+  assignedOrg.strength = computeOrgStrengthFromRoster(assignedOrg.roster);
+}
+
+// Analog zu reapplyPlayerDevelopmentToRosters() -- ORGANIZATIONS wird bei
+// jedem App-Start komplett neu aus den Rohdaten aufgebaut, die gespeicherte
+// Personalentwicklung muss danach einmal zurückgespielt werden.
+function reapplyStaffDevelopmentToRosters() {
+  const touchedOrgs = new Set();
+  Object.keys(staffDevelopment).forEach((key) => {
+    const parts = key.split('::');
+    if (parts.length < 3) return;
+    const orgName = parts[0];
+    const role = parts[1];
+    const personName = parts.slice(2).join('::');
+    const org = findOrgByName(orgName);
+    if (!org || !org.roster) return;
+    const person = role === 'Coach' ? org.roster.coach : (org.roster.staff || []).find((s) => s && !s.vacant && s.role === role && s.name === personName);
+    if (!person || person.name !== personName) return;
+    const dev = staffDevelopment[key];
+    const cap = personEffectiveStatCap(person);
+    dev.statKeys.forEach((k) => { person[k] = Math.max(PLAYER_DEV_STAT_MIN, Math.min(cap, Math.round(dev.baseline[k] + dev.deltas[k]))); });
+    person.overall = Math.round(dev.statKeys.reduce((s, k) => s + person[k], 0) / dev.statKeys.length);
+    touchedOrgs.add(org);
+  });
+  touchedOrgs.forEach((org) => { org.strength = computeOrgStrengthFromRoster(org.roster); });
+}
+
+// Analog zu resetPlayerDevelopmentToBaseline() -- "Neues Spiel", siehe
+// dortigen Kommentar (ORGANIZATIONS-Objekte überleben "Neues Spiel"
+// innerhalb derselben Electron-Session, reines Leeren der Map würde die
+// bereits IN-PLACE veränderten Personal-Werte nicht zurücksetzen).
+function resetStaffDevelopmentToBaseline() {
+  const touchedOrgs = new Set();
+  Object.keys(staffDevelopment).forEach((key) => {
+    const parts = key.split('::');
+    if (parts.length < 3) return;
+    const orgName = parts[0];
+    const role = parts[1];
+    const personName = parts.slice(2).join('::');
+    const org = findOrgByName(orgName);
+    if (!org || !org.roster) return;
+    const person = role === 'Coach' ? org.roster.coach : (org.roster.staff || []).find((s) => s && !s.vacant && s.role === role && s.name === personName);
+    if (!person || person.name !== personName) return;
+    const dev = staffDevelopment[key];
+    dev.statKeys.forEach((k) => { person[k] = dev.baseline[k]; });
+    person.overall = Math.round(dev.statKeys.reduce((s, k) => s + person[k], 0) / dev.statKeys.length);
+    touchedOrgs.add(org);
+  });
+  touchedOrgs.forEach((org) => { org.strength = computeOrgStrengthFromRoster(org.roster); });
+  staffDevelopment = {};
+}
+
+// ── Alterung, Karriereende, automatischer Ersatz (Masterprompt-Feature) ────
+// Läuft GENAU EINMAL pro Saisonwechsel (siehe resetSeasonScopedDashboardState()
+// weiter unten -- derselbe bereits etablierte, kalenderbasierte "einmal pro
+// Saison"-Hook, den auch careerState.seasonNumber selbst nutzt), für JEDE
+// Org (eigene UND alle Bot-Orgs -- der Auftrag verlangt glaubwürdige
+// Alterung für "Spieler UND Personal", nicht nur für die eigene Karriere).
+const RETIREMENT_MAX_AGE = 40; // absolute Obergrenze laut Auftrag
+const RETIREMENT_EARLY_MIN_AGE = 35; // ab hier steigende Zufallschance VOR der Obergrenze ("darf auch früher passieren")
+
+// Baut eine flache Liste aller besetzten Kaderplätze EINES Rosters, mit
+// Getter/Setter pro Platz -- ein Ersatz kann so unabhängig vom Container-Typ
+// (Array-Index bei Startern/Reserve, fixes Feld bei Sub/Coach, Objekt-Merge
+// bei Personal) einheitlich eingesetzt werden. Vakante Personal-Plätze
+// ({role, vacant:true}, siehe computeOrgStrengthFromRoster()-Kommentar) und
+// leere Slots werden übersprungen -- kein Alter zum Hochzählen vorhanden.
+function rosterAgingSlots(roster) {
+  const slots = [];
+  roster.starters.forEach((p, i) => {
+    if (p) slots.push({ role: 'Starter', isPlayerRole: true, get: () => roster.starters[i], set: (v) => { roster.starters[i] = v; } });
+  });
+  if (roster.sub) slots.push({ role: 'Sub', isPlayerRole: true, get: () => roster.sub, set: (v) => { roster.sub = v; } });
+  (roster.reserve || []).forEach((p, i) => {
+    if (p) slots.push({ role: 'Reserve', isPlayerRole: true, get: () => roster.reserve[i], set: (v) => { roster.reserve[i] = v; } });
+  });
+  if (roster.coach) slots.push({ role: 'Coach', isPlayerRole: true, get: () => roster.coach, set: (v) => { roster.coach = v; } });
+  (roster.staff || []).forEach((p, i) => {
+    if (p && !p.vacant) slots.push({ role: p.role, isPlayerRole: false, get: () => roster.staff[i], set: (v) => { roster.staff[i] = { role: p.role, ...v }; } });
+  });
+  return slots;
+}
+
+// 35+: steigende Zufallschance (35 -> 8%, 36 -> 16%, ... 39 -> 40%), 40:
+// garantiert. Darunter aktiv, egal wie stark/schwach die Person ist -- Alter
+// ist die einzige Karriereende-Ursache (Auftrag kennt keine weiteren).
+function shouldRetireThisSeason(age) {
+  if (age >= RETIREMENT_MAX_AGE) return true;
+  if (age >= RETIREMENT_EARLY_MIN_AGE) return Math.random() < (age - RETIREMENT_EARLY_MIN_AGE + 1) * 0.08;
+  return false;
+}
+
+// Altert JEDEN besetzten Platz EINES Rosters um 1 Saison und ersetzt jede
+// Person, die laut shouldRetireThisSeason() in Rente geht -- der Ersatz
+// behält Rolle + Qualitätsklasse (Sterne aus dem ALTEN overall) + Potenzial-
+// klasse (Sterne aus dem ALTEN potential), bekommt aber einen komplett neuen
+// Namen/Alter/Statverteilung (rollReplacementPerson(), data/org-rosters.js) --
+// exakt die Auftragsvorgabe "gleiche Qualitätsklasse, andere Eigenschaften".
+// Post-Benachrichtigung NUR für die eigene Org (Post ist laut Postsystem-
+// Konzept bewusst auf assignedOrg beschränkt, siehe pushPostMessage()).
+function ageAndRetireRosterForSeason(org, isOwnOrg) {
+  const roster = org.roster;
+  if (!roster) return;
+  let changed = false;
+  rosterAgingSlots(roster).forEach((slot) => {
+    const person = slot.get();
+    if (!person || typeof person.age !== 'number') return;
+    person.age += 1;
+    if (!shouldRetireThisSeason(person.age)) return;
+    changed = true;
+    const retireeName = person.name;
+    const retireeAge = person.age;
+    ensurePersonHasPotential(person);
+    const qualityStars = npcStarRating(person.overall);
+    const potentialStars = npcStarRating(person.potential);
+    const ageRange = slot.isPlayerRole ? { ageMin: 18, ageMax: 25 } : { ageMin: 20, ageMax: 30 };
+    const replacement = rollReplacementPerson(qualityStars, slot.role, careerDate, {
+      potentialStars,
+      ageMin: ageRange.ageMin,
+      ageMax: ageRange.ageMax,
+    });
+    slot.set(replacement);
+    if (isOwnOrg) {
+      const isPlayerLabel = slot.role === 'Starter' || slot.role === 'Sub' || slot.role === 'Reserve';
+      const roleNoun = isPlayerLabel ? 'Spieler ' : (slot.role === 'Coach' ? 'Coach ' : slot.role + ' ');
+      pushPostMessage(
+        isPlayerLabel ? 'player' : 'staff',
+        'HIGH',
+        isPlayerLabel ? 'Kader-Management' : 'Personalabteilung',
+        'Karriereende',
+        roleNoun + retireeName + ' hat seine aktive Esport-Karriere beendet (Alter: ' + retireeAge + '). Ein neuer Nachwuchstalent wurde bereits automatisch für die Position verpflichtet.',
+        null,
+        { type: 'openPage', page: isPlayerLabel ? 'roster' : 'staff' }
+      );
+    }
+  });
+  if (changed) org.strength = computeOrgStrengthFromRoster(roster);
+}
+
+// Verarbeitet ALLE Orgs GENAU EINMAL -- die eigene Org zuerst (garantiert
+// echte Post-Behandlung, auch wenn sie NICHT Teil von ORGANIZATIONS ist, z.B.
+// bei "Organisation erstellen"), danach jede Bot-Org, deren Roster-Referenz
+// noch nicht verarbeitet wurde. Der Referenz-Check (statt eines Namens-
+// Vergleichs) ist nötig, weil instantiateOrg() (organizations.js) beim
+// Karrierestart nur einen FLACHEN Kopie erzeugt -- assignedOrg.roster ist bei
+// einer real gewählten Org (nicht "Organisation erstellen") dieselbe Objekt-
+// Referenz wie ORGANIZATIONS[i].roster; ohne diesen Check würde ihr Kader
+// zweimal in derselben Saison altern.
+function runSeasonAgingAndRetirement() {
+  const processedRosters = new Set();
+  if (assignedOrg && assignedOrg.roster) {
+    ageAndRetireRosterForSeason(assignedOrg, true);
+    processedRosters.add(assignedOrg.roster);
+  }
+  ORGANIZATIONS.forEach((org) => {
+    if (!org.roster || processedRosters.has(org.roster)) return;
+    processedRosters.add(org.roster);
+    ageAndRetireRosterForSeason(org, false);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -13276,6 +13631,9 @@ function advanceOneCalendarDay() {
   // applyDailyPlayerTraining()-Kommentar für den Grund, warum das hier und
   // nicht in finishDashboardDayAdvance() hängt (Schnellvorlauf-Korrektheit).
   applyDailyPlayerTraining();
+  // Masterprompt-Feature: Personalentwicklung läuft im selben Tages-Tick wie
+  // die Spielerentwicklung (dieselbe Schnellvorlauf-Korrektheit-Begründung).
+  applyDailyStaffTraining();
   // Nachrichtensystem: Match-Ereignis-Trigger MUSS nach checkTournamentResolutions()
   // laufen (derselbe Grund wie beim checkSponsorGoals()-Kommentar oben -- sonst
   // sieht die Prüfung noch den alten matchHistory-Stand), Tages-Trigger danach --
@@ -13572,7 +13930,7 @@ function confirmOrgAndProceed() {
   // Bug-Fix (User-Meldung: "bei Gesamtsaldo 31.000€ nicht 30.000"): eine
   // selbst erstellte Org (buildCustomOrgFromForm(), erkennbar an .shortname,
   // die 454 echten Orgas haben nie eins) hat ein BEWUSST exaktes, festes
-  // Startbudget je Schwierigkeitsstufe (z.B. "Schwer" = genau 30.000 €) --
+  // Startbudget je Schwierigkeitsstufe (z.B. "Schwer" = genau 50.000 €) --
   // der Trait-Bonus/Malus soll diesen gewählten Schwierigkeitsgrad nicht
   // verwässern, gilt deshalb nur für die 454 echten Orgas.
   if (!assignedOrg.shortname) {
@@ -13680,6 +14038,11 @@ function confirmOrgAndProceed() {
   // betroffenen Spieler auf seine echte Baseline zurück, bevor die
   // Nachverfolgung geleert wird.
   resetPlayerDevelopmentToBaseline();
+  // Masterprompt-Feature (Personalentwicklung): exakt derselbe Leak-Grund wie
+  // bei playerDevelopment direkt darüber -- ORGANIZATIONS-Objekte (und damit
+  // ihre Coach-/Personal-Referenzen) überleben "Neues Spiel" innerhalb
+  // derselben Electron-Session.
+  resetStaffDevelopmentToBaseline();
   // Personal-Verpflichtungen (Runde 117) betreffen nur fremde Bot-Orgs --
   // anders als bei playerDevelopment gibt es hier keinen "Baseline"-Zustand
   // zum Zurückspielen (jede Ersatzperson ist bereits ein eigenständiges,
@@ -13697,6 +14060,17 @@ function confirmOrgAndProceed() {
   pendingOwnMatch = null; // Runde 99: kein Match aus einer vorherigen Karriere darf hier noch anstehen
   pendingPrizePayouts = []; // Runde 101: kein Preisgeld aus einer vorherigen Karriere darf hier noch ausstehen
   seasonSkipUsed = false; // Runde 102: neue Karriere, neue Saison 1 -- Banner darf wieder erscheinen können
+  // Bug-Fix (Masterprompt-Audit): npcRelations/postInbox fehlten hier komplett
+  // -- da der Renderer-Prozess zwischen zwei Karrieren in derselben Electron-
+  // Session nicht neu geladen wird, überlebten Post-Nachrichten und NPC-Chat-
+  // verläufe einer alten Karriere unbemerkt bis in die neue hinein (und wurden
+  // von saveGameState() unten sogar gleich in den neuen Spielstand geschrieben).
+  npcRelations = {};
+  postInbox = [];
+  postDevAccumulator = {};
+  postLastDevSummaryDate = null;
+  postLastTournamentTriggerDate = null;
+  postNoCoachWarned = false;
   // Bug-Fix (Audit): fehlte hier bisher (siehe resetSeasonScopedDashboardState()-
   // Fix) -- App-Neustart ist für eine neue Karriere nicht nötig, dieselben
   // module-weiten Variablen laufen über "Neue Karriere starten" hinweg weiter.
@@ -14119,6 +14493,12 @@ function resetSeasonScopedDashboardState() {
   // renderDashboardTopbar()), aber der Vollständigkeit halber ergänzt, falls
   // sich die Button-Gating-Logik künftig ändert.
   cascadeAnimationActive = false;
+  // Masterprompt-Feature (Alterung/Karriereende/Ersatz): läuft genau hier,
+  // weil resetSeasonScopedDashboardState() bereits der einzige, garantiert
+  // genau EINMAL pro Saisonwechsel laufende Hook im ganzen Projekt ist
+  // (careerState.seasonNumber selbst wird nur hier erhöht) -- kein weiterer,
+  // eigener Kalender-Trigger nötig.
+  runSeasonAgingAndRetirement();
 }
 
 // Runde 102, Bug-Fix (User-Meldung: "Schnellvorlauf überspringt immer ganzes
@@ -14174,7 +14554,7 @@ let loadStateRequestId = 0;
 
 function collectSaveState() {
   return {
-    version: 35, gameMode, careerCharacter, assignedOrg,
+    version: 36, gameMode, careerCharacter, assignedOrg,
     careerState, careerBotTeams, careerRivalRecords,
     transferLog, careerPlaytimeSeconds,
     ceoFireable, achievementsEnabled, consecutivePoorSeasons, careerEnded, transfersLockedUntil, unlockedAchievements,
@@ -14196,6 +14576,7 @@ function collectSaveState() {
     financeMonthlyLedger,
     financeTransactionLog,
     playerDevelopment,
+    staffDevelopment,
     npcRelations,
     postInbox,
     staffTransferReplacements,
@@ -14395,6 +14776,11 @@ async function loadGameState() {
   // im Anschluss dev.deltas[k] liest (siehe migratePlayerDevelopmentDeltas()-Kommentar).
   migratePlayerDevelopmentDeltas();
   reapplyPlayerDevelopmentToRosters();
+  // v1-v35-Spielstände kannten die Personalentwicklung noch nicht (Masterprompt-
+  // Feature) -- exakt dasselbe Zurückspiel-Prinzip wie playerDevelopment
+  // direkt darüber, nur für Coach + die 8 Personal-Rollen.
+  staffDevelopment = data.staffDevelopment || {};
+  reapplyStaffDevelopmentToRosters();
   // v1-v33-Spielstände kannten das Nachrichtensystem noch nicht (siehe
   // ensureNpcRelation()). Keine Migration/Reihenfolge-Abhängigkeit nötig --
   // npcRelations ist eine eigenständige Side-Map, die NICHTS auf Roster-

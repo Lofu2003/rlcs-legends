@@ -90,7 +90,7 @@ function basecampLevelData(level) {
 // 5 Qualitätsstufen. bonus = Punkte je fokussierter Statachse (mousepads
 // erhalten nur 1 Statachse, siehe statFocus.length-Verzweigung unten), price =
 // Spanne in Euro (Wirtschaft laut ORG_CREATE_DIFFICULTY_BUDGET in renderer.js:
-// 30.000 € [Schwer] bis 10.000.000 € [Leicht] Startbudget, Spielertransfers bis
+// 50.000 € [Schwer] bis 10.000.000 € [Leicht] Startbudget, Spielertransfers bis
 // weit über 1.000.000 € -- Peripherie bleibt bewusst deutlich darunter, damit
 // sie ein sinnvoller Zwischenschritt ist statt eines Rundungsfehlers im Budget).
 const SHOP_TIERS = [
