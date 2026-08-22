@@ -2,8 +2,22 @@ node_modules/
 dist/
 *.log
 
+# Lokale KI-Runtime (llama.cpp) + GGUF-Modell -- mehrere hundert MB bis GB,
+# gehören NICHT ins Git-Repo (Auftragsvorgabe: keine Repo-Aufblähung).
+# Distribution an Endnutzer läuft über GitHub Releases + Auto-Download,
+# nicht über normale Git-Dateien. Lokal von main.js/AI-Setup verwaltet.
+tools/ai/runtime/
+tools/ai/models/
+
 # Enthält den echten Discord-Feedback-Webhook -- darf NIE ins öffentliche
 # Repo, da jeder mit dieser URL Nachrichten in den Discord-Kanal posten
 # könnte. Wird zur Laufzeit von main.js gelesen, ist aber lokal/pro-Build
 # gehalten statt versioniert.
 discord-webhook.local.json
+
+# Einmalige QA-Auswertungs-Ausgaben (Audit-/Chaos-/Longrun-Rohdaten aus den
+# bisherigen Runden V7-V18, alle mit "_" prefixiert) -- reine, disponible
+# Lauf-Ergebnisse, keine Test-Infrastruktur. Die eigentlichen, wiederverwend-
+# baren Test-/Analyse-Skripte (ohne "_"-Prefix, z.B. chaos-run-v18.js,
+# headless-runner.js) bleiben regulär versioniert.
+tools/headless-qa/_*

@@ -28,10 +28,20 @@
 // freiem Draft, siehe confirmOrgAndProceed() in renderer.js).
 const ORG_BUDGET_HEADROOM = 1.4;
 
+// Bug-Fix (Bot Ecosystem V6, per Headless-Long-Run gefunden, P0 -- Crash):
+// las bisher roster.sub.overall/roster.coach.overall OHNE Null-Check --
+// stürzte ab, sobald eine Org (voellig normaler, seit den Coach-/Personal-
+// Markt-Fixes sogar HAEUFIGER Zustand) gerade keinen Sub oder Coach besetzt
+// hat. Reproduziert: reapplyBotEconomyOverlay() ruft dies als Fallback,
+// falls saved.budget nach dem JSON-Save/Load-Roundtrip nicht endlich ist
+// (z.B. NaN -> JSON.stringify(NaN) === null -> Number.isFinite(null) ===
+// false) -- bei 454 Orgs über mehrere Saisons real haeufiger als es zunaechst
+// wirkt. `roster.sub`/`roster.coach` koennen legitim null sein (vakante
+// Rolle), also robust behandeln statt abzustürzen.
 function computeOrgBudget(roster) {
   const rosterValue = roster.starters.reduce((sum, p) => sum + calculatePrice(p.overall), 0)
-    + calculatePrice(roster.sub.overall)
-    + calculatePrice(roster.coach.overall);
+    + (roster.sub ? calculatePrice(roster.sub.overall) : 0)
+    + (roster.coach ? calculatePrice(roster.coach.overall) : 0);
   return Math.round((rosterValue * ORG_BUDGET_HEADROOM) / 10000) * 10000;
 }
 

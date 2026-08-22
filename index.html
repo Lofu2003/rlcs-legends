@@ -2,6 +2,28 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
+  <!-- Bug-Fix (V18.1, Phase 15): behebt die Electron-Startwarnung "Insecure
+       Content-Security-Policy" (V18 BUG-05). Vorher gab es GAR KEINE CSP.
+       Geprueft vor dem Hinzufuegen: keine Inline-<script>-Bloecke (alle
+       Skripte kommen ueber <script src="..."> aus dem App-Bundle), kein
+       fetch()/XMLHttpRequest im Renderer (die lokale KI laeuft ueber IPC zu
+       main.js, nicht per direktem Netzwerkaufruf aus dem Renderer -- von
+       connect-src unberuehrt). img-src/media-src brauchen explizit `file:`
+       (nicht nur 'self'): hochgeladene Portraits/Team-Logos werden nach
+       userData kopiert und ueber eine VOLLSTAENDIGE file://-URL referenziert,
+       die ausserhalb des App-Bundle-Ursprungs liegt (siehe
+       selectedCharacterPortraitUrl/.logoUrl in renderer.js).
+       style-src 'unsafe-inline' ist eine BEWUSSTE, dokumentierte Ausnahme:
+       ein erster Testlauf mit striktem style-src 'self' zeigte >10
+       "Refused to apply inline style"-Fehler -- renderer.js setzt an sehr
+       vielen Stellen dynamisch generierte style="..."-Attribute direkt in
+       per .innerHTML eingefuegtem HTML (z.B. Team-/Item-Farben). Das auf CSS-
+       Klassen umzustellen waere ein groesserer, riskanter Umbau kurz vor
+       Release (siehe V18.1-Auftrag: "NICHT kurz vor Release umbauen, dann
+       dokumentieren") -- script-src bleibt dagegen strikt (kein
+       'unsafe-inline'/'unsafe-eval'), was der eigentlich sicherheitsrelevante
+       Teil der urspruenglichen Warnung war (Code-Ausfuehrung, nicht Styling). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:; media-src 'self' file:; connect-src 'self'; object-src 'none'; base-uri 'self';">
   <title>RLCS Legends</title>
   <link rel="icon" href="build/icon.png">
   <link rel="stylesheet" href="style.css">
@@ -67,7 +89,7 @@
       <nav class="mainmenu-nav">
         <button id="btn-new-game" class="mainmenu-nav-item mainmenu-nav-primary">Neues Spiel</button>
         <button id="btn-load-game" class="mainmenu-nav-item">Spielstand laden</button>
-        <button id="btn-tutorial" class="mainmenu-nav-item" disabled title="Kommt später">Tutorial<span class="mainmenu-nav-soon">Kommt später</span></button>
+        <button id="btn-tutorial" class="mainmenu-nav-item">Tutorial</button>
         <button id="btn-database" class="mainmenu-nav-item" disabled title="Kommt später">Datenbank<span class="mainmenu-nav-soon">Kommt später</span></button>
         <button id="btn-settings" class="mainmenu-nav-item">Einstellungen</button>
         <button id="btn-quit" class="mainmenu-nav-item mainmenu-nav-danger">Beenden</button>
@@ -89,7 +111,7 @@
       </div>
     </div>
 
-    <p id="mainmenu-version" class="mainmenu-version">v0.7.0</p>
+    <p id="mainmenu-version" class="mainmenu-version">v0.8.0</p>
   </div>
 
   <!-- ── Spielmodus-Auswahl (bei "Neues Spiel") ───────────────────────────── -->
@@ -744,14 +766,13 @@
                   <div id="dashboard-home-org-condition" class="dashboard-home-org-condition"></div>
                 </div>
                 <div class="dashboard-home-card">
-                  <div class="dashboard-home-card-title">» Wichtige Ereignisse</div>
-                  <div class="dashboard-home-event-row">
-                    <span class="dashboard-home-event-icon">💻</span>
-                    <div class="dashboard-home-event-text">
-                      <span class="dashboard-home-event-title">Willkommen!</span>
-                      <span class="dashboard-home-event-sub">Willkommen bei RLCS Legends!</span>
-                    </div>
+                  <div class="dashboard-home-card-title">» Scrims</div>
+                  <div id="dashboard-home-scrim-incoming" class="dashboard-home-scrim-incoming"></div>
+                  <div class="dashboard-home-scrim-invite-row">
+                    <select id="dashboard-home-scrim-target" class="dashboard-home-scrim-select"></select>
+                    <button type="button" id="btn-dashboard-home-scrim-invite" class="dashboard-post-mark-all-btn">Einladen</button>
                   </div>
+                  <div id="dashboard-home-scrim-history" class="dashboard-home-scrim-history"></div>
                 </div>
               </div>
 
@@ -870,6 +891,7 @@
                   <span class="dashboard-finance-summary-label">Nicht zugeteiltes Budget (Preisgeld)</span>
                   <span id="dashboard-finance-pending-prize" class="dashboard-finance-summary-value dashboard-finance-value-pending"></span>
                 </div>
+                <button type="button" id="btn-finance-request-report" class="dashboard-post-mark-all-btn dashboard-finance-report-btn">📋 Finanzbericht anfordern</button>
               </div>
 
               <div class="dashboard-finance-card dashboard-finance-alloc-card">
@@ -953,6 +975,7 @@
               <div class="dashboard-sponsors-subtabs">
                 <button type="button" class="dashboard-sponsors-subtab is-active" data-subtab="overview">Übersicht</button>
                 <button type="button" class="dashboard-sponsors-subtab" data-subtab="mine">Meine Sponsoren</button>
+                <div id="dashboard-sponsors-reputation" class="dashboard-sponsors-reputation" title="Reputation verbessert sich mit einem PR-Manager -- höhere Reputation überzeugt bessere Sponsoren und Spieler/Personal eher von einem Wechsel."></div>
               </div>
 
               <div id="dashboard-sponsors-overview" class="dashboard-sponsors-subpanel dashboard-sponsors-overview-row">
@@ -1516,6 +1539,29 @@
                   </div>
                 </div>
 
+                <!-- Beziehung zum Manager -- echter PRO-PERSON-Wert (anders als der
+                     Team-Zustand oben), nur für eigene kontaktierbare Personen
+                     sichtbar. Härtungsauftrag: Lob/Kritik/Beleidigung im Chat ändert
+                     relation.relationship/Zufriedenheit bereits (ConsequenceManager),
+                     das war bisher aber NIRGENDS im Spieler-/Personalpanel sichtbar --
+                     nur im Nachrichten-Chat-Header. Siehe renderPersonInfoPanel(). -->
+                <div id="dashboard-person-info-relation-card" class="hidden">
+                  <div class="dashboard-tournaments-breadcrumb">» Beziehung zum Manager</div>
+                  <div class="dashboard-person-info-team-status">
+                    <div class="dashboard-person-info-status-row">
+                      <span class="dashboard-person-info-status-label">Zufriedenheit</span>
+                      <div class="dashboard-person-info-stat-track"><div id="dashboard-person-info-satisfaction-fill" class="dashboard-person-info-stat-fill"></div></div>
+                      <span id="dashboard-person-info-satisfaction-value" class="dashboard-person-info-stat-value"></span>
+                      <span id="dashboard-person-info-satisfaction-pill" class="dashboard-roster-card-pill"></span>
+                    </div>
+                    <div class="dashboard-person-info-status-row">
+                      <span class="dashboard-person-info-status-label">Beziehung</span>
+                      <div class="dashboard-person-info-stat-track"><div id="dashboard-person-info-relationship-fill" class="dashboard-person-info-stat-fill"></div></div>
+                      <span id="dashboard-person-info-relationship-value" class="dashboard-person-info-stat-value"></span>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Training (neu) -- nur bei echten Spielern MIT playerDevelopment-
                      Eintrag sichtbar, siehe renderPersonInfoPanel()-Kommentar. Rein
                      lesend (Modus/Kategorie ändern passiert auf der Trainings-Seite). -->
@@ -1661,6 +1707,12 @@
                     <option value="21-25">21-25</option>
                     <option value="26-30">26-30</option>
                     <option value="31-99">31+</option>
+                  </select>
+                </label>
+                <label class="dashboard-scouting-filter-field" id="dashboard-scouting-filter-role-field">
+                  <span>Rolle</span>
+                  <select id="dashboard-scouting-filter-role">
+                    <option value="">Alle Rollen</option>
                   </select>
                 </label>
               </div>
@@ -1912,7 +1964,10 @@
                 <div id="dashboard-post-list-view" class="dashboard-post-list-view">
                   <div class="dashboard-post-list-header">
                     <div id="dashboard-post-list-title" class="dashboard-post-list-title">Alle</div>
-                    <button type="button" id="btn-dashboard-post-mark-all-read" class="dashboard-post-mark-all-btn">Alle als gelesen markieren</button>
+                    <div class="dashboard-post-list-header-actions">
+                      <button type="button" id="btn-dashboard-post-mark-all-read" class="dashboard-post-mark-all-btn">Alle als gelesen markieren</button>
+                      <button type="button" id="btn-dashboard-post-delete-all" class="dashboard-post-mark-all-btn is-danger">Alle löschen</button>
+                    </div>
                   </div>
                   <div id="dashboard-post-message-list" class="dashboard-post-message-list"></div>
                 </div>
@@ -2058,6 +2113,50 @@
     </div>
   </div>
 
+  <!-- ── Tutorial (Masterprompt-Auftrag: echte Schritt-für-Schritt-Führung
+       über die tatsächliche UI, kein statisches Bild) ────────────────────── -->
+  <div id="tutorial-overlay" class="tutorial-overlay hidden">
+    <div id="tutorial-dim-top" class="tutorial-dim"></div>
+    <div id="tutorial-dim-bottom" class="tutorial-dim"></div>
+    <div id="tutorial-dim-left" class="tutorial-dim"></div>
+    <div id="tutorial-dim-right" class="tutorial-dim"></div>
+    <div id="tutorial-callout" class="tutorial-callout">
+      <div class="tutorial-callout-progress"><span id="tutorial-step-counter"></span></div>
+      <div id="tutorial-callout-title" class="tutorial-callout-title"></div>
+      <p id="tutorial-callout-text" class="tutorial-callout-text"></p>
+      <div class="tutorial-callout-buttons">
+        <button type="button" id="btn-tutorial-skip" class="menu-btn">Überspringen</button>
+        <div class="tutorial-callout-nav">
+          <button type="button" id="btn-tutorial-back" class="menu-btn">Zurück</button>
+          <button type="button" id="btn-tutorial-next" class="menu-btn menu-btn-primary">Weiter</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Vertragsverhandlung (Masterprompt-Auftrag: echte Verhandlung statt
+       sofortiger Verpflichtung) ─────────────────────────────────────────── -->
+  <div id="negotiation-offer-modal" class="modal-overlay hidden">
+    <div class="modal-box negotiation-box">
+      <div class="modal-org-title">Verhandlung: <span id="negotiation-offer-person-name"></span></div>
+      <p id="negotiation-offer-subtitle" class="negotiation-subtitle"></p>
+      <div id="negotiation-offer-log" class="negotiation-log"></div>
+      <div id="negotiation-offer-fee-field">
+        <label class="negotiation-label" for="negotiation-offer-fee">Transferwert-Angebot</label>
+        <input type="number" id="negotiation-offer-fee" class="negotiation-offer-input" min="0" step="1000" />
+      </div>
+      <div>
+        <label class="negotiation-label" for="negotiation-offer-salary">Gehalts-Angebot (pro Monat)</label>
+        <input type="number" id="negotiation-offer-salary" class="negotiation-offer-input" min="0" step="100" />
+      </div>
+      <p id="negotiation-offer-status" class="update-check-status"></p>
+      <div class="negotiation-buttons">
+        <button id="btn-negotiation-offer-cancel" class="menu-btn">Abbrechen</button>
+        <button id="btn-negotiation-offer-send" class="menu-btn menu-btn-primary">Angebot senden</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Generisches Bestätigungs-Popup (ersetzt window.confirm) ─────────── -->
   <div id="confirm-modal" class="modal-overlay hidden">
     <div class="modal-box">
@@ -2098,6 +2197,7 @@
         <button type="button" class="settings-category-btn" data-settings-category="sprache">Sprache</button>
         <button type="button" class="settings-category-btn" data-settings-category="spielablauf">Spielablauf</button>
         <button type="button" class="settings-category-btn" data-settings-category="system">System</button>
+        <button type="button" class="settings-category-btn" data-settings-category="ki">Lokale KI</button>
       </div>
 
       <div class="settings-scroll">
@@ -2180,6 +2280,31 @@
             <label class="settings-label" for="settings-auto-update">Beim Start automatisch nach Updates suchen</label>
             <input id="settings-auto-update" type="checkbox" class="settings-checkbox" />
           </div>
+        </div>
+
+        <!-- Lokale, generative Game-KI (llama.cpp + GGUF-Modell, komplett offline
+             nach Einrichtung) -- separat vom Spiel-Update versioniert. -->
+        <div class="settings-category-panel" data-settings-panel="ki">
+          <div class="settings-row">
+            <label class="settings-label">Status</label>
+            <span id="settings-ai-status-text">Wird geprüft…</span>
+          </div>
+          <div id="settings-ai-hardware-row" class="settings-row hidden">
+            <label class="settings-label">Hardware</label>
+            <span id="settings-ai-hardware-text"></span>
+          </div>
+          <div id="settings-ai-progress-row" class="settings-ai-progress-row hidden">
+            <div class="settings-ai-progress-bar"><div id="settings-ai-progress-fill" class="settings-ai-progress-fill"></div></div>
+            <span id="settings-ai-progress-text" class="settings-ai-progress-text"></span>
+          </div>
+          <div class="settings-row">
+            <button id="btn-settings-ai-setup" type="button" class="menu-btn menu-btn-primary">Lokale KI einrichten</button>
+          </div>
+          <p class="settings-hint">Lädt einmalig ein lokales KI-Sprachmodell (ca. 2,5 GB) herunter und richtet die Inferenz-Runtime ein. Danach läuft die Game-KI (Coach, Analyst, Scout, ...) komplett offline auf deinem PC -- keine Cloud, keine laufenden Kosten, kein Account nötig. Nur der einmalige Download braucht Internet. Passende Beschleunigung (Grafikkarte oder Prozessor) wird automatisch erkannt.</p>
+          <details id="settings-ai-advanced" class="settings-ai-advanced hidden">
+            <summary>Erweiterte Informationen</summary>
+            <div class="settings-ai-advanced-grid" id="settings-ai-advanced-grid"></div>
+          </details>
         </div>
       </div>
 

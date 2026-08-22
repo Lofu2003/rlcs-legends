@@ -33,4 +33,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateError: (cb) => ipcRenderer.on('update:error', (_e, msg) => cb(msg)),
   onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, pct) => cb(pct)),
   onUpdateDownloaded: (cb) => ipcRenderer.on('update:downloaded', () => cb()),
+
+  aiGetStatus: () => ipcRenderer.invoke('ai-get-status'),
+  aiEnsureReady: () => ipcRenderer.invoke('ai-ensure-ready'),
+  aiChat: (payload) => ipcRenderer.invoke('ai-chat', payload),
+  aiChatStream: (payload) => ipcRenderer.invoke('ai-chat-stream', payload),
+  onAiChatChunk: (cb) => ipcRenderer.on('ai:chat-chunk', (_e, payload) => cb(payload)),
+  aiSetupDownload: () => ipcRenderer.invoke('ai-setup-download'),
+  onAiSetupProgress: (cb) => ipcRenderer.on('ai:setup-progress', (_e, payload) => cb(payload)),
 });

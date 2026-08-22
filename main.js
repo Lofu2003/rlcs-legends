@@ -2,6 +2,9 @@ const { app, BrowserWindow, Menu, ipcMain, screen, nativeImage, dialog } = requi
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const http = require('http');
+const crypto = require('crypto');
+const os = require('os');
 const { pathToFileURL } = require('url');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
@@ -556,6 +559,7 @@ app.on('before-quit', releaseCursorClip);
 app.on('will-quit', () => {
   releaseCursorClip();
   if (cursorClipProc && !cursorClipProc.killed) cursorClipProc.kill();
+  stopAiServer();
 });
 
 function persistWindowBounds(win) {
@@ -645,6 +649,812 @@ function ensureWindowMatchesDisplaySettings() {
 ipcMain.handle('apply-display-settings', () => {
   ensureWindowMatchesDisplaySettings();
   return loadSettingsSync();
+});
+
+// ── Lokale Game-KI (llama.cpp + GGUF-Modell) ────────────────────────────
+// Masterprompt-Auftrag: echte generative KI, komplett lokal/offline, ohne
+// dass der Endnutzer Ollama/Python/Terminal braucht. Runtime + Modell sind
+// GETRENNT vom Spiel versioniert (AI_RUNTIME_VERSION/AI_MODEL_VERSION) --
+// ein normales Game-Update lädt NIE das mehrere-GB-große Modell neu.
+//
+// Auflösung der Dateipfade: zuerst der Entwicklungs-Ordner tools/ai/ im
+// Projekt selbst (dort liegt es während der Entwicklung, siehe .gitignore --
+// wird NIE ins Repo committed), sonst userData (dort landet es beim
+// Endnutzer nach dem Auto-Setup-Download, gleicher Ort wie Spielstände/
+// Einstellungen -- bleibt bei einer Neuinstallation erhalten, anders als
+// das Programmverzeichnis, das i.d.R. nicht beschreibbar ist).
+const AI_RUNTIME_VERSION = '1.0.0';
+const AI_MODEL_VERSION = '1.0.0';
+const AI_CONTEXT_SCHEMA_VERSION = 2;
+const AI_MODEL_FILENAME = 'Qwen3-4B-Instruct-2507-Q4_K_M.gguf';
+// Qwen3-4B-Instruct-2507, Apache-2.0 (kommerzielle Nutzung + Redistribution
+// erlaubt), Q4_K_M-Quantisierung von unsloth -- siehe Abschlussbericht für
+// die vollständige Lizenz-/Größenbegründung.
+// Auf einen konkreten Commit gepinnt (nicht "resolve/main/...") -- Abschnitt
+// 21: eine "main"-URL könnte durch einen künftigen Push im fremden Repo auf
+// eine andere Datei zeigen, ohne dass hier je etwas geändert wurde. SHA-256
+// unten bleibt trotzdem die eigentliche Integritätsprüfung.
+const AI_MODEL_DOWNLOAD_URL = 'https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf';
+const AI_MODEL_SIZE_BYTES = 2497281120;
+const AI_MODEL_SHA256 = '3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597';
+// Abschnitt 5/6/9 (Runde V5): reale, tatsächlich existierende Backend-Builds
+// DERSELBEN llama.cpp-Release (b10411), geprüft über die echten GitHub-
+// Release-Assets -- keine erfundenen Optionen. CUDA/SYCL entfallen (keine
+// NVIDIA-/Intel-GPU zu bedienen, bewusst geprüft). ROCm(HIP) wurde real
+// heruntergeladen und geprüft, dann verworfen: das Windows-ROCm-Release
+// bündelt eine 924 MB große ggml-hip.dll (kompletter statischer HIP/
+// rocBLAS-Runtime-Klumpen) -- fast 4x die Modellgröße allein für die
+// Runtime, für einen optionalen Endnutzer-Download unverhältnismäßig.
+// Vulkan braucht dagegen NUR den ohnehin vorhandenen GPU-Treiber (kein
+// separates CUDA-Toolkit/ROCm/Python/Compiler beim Endnutzer, Abschnitt 6/8)
+// und lief im echten Benchmark dieser Runde stabil mit ~12x der CPU-
+// Generierungsgeschwindigkeit -- siehe Abschlussbericht.
+const AI_RUNTIME_VARIANTS = {
+  cpu: {
+    dirName: 'cpu',
+    zipUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b10411/llama-b10411-bin-win-cpu-x64.zip',
+  },
+  vulkan: {
+    dirName: 'vulkan',
+    zipUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b10411/llama-b10411-bin-win-vulkan-x64.zip',
+    zipSha256: '6d0f5dd7747560cdbbe8a90c950d2d0059e2c8d6211b10952e1a7cc090795080',
+  },
+};
+// Hochzählen, falls sich die Erkennungs-/Auswahllogik künftig ändert --
+// erzwingt bei bereits eingerichteten Spielern eine Neukalibrierung.
+const AI_HARDWARE_PROFILE_VERSION = 1;
+const AI_SERVER_PORT = 8734; // bewusst kein Standardport (8080/3000/...), localhost-only
+const AI_SERVER_HOST = '127.0.0.1';
+// Bug-Fix (Performance-Benchmark dieser Runde): 45s reichten bei Standard-
+// Threadzahl (4,6 Tok/s Generierung) für lange Antworten nicht -- zwei von
+// sieben Testanfragen liefen live in den Timeout und fielen auf den
+// Fehler-Fallback zurück. Mit der jetzt korrigierten Threadzahl (8,8 Tok/s,
+// siehe ensureAiServerRunning()) reicht 45s meist, 60s bleibt als Sicherheits-
+// marge für einen kalten ersten Request nach dem Serverstart.
+const AI_CHAT_TIMEOUT_MS = 60000; // Abschnitt 42: Spiel darf nie hängen bleiben
+
+// Variant-Parameter (Runde V5): 'cpu' (Standard, unverändertes Verzeichnis --
+// keine Migration für bereits eingerichtete Spieler nötig) oder 'vulkan'
+// (neu, eigenes Verzeichnis, nur wenn das Hardwareprofil es empfiehlt).
+function aiDevRuntimeDir(variant) { return path.join(__dirname, 'tools', 'ai', 'runtime', variant || 'cpu'); }
+function aiDevModelDir() { return path.join(__dirname, 'tools', 'ai', 'models'); }
+function aiUserRuntimeDir(variant) { return path.join(app.getPath('userData'), (variant && variant !== 'cpu') ? ('ai-runtime-' + variant) : 'ai-runtime'); }
+function aiUserModelDir() { return path.join(app.getPath('userData'), 'ai-models'); }
+
+function resolveAiServerExeForVariant(variant) {
+  const devPath = path.join(aiDevRuntimeDir(variant), 'llama-server.exe');
+  if (fs.existsSync(devPath)) return devPath;
+  const userPath = path.join(aiUserRuntimeDir(variant), 'llama-server.exe');
+  if (fs.existsSync(userPath)) return userPath;
+  return null;
+}
+// Bleibt bewusst auf 'cpu' fixiert: das ist die Pflicht-Baseline (Abschnitt
+// 12), die jede bestehende "ist die KI grundsätzlich installiert?"-Prüfung
+// (deriveAiState, app.whenReady()-Warmup) unverändert weiter beantwortet.
+function resolveAiServerExe() { return resolveAiServerExeForVariant('cpu'); }
+function resolveAiModelFile() {
+  const devPath = path.join(aiDevModelDir(), AI_MODEL_FILENAME);
+  if (fs.existsSync(devPath)) return devPath;
+  const userPath = path.join(aiUserModelDir(), AI_MODEL_FILENAME);
+  if (fs.existsSync(userPath)) return userPath;
+  return null;
+}
+
+// ── Hardware-Erkennung & automatische Backend-Wahl (Runde V5) ───────────────
+// Abschnitt 4/10/33/34: EINMALIGE Erkennung während der Ersteinrichtung,
+// danach gecacht (ai-hardware-profile.json in userData) -- kein erneuter
+// Hardware-Scan bei jedem Spielstart. dxdiag /t liefert die tatsächliche
+// GPU-VRAM-Größe zuverlässig; Win32_VideoController.AdapterRAM ist für
+// Karten >4GB ein bekannter 32-Bit-Overflow-Bug in Windows (meldete am
+// Entwicklungs-PC 4 GB für eine tatsächlich 16 GB große Karte -- per dxdiag
+// korrekt als 16338 MB verifiziert).
+function aiHardwareProfilePath() { return path.join(app.getPath('userData'), 'ai-hardware-profile.json'); }
+
+function detectGpuHardware() {
+  return new Promise((resolve) => {
+    const tmpFile = path.join(os.tmpdir(), 'rlcs-ai-dxdiag-' + Date.now() + '.txt');
+    let done = false;
+    const finish = (result) => { if (done) return; done = true; try { fs.unlinkSync(tmpFile); } catch {} resolve(result); };
+    let proc;
+    try { proc = spawn('dxdiag.exe', ['/t', tmpFile], { windowsHide: true }); }
+    catch { finish(null); return; }
+    const timer = setTimeout(() => { try { proc.kill(); } catch {} finish(null); }, 15000);
+    proc.on('error', () => { clearTimeout(timer); finish(null); });
+    proc.on('exit', () => {
+      clearTimeout(timer);
+      try {
+        const text = fs.readFileSync(tmpFile, 'utf8');
+        // "Card name: X" gefolgt (innerhalb desselben Geräte-Eintrags) von
+        // "Dedicated Memory: N MB" -- bei mehreren Monitoren an derselben
+        // Karte taucht der Block mehrfach identisch auf, das max() unten
+        // macht das unschädlich. Kein separates GPU-Erkennungstool nötig,
+        // dxdiag ist auf jedem Windows-System bereits vorhanden.
+        const re = /Card name:\s*(.+?)\r?\n[\s\S]{0,600}?Dedicated Memory:\s*(\d+)\s*MB/g;
+        let match; let best = null;
+        while ((match = re.exec(text))) {
+          const vramMB = parseInt(match[2], 10);
+          if (!best || vramMB > best.vramMB) {
+            const name = match[1].trim();
+            let vendor = 'unknown';
+            if (/nvidia/i.test(name)) vendor = 'nvidia';
+            else if (/amd|radeon/i.test(name)) vendor = 'amd';
+            else if (/intel/i.test(name)) vendor = 'intel';
+            best = { name, vendor, vramMB };
+          }
+        }
+        finish(best);
+      } catch { finish(null); }
+    });
+  });
+}
+
+function detectCpuPhysicalCores() {
+  return new Promise((resolve) => {
+    const logical = Math.max(1, os.cpus().length);
+    let proc;
+    try {
+      proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-NoLogo', '-Command',
+        '(Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum'], { windowsHide: true });
+    } catch { resolve(logical); return; }
+    let out = '';
+    const timer = setTimeout(() => { try { proc.kill(); } catch {} resolve(logical); }, 8000);
+    proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.on('error', () => { clearTimeout(timer); resolve(logical); });
+    proc.on('exit', () => {
+      clearTimeout(timer);
+      const n = parseInt(out.trim(), 10);
+      resolve(Number.isFinite(n) && n > 0 ? n : logical);
+    });
+  });
+}
+
+// Kurzer echter Testlauf (Abschnitt 33: wenige Sekunden, nicht minutenlang)
+// gegen einen bereits gestarteten llama-server -- misst die TATSÄCHLICHE
+// Generierungsgeschwindigkeit dieser Konfiguration statt sie zu schätzen.
+function measureGenerationSpeed(port) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ prompt: 'Erklaere in einem Satz, warum Teamkommunikation im Esport wichtig ist.', n_predict: 40, temperature: 0.1, cache_prompt: false });
+    const req = http.request({ host: AI_SERVER_HOST, port, path: '/completion', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 30000 }, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          const t = parsed.timings || {};
+          resolve({ ok: true, genTokPerSec: t.predicted_per_second || 0, promptTokPerSec: t.prompt_per_second || 0 });
+        } catch { resolve({ ok: false }); }
+      });
+    });
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false }); });
+    req.on('error', () => resolve({ ok: false }));
+    req.write(body); req.end();
+  });
+}
+
+// Abschnitt 11: NICHT hart hardcodiert nach Hardware-Annahme, sondern aus dem
+// echten Kalibrierungs-Benchmark abgeleitet. Schwellen orientieren sich an
+// den real gemessenen Werten dieser Runde (CPU-Baseline ~9 Tok/s landet
+// bewusst in MEDIUM, GPU-Vulkan ~113 Tok/s in VERY_HIGH).
+function classifyPerformanceTier(genTokPerSec) {
+  if (genTokPerSec >= 50) return 'VERY_HIGH';
+  if (genTokPerSec >= 15) return 'HIGH';
+  if (genTokPerSec >= 5) return 'MEDIUM';
+  return 'LOW';
+}
+
+// Abschnitt 26/27 (Runde V5, echter Benchmark): auf dem Entwicklungs-PC
+// (8 physische / 16 logische Kerne, SMT) lieferten 12 Threads wiederholt
+// ~9,5-10,0 Tok/s gegenüber ~9,1-9,2 Tok/s bei allen 16 logischen Threads --
+// ein kleiner, aber über mehrere Läufe konsistenter Vorteil. Bei diesem
+// speicherbandbreitenlimitierten Workload konkurrieren Hyperthreads auf
+// denselben physischen Kernen eher um Bandbreite, statt echten zusätzlichen
+// Durchsatz zu liefern. physische Kerne * 1,5 (aufgerundet, gedeckelt auf die
+// logische Kernzahl) reproduziert das ohne die logischen Kerne fest zu
+// hardcodieren -- passt sich also automatisch an andere CPU-Layouts an.
+function computeRecommendedThreads(physicalCores, logicalCores) {
+  const logical = Math.max(1, logicalCores || 1);
+  if (!physicalCores || physicalCores <= 0) return logical; // unbekannt -- sicherer alter Default
+  return Math.max(1, Math.min(logical, Math.round(physicalCores * 1.5)));
+}
+
+function loadCachedHardwareProfile() {
+  try {
+    const raw = fs.readFileSync(aiHardwareProfilePath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.profileVersion === AI_HARDWARE_PROFILE_VERSION) return parsed;
+  } catch {}
+  return null;
+}
+function saveHardwareProfile(profile) {
+  try { fs.writeFileSync(aiHardwareProfilePath(), JSON.stringify(profile, null, 2)); } catch {}
+}
+// Abschnitt 35: ändert sich CPU-Modell oder GPU zwischen zwei Starts (z.B.
+// externe GPU getauscht, Spielstand auf neuen PC übertragen), weicht die
+// Signatur ab -- die aufrufende Stelle kann dann gezielt neu kalibrieren.
+function hardwareSignature(cpuModel, gpu) {
+  return cpuModel + '|' + (gpu ? gpu.vendor + ':' + gpu.name + ':' + gpu.vramMB : 'none');
+}
+
+// Startet nacheinander (nie gleichzeitig, um sich nicht gegenseitig VRAM/CPU
+// wegzunehmen) jeden verfügbaren Backend-Kandidaten auf einem separaten Port
+// (stört einen eventuell parallel laufenden Produktivserver nicht), wartet
+// auf Health-Check und misst dann die echte Tokens/s-Geschwindigkeit.
+// Abschnitt 16: mehrere Anfragen wären "sicherer", aber bei einer einmaligen
+// Kalibrierung im Sekundenbereich reicht ein kurzer, echter Messwert pro
+// Kandidat -- kein synthetischer Schätzwert.
+async function runLocalAiCalibration(candidateExePaths, modelPath, threadCount) {
+  const results = {};
+  for (const variant of ['cpu', 'vulkan']) {
+    const exePath = candidateExePaths[variant];
+    if (!exePath) continue;
+    const testPort = AI_SERVER_PORT + 1;
+    const ngl = variant === 'vulkan' ? 999 : 0;
+    let crashed = false;
+    let proc;
+    try {
+      proc = spawn(exePath, [
+        '-m', modelPath, '--port', String(testPort), '--host', AI_SERVER_HOST,
+        '-c', '2048', '-ngl', String(ngl), '--threads', String(threadCount), '--threads-batch', String(threadCount), '--no-webui',
+      ], { stdio: ['ignore', 'ignore', 'ignore'], windowsHide: true });
+    } catch { results[variant] = null; continue; }
+    proc.on('error', () => { crashed = true; });
+    proc.on('exit', () => { crashed = true; });
+    const deadline = Date.now() + 20000;
+    let healthy = false;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 500));
+      if (crashed) break;
+      const ok = await new Promise((resolve) => {
+        const req = http.get({ host: AI_SERVER_HOST, port: testPort, path: '/health', timeout: 1500 }, (res) => { res.resume(); resolve(res.statusCode === 200); });
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => { req.destroy(); resolve(false); });
+      });
+      if (ok) { healthy = true; break; }
+    }
+    if (healthy) {
+      results[variant] = await measureGenerationSpeed(testPort);
+      if (!results[variant].ok) results[variant] = null;
+    } else {
+      results[variant] = null;
+      // Abschnitt 13: Fallback nicht verstecken -- Development-Log, keine Nutzer-Fehlermeldung nötig (CPU bleibt Pflicht-Fallback, Abschnitt 12).
+      console.log('[LocalAI] Backend "' + variant + '" wurde während der Kalibrierung nicht rechtzeitig gesund (Absturz oder Timeout) -> wird nicht empfohlen.');
+    }
+    try { if (proc && !proc.killed) proc.kill(); } catch {}
+    await new Promise((r) => setTimeout(r, 800)); // Port sauber freigeben, bevor der nächste Kandidat startet
+  }
+  return results;
+}
+
+// Abschnitt 16: nicht blind die höchste Tok/s-Zahl wählen -- ein GPU-Backend
+// muss deutlich (>30%) schneller sein als CPU, um die zusätzliche
+// Backend-Komplexität/den zusätzlichen Download zu rechtfertigen. Bei einem
+// nur marginalen oder verrauschten Unterschied bleibt CPU (die portablere,
+// bereits vollständig verifizierte Wahl) die Empfehlung.
+function decideBackendFromCalibration(results) {
+  const cpu = results.cpu;
+  const vulkan = results.vulkan;
+  if (vulkan && vulkan.genTokPerSec > 0 && (!cpu || vulkan.genTokPerSec > cpu.genTokPerSec * 1.3)) {
+    return { backend: 'vulkan', genTokPerSec: vulkan.genTokPerSec, promptTokPerSec: vulkan.promptTokPerSec };
+  }
+  if (cpu && cpu.genTokPerSec > 0) return { backend: 'cpu', genTokPerSec: cpu.genTokPerSec, promptTokPerSec: cpu.promptTokPerSec };
+  return { backend: 'cpu', genTokPerSec: 0, promptTokPerSec: 0 }; // nichts messbar -- CPU bleibt Pflicht-Fallback (Abschnitt 12)
+}
+
+let aiServerProc = null;
+let aiServerStarting = null; // Promise, verhindert doppelten Start bei gleichzeitigen Anfragen
+let aiServerReady = false;
+// Abschnitt 20: benannte Zustandsmaschine statt loser Booleans -- die UI soll
+// nie eine Anfrage senden, solange der Zustand nicht READY/RUNNING ist.
+let aiLastError = null;
+let aiActiveBackend = 'cpu'; // Runde V5: welches Backend tatsächlich läuft (für Settings-Anzeige/Dev-Profiler)
+let aiLastGpuFallbackReason = null;
+function deriveAiState(runtimeReady, modelReady) {
+  if (aiSetupInProgress) return aiSetupStage === 'verify' ? 'VERIFYING' : 'DOWNLOADING';
+  if (!runtimeReady || !modelReady) return aiLastError ? 'ERROR' : 'NOT_INSTALLED';
+  if (aiServerReady) return 'RUNNING';
+  if (aiServerStarting) return 'LOADING';
+  if (aiLastError) return 'ERROR';
+  return 'READY';
+}
+
+function aiServerHealthCheck() {
+  return new Promise((resolve) => {
+    const req = http.get({ host: AI_SERVER_HOST, port: AI_SERVER_PORT, path: '/health', timeout: 2000 }, (res) => {
+      res.resume();
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+
+// Startet llama-server als Kindprozess (gleiches Muster wie
+// getCursorClipProcess() oben: windowsHide, stdio ignoriert, Referenz +
+// error/exit-Handler). Wartet per Health-Check-Polling, bis das Modell
+// tatsächlich geladen ist, statt sofort "bereit" zu melden.
+// Bug-Fix (Runde V7, Teil G, live als echtes Problem erkannt -- UND live per
+// eigenem Test korrigiert): ein EINMALIGER GPU-Fehlschlag markierte das
+// Profil bisher DAUERHAFT auf 'cpu' -- selbst nach einem App-Neustart mit
+// wieder funktionierender GPU würde nie wieder Vulkan versucht (Abschnitt
+// G3). Ein erster Fix-Versuch mit einem reinen Zeit-Cooldown (15 Minuten)
+// war noch FALSCH kalibriert: ein Testneustart Sekunden nach dem
+// Fehlschlag fiel weiterhin in den Cooldown und blieb fälschlich auf CPU --
+// die eigentliche Erwartung aus Abschnitt G2 ("App beenden... App starten")
+// ist an den PROZESS-Neustart gekoppelt, nicht an eine feste Wartezeit.
+// Fix: ein reiner IN-MEMORY-Flag (nicht persistiert) -- pro App-Sitzung wird
+// GPU genau EINMAL versucht; scheitert es, bleibt es für den Rest DIESER
+// Sitzung bei CPU (keine wiederholten Fehlversuche bei jeder Chat-
+// Nachricht), aber ein echter Neustart (frischer Prozess, Flag zurück auf
+// false) probiert automatisch wieder GPU. gpuFallbackAt/-Reason bleiben im
+// Profil rein zu Diagnose-/Anzeigezwecken erhalten.
+let aiGpuRetriedThisSession = false;
+
+// Abschnitt 10/12: Backend aus dem gecachten Hardwareprofil, mit hartem
+// CPU-Fallback, falls kein Profil existiert oder die empfohlene GPU-Runtime
+// lokal fehlt -- die KI darf NIE eine GPU voraussetzen.
+function desiredAiBackend() {
+  const p = loadCachedHardwareProfile();
+  if (!p || p.recommendedBackend !== 'vulkan' || !resolveAiServerExeForVariant('vulkan')) return 'cpu';
+  if (aiGpuRetriedThisSession) return 'cpu'; // in dieser Sitzung schon erfolglos versucht
+  return 'vulkan';
+}
+
+async function ensureAiServerRunning() {
+  // Bug-Fix (Runde V5, live gefunden): der frühere Kurzschluss prüfte NUR
+  // "läuft bereits + gesund" -- lief der Server (z.B. durch den Warmstart
+  // beim App-Start, der immer mit CPU startet, bevor überhaupt ein
+  // Hardwareprofil existiert) schon VOR einer frisch abgeschlossenen
+  // Kalibrierung, wechselte er nie mehr auf das neu empfohlene GPU-Backend --
+  // die Einrichtung endete am Ende trotz "vulkan empfohlen" real auf CPU.
+  // Der Kurzschluss gilt jetzt nur noch, wenn das AKTIVE Backend auch dem
+  // aktuell empfohlenen entspricht.
+  if (aiServerReady && aiActiveBackend === desiredAiBackend() && (await aiServerHealthCheck())) return { ok: true };
+  if (aiServerStarting) return aiServerStarting;
+  const modelPath = resolveAiModelFile();
+  if (!resolveAiServerExe() || !modelPath) return { ok: false, reason: 'missing-files' };
+
+  aiServerStarting = (async () => {
+    if (aiServerProc && !aiServerProc.killed) {
+      try { aiServerProc.kill(); } catch {}
+      aiServerProc = null;
+      aiServerReady = false;
+    }
+    // Benchmark V4 (Ryzen 7 5700X, 8C/16T): Standard-Threadzahl von llama-
+    // server lag klar unter dem Optimum -- auf ALLE logischen Kerne gesetzt
+    // verdoppelte fast den Durchsatz. Benchmark V5 verfeinerte das weiter
+    // (siehe computeRecommendedThreads()): 12 statt 16 Threads maßen auf
+    // demselben PC nochmal ~5-6% schneller. Threadzahl kommt jetzt aus dem
+    // gecachten Hardwareprofil (dort mit derselben Formel berechnet); ohne
+    // Profil (z.B. Hintergrund-Warmstart vor der ersten Einrichtung) bleibt
+    // der alte, sichere Default (alle logischen Kerne).
+    // Bug-Fix (Runde V7, Teil H, live gefunden): ein beschädigtes/manuell
+    // manipuliertes Profil mit z.B. recommendedThreads:-5 wurde bisher UNGEPRÜFT
+    // an "--threads" durchgereicht -- eine negative Zahl ist zwar "truthy" in JS
+    // (der bisherige "|| Fallback" griff also NICHT), hätte aber llama-server.exe
+    // mit einem ungültigen Kommandozeilen-Argument gestartet. Jetzt echte
+    // Plausibilitäts-Prüfung (positive ganze Zahl, gedeckelt auf das
+    // Doppelte der logischen Kernzahl als großzügige Obergrenze) statt nur "ist
+    // truthy" -- ein ungültiger Wert im Profil fällt automatisch auf den
+    // sicheren Default zurück, kein Crash/Fehlstart von llama-server.exe.
+    const logicalCoresNow = Math.max(1, os.cpus().length);
+    const cachedProfileForThreads = loadCachedHardwareProfile();
+    const cachedThreads = cachedProfileForThreads && cachedProfileForThreads.recommendedThreads;
+    const threadCount = (Number.isInteger(cachedThreads) && cachedThreads >= 1 && cachedThreads <= logicalCoresNow * 2)
+      ? cachedThreads
+      : logicalCoresNow;
+
+    let backend = desiredAiBackend();
+    let exePath = resolveAiServerExeForVariant(backend);
+    if (!exePath) { backend = 'cpu'; exePath = resolveAiServerExeForVariant('cpu'); }
+    if (!exePath) return { ok: false, reason: 'missing-files' };
+
+    const attempt = async (variant, variantExePath) => {
+      const ngl = variant === 'vulkan' ? 999 : 0; // volle GPU-Auslagerung (Abschnitt 14: VRAM des Entwicklungs-PCs deckt Modell+Kontext bequem, siehe Abschlussbericht)
+      let proc;
+      try {
+        // Bug-Fix (Runde V5, live gefunden, Abschnitt 72/96): spawn() kann bei
+        // einer defekten/keiner echten Windows-Exe SYNCHRON werfen ("spawn
+        // UNKNOWN") statt nur asynchron ein 'error'-Event zu feuern. Ohne
+        // dieses try/catch riss das die gesamte ensureAiServerRunning()-Kette
+        // und damit den ai-ensure-ready-IPC-Aufruf mit sich -- der Renderer
+        // bekam einen harten Fehler statt des vorgesehenen CPU-Fallbacks.
+        proc = spawn(variantExePath, [
+          '-m', modelPath,
+          '--port', String(AI_SERVER_PORT),
+          '--host', AI_SERVER_HOST,
+          '-c', '8192', // Kontextfenster -- reicht für Systemprompt + relevanten Game-State + kurze Konversation
+          '-ngl', String(ngl),
+          '--threads', String(threadCount),
+          '--threads-batch', String(threadCount),
+          '--no-webui',
+        ], { stdio: ['ignore', 'ignore', 'ignore'], windowsHide: true });
+      } catch {
+        return { ok: false, reason: 'spawn-failed' };
+      }
+      proc.on('error', () => { aiServerReady = false; if (aiServerProc === proc) aiServerProc = null; });
+      proc.on('exit', () => { aiServerReady = false; if (aiServerProc === proc) aiServerProc = null; });
+      aiServerProc = proc;
+      // Abschnitt 28/29: normale statt hohe Prozesspriorität -- die KI-
+      // Inferenz darf das eigentliche Spiel (Matchsimulation, UI, Audio) nie
+      // ausbremsen. ABOVE_NORMAL bevorzugt sie nur leicht gegenüber echten
+      // Hintergrundprozessen, niemals HIGH/REALTIME.
+      try { os.setPriority(proc.pid, os.constants.priority.PRIORITY_ABOVE_NORMAL); } catch {}
+
+      const deadline = Date.now() + 60000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 700));
+        if (!aiServerProc) return { ok: false, reason: 'crashed' }; // Prozess ist währenddessen abgestürzt
+        if (await aiServerHealthCheck()) {
+          aiServerReady = true; aiLastError = null; aiActiveBackend = variant;
+          // GPU lief gerade erfolgreich -- ein evtl. gesetztes Session-Flag/
+          // Diagnose-Timestamp aus einem früheren Fehlschlag ist überholt.
+          if (variant === 'vulkan') {
+            aiGpuRetriedThisSession = false;
+            const cached = loadCachedHardwareProfile();
+            if (cached && cached.gpuFallbackAt) { delete cached.gpuFallbackAt; delete cached.gpuFallbackReason; saveHardwareProfile(cached); }
+          }
+          return { ok: true };
+        }
+      }
+      return { ok: false, reason: 'timeout' };
+    };
+
+    let result = await attempt(backend, exePath);
+    if (!result.ok && backend === 'vulkan') {
+      // Abschnitt 12/13: GPU darf nie zur Voraussetzung werden -- sichtbar
+      // geloggter, automatischer CPU-Fallback statt einer kaputten KI.
+      console.log('[LocalAI] GPU-Backend (vulkan) wurde nicht rechtzeitig gesund (' + result.reason + ') -> Fallback auf CPU.');
+      aiLastGpuFallbackReason = result.reason;
+      if (aiServerProc && !aiServerProc.killed) { try { aiServerProc.kill(); } catch {} aiServerProc = null; }
+      const cpuExe = resolveAiServerExeForVariant('cpu');
+      if (cpuExe) {
+        const cpuResult = await attempt('cpu', cpuExe);
+        if (cpuResult.ok) {
+          // Session-Flag setzen (siehe aiGpuRetriedThisSession/desiredAiBackend()
+          // oben) -- verhindert wiederholte Fehlversuche bei jeder weiteren
+          // Chat-Nachricht DIESER Sitzung, ohne die Empfehlung im Profil
+          // dauerhaft zu ändern (ein Neustart probiert automatisch neu, Abschnitt G2).
+          aiGpuRetriedThisSession = true;
+          const cached = loadCachedHardwareProfile();
+          if (cached) { cached.gpuFallbackAt = new Date().toISOString(); cached.gpuFallbackReason = result.reason; saveHardwareProfile(cached); } // nur zu Diagnose-/Anzeigezwecken (Settings-UI)
+        }
+        result = cpuResult;
+      }
+    }
+    return result;
+  })();
+  const result = await aiServerStarting;
+  aiServerStarting = null;
+  if (!result.ok) aiLastError = result.reason || 'unknown';
+  return result;
+}
+
+function stopAiServer() {
+  if (aiServerProc && !aiServerProc.killed) {
+    try { aiServerProc.kill(); } catch {}
+  }
+  aiServerProc = null;
+  aiServerReady = false;
+}
+
+ipcMain.handle('ai-get-status', async () => {
+  const runtimeReady = !!resolveAiServerExe();
+  const modelReady = !!resolveAiModelFile();
+  return {
+    runtimeReady, modelReady,
+    serverRunning: aiServerReady,
+    state: deriveAiState(runtimeReady, modelReady),
+    lastError: aiLastError,
+    aiRuntimeVersion: AI_RUNTIME_VERSION, aiModelVersion: AI_MODEL_VERSION,
+    modelSizeBytes: AI_MODEL_SIZE_BYTES,
+    // Runde V5 (Abschnitt 36/37): für die erweiterte Settings-Anzeige +
+    // Dev-Profiler -- activeBackend ist das TATSÄCHLICH laufende Backend
+    // (kann nach einem GPU-Fallback von hardwareProfile.recommendedBackend abweichen).
+    activeBackend: aiActiveBackend,
+    gpuFallbackReason: aiLastGpuFallbackReason,
+    hardwareProfile: loadCachedHardwareProfile(),
+  };
+});
+
+ipcMain.handle('ai-ensure-ready', async () => ensureAiServerRunning());
+
+// Kernaufruf für den Chat -- proxied über den Hauptprozess (gleiches
+// Sicherheitsprinzip wie der bestehende Discord-Feedback-Call: der Renderer
+// bekommt nie direkten Netzwerkzugriff, alles läuft über einen geprüften
+// IPC-Handler). OpenAI-kompatibles /v1/chat/completions-Format, das
+// llama-server nativ bereitstellt.
+ipcMain.handle('ai-chat', async (_event, payload) => {
+  const readiness = await ensureAiServerRunning();
+  if (!readiness.ok) return { ok: false, error: 'ai-not-ready', reason: readiness.reason };
+  const body = JSON.stringify({
+    messages: (payload && payload.messages) || [],
+    temperature: (payload && typeof payload.temperature === 'number') ? payload.temperature : 0.75,
+    max_tokens: (payload && payload.maxTokens) || 220,
+    stream: false,
+  });
+  return new Promise((resolve) => {
+    const req = http.request({
+      host: AI_SERVER_HOST, port: AI_SERVER_PORT, path: '/v1/chat/completions', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      timeout: AI_CHAT_TIMEOUT_MS,
+    }, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          const text = parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content;
+          if (!text) { resolve({ ok: false, error: 'empty-response' }); return; }
+          // Runde V5 (Abschnitt 85): llama-server hängt "timings" auch an die
+          // OpenAI-kompatible Antwort an -- für den Dev-Profiler durchreichen.
+          resolve({ ok: true, text: text.trim(), timings: parsed.timings || null, backend: aiActiveBackend });
+        } catch {
+          resolve({ ok: false, error: 'invalid-response' });
+        }
+      });
+    });
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'timeout' }); });
+    req.on('error', () => resolve({ ok: false, error: 'connection-failed' }));
+    req.write(body);
+    req.end();
+  });
+});
+
+// Streaming-Variante für den interaktiven Chat (Abschnitt 18): llama-server
+// unterstützt SSE ("data: {...}\n\n"-Zeilen) über denselben OpenAI-kompatiblen
+// Endpunkt, nur mit stream:true. Jedes Text-Delta geht sofort per Event an
+// den Renderer (ai:chat-chunk), damit die Bubble Wort für Wort befüllt werden
+// kann statt 10-40s auf die komplette Antwort zu warten -- das eigentliche
+// Tempo (Tokens/Sekunde) ändert sich dadurch nicht, aber die gefühlte
+// Reaktionszeit sinkt auf die Zeit bis zum ERSTEN Token (TTFT), nicht bis zur
+// letzten Zeile. Das ipcMain.handle()-Promise liefert am Ende trotzdem den
+// kompletten Text zurück (für Aktions-Parsing/History), Events sind nur die
+// Zwischenanzeige.
+ipcMain.handle('ai-chat-stream', async (event, payload) => {
+  const readiness = await ensureAiServerRunning();
+  if (!readiness.ok) return { ok: false, error: 'ai-not-ready', reason: readiness.reason };
+  const requestId = payload && payload.requestId;
+  const body = JSON.stringify({
+    messages: (payload && payload.messages) || [],
+    temperature: (payload && typeof payload.temperature === 'number') ? payload.temperature : 0.75,
+    max_tokens: (payload && payload.maxTokens) || 220,
+    stream: true,
+  });
+  return new Promise((resolve) => {
+    let full = '';
+    let settled = false;
+    let lastTimings = null; // Runde V5 (Abschnitt 85): llama-server hängt "timings" an den letzten SSE-Chunk an
+    const finish = (result) => { if (!settled) { settled = true; resolve(result); } };
+    const req = http.request({
+      host: AI_SERVER_HOST, port: AI_SERVER_PORT, path: '/v1/chat/completions', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      timeout: AI_CHAT_TIMEOUT_MS,
+    }, (res) => {
+      res.setEncoding('utf8');
+      let buffer = '';
+      res.on('data', (chunk) => {
+        buffer += chunk;
+        let idx;
+        while ((idx = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, idx).trim();
+          buffer = buffer.slice(idx + 2);
+          if (!rawEvent.startsWith('data:')) continue;
+          const dataStr = rawEvent.slice(5).trim();
+          if (dataStr === '[DONE]') continue;
+          try {
+            const json = JSON.parse(dataStr);
+            const delta = json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content;
+            if (delta) {
+              full += delta;
+              if (event.sender && !event.sender.isDestroyed()) event.sender.send('ai:chat-chunk', { requestId, delta });
+            }
+            if (json.timings) lastTimings = json.timings;
+          } catch {}
+        }
+      });
+      res.on('end', () => finish(full ? { ok: true, text: full.trim(), timings: lastTimings, backend: aiActiveBackend } : { ok: false, error: 'empty-response' }));
+      res.on('error', () => finish({ ok: false, error: 'connection-failed' }));
+    });
+    req.on('timeout', () => { req.destroy(); finish({ ok: false, error: 'timeout' }); });
+    req.on('error', () => finish({ ok: false, error: 'connection-failed' }));
+    req.write(body);
+    req.end();
+  });
+});
+
+// ── AI-Setup (Erstinstallation beim Endnutzer) ──────────────────────────
+// Läuft NUR auf expliziten Nutzer-Klick (nicht automatisch beim Start --
+// ~2,5 GB Download soll niemanden überraschen). Runtime-Zip wird per
+// PowerShell Expand-Archive entpackt (gleiches Muster wie der bestehende
+// C#-Cursor-Clip-Helper oben: kein zusätzliches npm-Package für Zip-Handling
+// nötig, das Spiel ist ohnehin Windows-only, siehe package.json "win"-Target).
+function aiSetupSend(payload) { send('ai:setup-progress', payload); }
+
+function downloadFileWithProgress(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const doRequest = (requestUrl, redirectsLeft) => {
+      https.get(requestUrl, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          if (redirectsLeft <= 0) { reject(new Error('too-many-redirects')); return; }
+          res.resume();
+          doRequest(res.headers.location, redirectsLeft - 1);
+          return;
+        }
+        if (res.statusCode !== 200) { reject(new Error('http-' + res.statusCode)); return; }
+        const total = Number(res.headers['content-length']) || 0;
+        let received = 0;
+        const tmpPath = destPath + '.tmp-' + process.pid;
+        const fileStream = fs.createWriteStream(tmpPath);
+        res.on('data', (chunk) => {
+          received += chunk.length;
+          if (onProgress) onProgress(received, total);
+        });
+        res.pipe(fileStream);
+        fileStream.on('finish', () => {
+          fileStream.close(() => {
+            fs.renameSync(tmpPath, destPath);
+            resolve();
+          });
+        });
+        fileStream.on('error', (err) => { try { fs.unlinkSync(tmpPath); } catch {} reject(err); });
+        res.on('error', (err) => { try { fs.unlinkSync(tmpPath); } catch {} reject(err); });
+      }).on('error', reject);
+    };
+    doRequest(url, 5);
+  });
+}
+
+function sha256OfFile(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+function extractZipWithPowerShell(zipPath, destDir) {
+  return new Promise((resolve, reject) => {
+    const script = 'Expand-Archive -Path "' + zipPath + '" -DestinationPath "' + destDir + '" -Force';
+    const proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-NoLogo', '-Command', script], { windowsHide: true });
+    proc.on('error', reject);
+    proc.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('expand-archive-exit-' + code))));
+  });
+}
+
+let aiSetupInProgress = false;
+let aiSetupStage = null; // Abschnitt 20: 'runtime'|'model'|'verify'|'starting'|'ready' -- fließt in deriveAiState()
+ipcMain.handle('ai-setup-download', async () => {
+  if (aiSetupInProgress) return { ok: false, error: 'already-running' };
+  aiSetupInProgress = true;
+  aiLastError = null;
+  try {
+    const runtimeDir = aiUserRuntimeDir();
+    const modelDir = aiUserModelDir();
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.mkdirSync(modelDir, { recursive: true });
+
+    // Speicherplatz vorab prüfen (Abschnitt 47) -- Modell + Zip + Reserve.
+    const needed = AI_MODEL_SIZE_BYTES + 50 * 1024 * 1024;
+    try {
+      const check = fs.statfsSync ? fs.statfsSync(app.getPath('userData')) : null;
+      if (check && check.bavail * check.bsize < needed) {
+        aiSetupInProgress = false; aiSetupStage = null; aiLastError = 'not-enough-disk-space';
+        return { ok: false, error: 'not-enough-disk-space' };
+      }
+    } catch {} // statfsSync nicht auf jeder Node-Version verfügbar -- dann ohne Vorabprüfung fortfahren
+
+    if (!resolveAiServerExe()) {
+      aiSetupStage = 'runtime';
+      aiSetupSend({ stage: 'runtime', receivedBytes: 0, totalBytes: 0 });
+      const zipPath = path.join(runtimeDir, 'llama-cpu.zip');
+      await downloadFileWithProgress(AI_RUNTIME_VARIANTS.cpu.zipUrl, zipPath, (received, total) => {
+        aiSetupSend({ stage: 'runtime', receivedBytes: received, totalBytes: total });
+      });
+      await extractZipWithPowerShell(zipPath, runtimeDir);
+      try { fs.unlinkSync(zipPath); } catch {}
+      if (!resolveAiServerExe()) { aiSetupInProgress = false; aiSetupStage = null; aiLastError = 'runtime-extract-failed'; return { ok: false, error: 'runtime-extract-failed' }; }
+    }
+
+    if (!resolveAiModelFile()) {
+      aiSetupStage = 'model';
+      aiSetupSend({ stage: 'model', receivedBytes: 0, totalBytes: AI_MODEL_SIZE_BYTES });
+      const modelPath = path.join(modelDir, AI_MODEL_FILENAME);
+      await downloadFileWithProgress(AI_MODEL_DOWNLOAD_URL, modelPath, (received, total) => {
+        aiSetupSend({ stage: 'model', receivedBytes: received, totalBytes: total || AI_MODEL_SIZE_BYTES });
+      });
+      aiSetupStage = 'verify';
+      aiSetupSend({ stage: 'verify', receivedBytes: 0, totalBytes: 0 });
+      const actualHash = await sha256OfFile(modelPath);
+      if (actualHash !== AI_MODEL_SHA256) {
+        try { fs.unlinkSync(modelPath); } catch {}
+        aiSetupInProgress = false; aiSetupStage = null; aiLastError = 'hash-mismatch';
+        return { ok: false, error: 'hash-mismatch' };
+      }
+    }
+
+    // Runde V5 (Abschnitt 4/10/33/34/35/78): Hardware wird bei JEDEM Aufruf
+    // dieses NUTZERAUSGELÖSTEN Handlers (Ersteinrichtung ODER "Erneut
+    // prüfen"-Klick -- NIE automatisch bei jedem Spielstart) neu und günstig
+    // erkannt (CPU-Kerne + dxdiag, ~1-2s) und mit der zuletzt gecachten
+    // Signatur verglichen. Nur bei einer ECHTEN Abweichung (neue/andere GPU,
+    // anderer PC) oder fehlendem Profil folgt der teurere Schritt (GPU-
+    // Runtime-Download + Kalibrierungs-Testläufe) -- ein unveränderter PC
+    // durchläuft die teure Kalibrierung kein zweites Mal.
+    {
+      const existingProfile = loadCachedHardwareProfile();
+      aiSetupStage = 'hardware-detect';
+      aiSetupSend({ stage: 'hardware-detect', receivedBytes: 0, totalBytes: 0 });
+      const cpuCores = await detectCpuPhysicalCores();
+      const gpu = await detectGpuHardware();
+      const currentCpuModel = (os.cpus()[0] || {}).model || 'unknown';
+      const currentSignature = hardwareSignature(currentCpuModel, gpu);
+      if (existingProfile && existingProfile.signature === currentSignature) {
+        aiSetupStage = null; // Hardware unverändert -- Profil bleibt gültig, keine erneute Kalibrierung nötig
+      } else {
+      const gpuCandidate = !!(gpu && gpu.vramMB >= 4096); // Modell (~2,5 GB) + Kontext + Sicherheitsmarge
+
+      if (gpuCandidate && !resolveAiServerExeForVariant('vulkan')) {
+        try {
+          aiSetupStage = 'gpu-runtime';
+          aiSetupSend({ stage: 'gpu-runtime', receivedBytes: 0, totalBytes: 0 });
+          const vRuntimeDir = aiUserRuntimeDir('vulkan');
+          fs.mkdirSync(vRuntimeDir, { recursive: true });
+          const vZipPath = path.join(vRuntimeDir, 'llama-vulkan.zip');
+          await downloadFileWithProgress(AI_RUNTIME_VARIANTS.vulkan.zipUrl, vZipPath, (received, total) => {
+            aiSetupSend({ stage: 'gpu-runtime', receivedBytes: received, totalBytes: total });
+          });
+          const actualZipHash = await sha256OfFile(vZipPath);
+          if (actualZipHash !== AI_RUNTIME_VARIANTS.vulkan.zipSha256) {
+            try { fs.unlinkSync(vZipPath); } catch {} // beschädigt -- kein harter Fehler, CPU bleibt Fallback
+          } else {
+            await extractZipWithPowerShell(vZipPath, vRuntimeDir);
+            try { fs.unlinkSync(vZipPath); } catch {}
+          }
+        } catch { /* GPU-Runtime-Download fehlgeschlagen -- CPU bleibt Fallback, kein harter Fehler (Abschnitt 12) */ }
+      }
+
+      aiSetupStage = 'calibrating';
+      aiSetupSend({ stage: 'calibrating', receivedBytes: 0, totalBytes: 0 });
+      const calibModelPath = resolveAiModelFile();
+      const logicalCores = Math.max(1, os.cpus().length);
+      // Abschnitt 26/27: aus physischen Kernen abgeleitet (siehe
+      // computeRecommendedThreads()), nicht blind die logische Kernzahl --
+      // die Kalibrierung misst damit direkt die Threadzahl, die später auch
+      // wirklich im Spiel verwendet wird.
+      const threadCount = computeRecommendedThreads(cpuCores, logicalCores);
+      const candidates = { cpu: resolveAiServerExeForVariant('cpu'), vulkan: resolveAiServerExeForVariant('vulkan') };
+      const calibResults = await runLocalAiCalibration(candidates, calibModelPath, threadCount);
+      const decision = decideBackendFromCalibration(calibResults);
+      const cpuModel = (os.cpus()[0] || {}).model || 'unknown';
+      saveHardwareProfile({
+        profileVersion: AI_HARDWARE_PROFILE_VERSION,
+        cpu: { model: cpuModel, physicalCores: cpuCores, logicalCores },
+        ramTotalGB: Math.round((os.totalmem() / 1024 / 1024 / 1024) * 10) / 10,
+        gpu,
+        recommendedBackend: decision.backend,
+        recommendedGpuLayers: decision.backend === 'vulkan' ? 999 : 0,
+        recommendedThreads: threadCount,
+        estimatedTier: classifyPerformanceTier(decision.genTokPerSec),
+        calibration: { cpuGenTokPerSec: calibResults.cpu ? calibResults.cpu.genTokPerSec : null, gpuGenTokPerSec: calibResults.vulkan ? calibResults.vulkan.genTokPerSec : null },
+        signature: hardwareSignature(cpuModel, gpu),
+        calibratedAt: new Date().toISOString(),
+      });
+      }
+    }
+
+    aiSetupStage = 'starting';
+    aiSetupSend({ stage: 'starting', receivedBytes: 0, totalBytes: 0 });
+    const result = await ensureAiServerRunning();
+    aiSetupInProgress = false; aiSetupStage = null;
+    if (!result.ok) { aiLastError = 'server-start-failed'; return { ok: false, error: 'server-start-failed', reason: result.reason }; }
+    aiSetupSend({ stage: 'ready', receivedBytes: 0, totalBytes: 0 });
+    return { ok: true };
+  } catch (err) {
+    aiSetupInProgress = false; aiSetupStage = null; aiLastError = 'exception';
+    return { ok: false, error: 'exception', message: String(err && err.message || err) };
+  }
 });
 
 // ── Auto-Update (GitHub Releases) ────────────────────────────────────────
@@ -751,6 +1561,13 @@ app.whenReady().then(() => {
   if (app.isPackaged && loadSettingsSync().autoCheckUpdates) {
     const requestId = beginUpdateCheck();
     autoUpdater.checkForUpdates().finally(() => { endUpdateCheck(requestId); });
+  }
+  // Lokale KI: nur STARTEN, wenn Runtime+Modell bereits vorhanden sind (nie
+  // automatisch herunterladen -- der ~2,5 GB-Download läuft ausschließlich
+  // über einen expliziten Klick, siehe ai-setup-download). Läuft im
+  // Hintergrund, blockiert das Fensteröffnen nicht.
+  if (resolveAiServerExe() && resolveAiModelFile()) {
+    ensureAiServerRunning().catch(() => {});
   }
 });
 

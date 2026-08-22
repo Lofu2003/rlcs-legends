@@ -24,9 +24,13 @@
 // Statachsen über rollPlayer(), war schon für den Match-Bonus zuständig) --
 // Trainer entfällt komplett, sein Entwicklungsbonus wandert zu Coach (siehe
 // coachDevelopmentBonusPct() in renderer.js, vorher trainerDevelopmentBonusPct()).
+// Rollenentfernung (Masterprompt-Auftrag): 'Anwalt' und 'Event-Manager'
+// wurden hier ersatzlos gestrichen (waren Ablösedauer- bzw. Vorstandsbudget-
+// Bonusrollen ohne eigenständigen Mehrwert) -- siehe loadGameState()-
+// Migration für bestehende Saves mit alten Anwalt/Event-Manager-Einträgen.
 const ORG_ROSTER_STAFF_ROLES = [
-  'Scout', 'Analyst', 'Finanzvorstand', 'Anwalt',
-  'Event-Manager', 'PR-Manager', 'Psychologe', 'Physiotherapeut',
+  'Scout', 'Analyst', 'Finanzvorstand',
+  'PR-Manager', 'Psychologe', 'Physiotherapeut',
 ];
 
 // Personal-Seite (Runde: "Personal"-Dashboard): jede der 8 Rollen bekommt ihre
@@ -41,8 +45,6 @@ const STAFF_ROLE_ATTRIBUTES = {
   'Scout': ['talentgespuer', 'netzwerk', 'datenanalyse', 'verhandlung'],
   'Analyst': ['datenanalyse', 'gegnervorbereitung', 'praezision', 'kommunikation'],
   'Finanzvorstand': ['verhandlung', 'budgetplanung', 'risikomanagement', 'marktkenntnis'],
-  'Anwalt': ['vertragswissen', 'verhandlung', 'diskretion', 'reaktionsschnelligkeit'],
-  'Event-Manager': ['organisation', 'kreativitaet', 'netzwerk', 'stressresistenz'],
   'PR-Manager': ['kommunikation', 'kreativitaet', 'netzwerk', 'krisenmanagement'],
   'Psychologe': ['empathie', 'kommunikation', 'erfahrung', 'diskretion'],
   'Physiotherapeut': ['medizinwissen', 'praezision', 'erfahrung', 'geduld'],
@@ -52,8 +54,7 @@ const STAFF_ATTRIBUTE_LABELS = {
   talentgespuer: 'Talentgespür', netzwerk: 'Netzwerk', datenanalyse: 'Datenanalyse', verhandlung: 'Verhandlungsgeschick',
   gegnervorbereitung: 'Gegner-Vorbereitung', praezision: 'Präzision', kommunikation: 'Kommunikation',
   budgetplanung: 'Budgetplanung', risikomanagement: 'Risikomanagement', marktkenntnis: 'Marktkenntnis',
-  vertragswissen: 'Vertragswissen', diskretion: 'Diskretion', reaktionsschnelligkeit: 'Reaktionsschnelligkeit',
-  organisation: 'Organisation', kreativitaet: 'Kreativität', stressresistenz: 'Stressresistenz',
+  diskretion: 'Diskretion', kreativitaet: 'Kreativität',
   krisenmanagement: 'Krisenmanagement', empathie: 'Empathie', erfahrung: 'Erfahrung', medizinwissen: 'Medizinwissen',
 };
 
@@ -83,17 +84,42 @@ const ROSTER_NICK_SUFFIXES = [
   'Blade', 'Reign', 'Fury', 'Pulse', 'Shift', 'Wing', 'Cross', 'Flare', 'Grip', 'Dash',
   'Vortex', 'Spark', 'Ridge', 'Talon',
 ];
+// Bug-Fix (Bot-Ökosystem V17, Fix 3 -- Root-Cause empirisch bewiesen): mit nur
+// 15 männlichen + 15 weiblichen Vornamen x 15 Nachnamen (450 Kombinationen pro
+// Nicht-Coach-Rolle, ueber alle 6 Rollen unabhaengig) war der Namensraum bei
+// 453 Orgs UND dem jetzt (nach Fix 1+2) tatsaechlich funktionierenden
+// Einstellungs-Durchsatz strukturell zu klein: ensureStaffMarketPopulation()s
+// `usedNames`-Pruefung zaehlt JEDEN JEMALS erzeugten Namen (nicht nur aktuell
+// verfuegbare), Namen werden NIE wiederverwendet -- gemessen (V17-POST, 5x50
+// Saisons): der verfuegbare Pool aller 6 Nicht-Coach-Rollen faellt trotz des
+// bereits 4x groesseren MIN=80/BATCH=32 (Fix 2) ab Saison ~21 unaufhaltsam auf
+// 0 und bleibt dort dauerhaft (Coach, mit 24x24=576 Spitznamen-Kombinationen
+// UND geringerer Nachfrage durch den Prioritaets-Tie-Breaker, bleibt gesund).
+// Fix: derselbe 4x-Skalierungsfaktor wie bei Fix 2/V15-Spieler-Pool, jetzt auf
+// den Namensraum selbst angewendet (30+30 Vornamen x 30 Nachnamen = 1800
+// Kombinationen je Rolle, >3x Coachs Kombinationszahl) statt einer weiteren
+// Batch-Groessen-Erhoehung, die das eigentliche Problem (endlicher
+// Namensraum, nicht zu kleine Nachfuell-Rate) nicht behoben haette.
 const ROSTER_STAFF_FIRST_NAMES_M = [
   'Samuel', 'Lukas', 'Finn', 'Paul', 'Jonas', 'Max', 'Leon', 'Tim', 'Elias', 'Noah',
   'David', 'Simon', 'Felix', 'Jan', 'Marco',
+  'Tobias', 'Erik', 'Julian', 'Niklas', 'Theo',
+  'Adrian', 'Benedikt', 'Christian', 'Daniel', 'Fabian',
+  'Gustav', 'Henrik', 'Ivo', 'Jakob', 'Konrad',
 ];
 const ROSTER_STAFF_FIRST_NAMES_F = [
   'Sophie', 'Marie', 'Laura', 'Emma', 'Julia', 'Lena', 'Anna', 'Nina', 'Mia', 'Lea',
   'Sarah', 'Clara', 'Hannah', 'Vera', 'Nora',
+  'Ida', 'Frida', 'Greta', 'Ines', 'Jana',
+  'Katja', 'Lotte', 'Maja', 'Nele', 'Paula',
+  'Rosa', 'Selma', 'Tessa', 'Ulrike', 'Wanda',
 ];
 const ROSTER_STAFF_LAST_NAMES = [
   'Torres', 'Weber', 'Hoffmann', 'Berger', 'Kessler', 'Nilsson', 'Dubois', 'Rossi', 'Novak', 'Andersen',
   'Keller', 'Fischer', 'Moreau', 'Larsen', 'Bianchi',
+  'Schulz', 'Vogel', 'Petersen', 'Costa', 'Lindqvist',
+  'Marchetti', 'Bergström', 'Wagner', 'Laurent', 'Kowalski',
+  'Hartmann', 'Sorensen', 'Ferreira', 'Zimmermann', 'Olsen',
 ];
 
 // Echte/verifizierte Spieler- und Team-Mitarbeiter-Namen pro Org, aus der
@@ -108,93 +134,93 @@ const ROSTER_STAFF_LAST_NAMES = [
 // ist im Spiel immer der selbst erstellte Charakter des Spielers (siehe
 // ORG_PREVIEW_STAFF_ROLES/renderOrgPreview() in renderer.js).
 const ORG_REAL_ROSTER_NAMES = {
-  "25 Shot Club": { players: ["Sypical", "Chicago", "Caard"], coach: "Jahzo", staff: { "Finanzvorstand": "Gabriel Hernandez", "PR-Manager": "Sven Miller", "Psychologe": "Dominik Smith", "Scout": "Morgan Taylor", "Anwalt": "Francis Dupont", "Event-Manager": "Chris Jones", "Physiotherapeut": "Gabriel Martinez" } },
-  "445": { players: ["Chronic", "caleb", "Metsanauris"], coach: "Jahzo", staff: { "Finanzvorstand": "Chris Smith", "PR-Manager": "Francis Anderson", "Psychologe": "Pierre Taylor", "Scout": "Dominik Smith", "Anwalt": "Sven Martinez", "Event-Manager": "Arthur Jones", "Physiotherapeut": "Dominik Williams" } },
-  "77Blocks": { players: ["Caard", "Sypical", "Dread"], coach: "Satthew", staff: { "Finanzvorstand": "Lucas Müller", "PR-Manager": "Skyler Anderson", "Psychologe": "Jamie Lopez", "Scout": "Chris Smith", "Anwalt": "Morgan Miller", "Event-Manager": "Arthur Hernandez", "Physiotherapeut": "Casey Silva" } },
-  "BS+COMPETITION": { players: ["Retals", "Archie", "kaka"], coach: "Chrome", staff: { "Finanzvorstand": "Chris Lopez", "PR-Manager": "Dominik Garcia", "Psychologe": "Lucas Dupont", "Scout": "Sven Davis", "Anwalt": "Alex Dupont", "Event-Manager": "Gabriel Thomas", "Physiotherapeut": "Skyler Thomas" } },
-  "BTF Esports": { players: ["BeastMode", "MajicBear", "Caard"], coach: "Chrome", staff: { "Finanzvorstand": "Arthur Johnson", "PR-Manager": "Ryan Taylor", "Psychologe": "Sam Garcia", "Scout": "Robin Wilson", "Anwalt": "Alex Miller", "Event-Manager": "Gabriel Thomas", "Physiotherapeut": "Taylor Lopez" } },
-  "Bonk!": { players: ["Retals", "Superlachie", "Atow"], coach: "Fireburner", staff: { "Finanzvorstand": "Casey Müller", "PR-Manager": "Taylor Brown", "Psychologe": "Sven Davis", "Scout": "Chris Johnson", "Anwalt": "Arthur Williams", "Event-Manager": "David Gonzalez", "Physiotherapeut": "Jamie Davis" } },
-  "Canterbury-Bankstown Bulldogs": { players: ["carca", "kamz", "Satthew"], coach: "Sizz", staff: { "Finanzvorstand": "Jordan Davis", "PR-Manager": "Dominik Martinez", "Psychologe": "David Müller", "Scout": "Marc Thomas", "Anwalt": "Chris Lopez", "Event-Manager": "Marc Lopez", "Physiotherapeut": "Taylor Hernandez" } },
-  "Chiefs Esports Club": { players: ["Metsanauris", "Torsos", "carca"], coach: "Ferra", staff: { "Finanzvorstand": "Dominik Jones", "PR-Manager": "Jamie Martinez", "Psychologe": "Arthur Rodriguez", "Scout": "Skyler Rodriguez", "Anwalt": "Lucas Silva", "Event-Manager": "Robin Brown", "Physiotherapeut": "Robin Hernandez" } },
-  "Cloud9": { players: ["Torsos", "Metsanauris", "kamz"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Jones", "PR-Manager": "Jordan Smith", "Psychologe": "Ryan Smith", "Scout": "Casey Johnson", "Anwalt": "Chris Thomas", "Event-Manager": "Lucas Garcia", "Physiotherapeut": "Morgan Taylor" } },
-  "Complexity Gaming": { players: ["Joreuz", "Retals", "caleb"], coach: "RawGregory", staff: { "Finanzvorstand": "Gabriel Müller", "PR-Manager": "Sam Müller", "Psychologe": "Ryan Thomas", "Scout": "Pierre Smith", "Anwalt": "Arthur Miller", "Event-Manager": "David Jones", "Physiotherapeut": "Jamie Lopez" } },
-  "Dangerous Esports Club": { players: ["Turo", "AppJack", "Amphis"], coach: "Eversax", staff: { "Finanzvorstand": "Morgan Davis", "PR-Manager": "Ryan Thomas", "Psychologe": "Dominik Dupont", "Scout": "Morgan Thomas", "Anwalt": "Gabriel Martinez", "Event-Manager": "Dominik Johnson", "Physiotherapeut": "Marc Rodriguez" } },
-  "Death Cloud Esports": { players: ["Comm", "EyeIgnite", "Scream"], coach: "Ferra", staff: { "Finanzvorstand": "David Anderson", "PR-Manager": "Pierre Dupont", "Psychologe": "Jamie Jones", "Scout": "Sven Silva", "Anwalt": "Lucas Williams", "Event-Manager": "Alex Müller", "Physiotherapeut": "Jordan Miller" } },
-  "Deleted Gaming": { players: ["N1tro", "Remkoe", "Archie"], coach: "Eversax", staff: { "Finanzvorstand": "Pierre Jones", "PR-Manager": "Gabriel Johnson", "Psychologe": "Lucas Garcia", "Scout": "Skyler Smith", "Anwalt": "Jamie Anderson", "Event-Manager": "Sam Lopez", "Physiotherapeut": "Gabriel Miller" } },
-  "Dignitas": { players: ["crr", "caleb", "noly"], coach: "Satthew", staff: { "Finanzvorstand": "Casey Martinez", "PR-Manager": "Gabriel Jones", "Psychologe": "Pierre Dupont", "Scout": "Gabriel Thomas", "Anwalt": "Skyler Brown", "Event-Manager": "Casey Garcia", "Physiotherapeut": "Taylor Miller" } },
-  "Endpoint": { players: ["Metsanauris", "Remkoe", "kamz"], coach: "Chrome", staff: { "Finanzvorstand": "Gabriel Müller", "PR-Manager": "Taylor Thomas", "Psychologe": "Sam Jones", "Scout": "Arthur Hernandez", "Anwalt": "Marc Martinez", "Event-Manager": "Lucas Miller", "Physiotherapeut": "Jamie Thomas" } },
-  "Enisorail": { players: ["Markydooda", "CaioTG1", "Hntr"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Rodriguez", "PR-Manager": "Casey Silva", "Psychologe": "Skyler Brown", "Scout": "Pierre Johnson", "Anwalt": "Morgan Gonzalez", "Event-Manager": "Gabriel Thomas", "Physiotherapeut": "Gabriel Taylor" } },
-  "Envy": { players: ["Rizzo", "carca", "ayyjayy"], coach: "Ferra", staff: { "Finanzvorstand": "Jamie Brown", "PR-Manager": "Robin Gonzalez", "Psychologe": "Arthur Garcia", "Scout": "Chris Thomas", "Anwalt": "Dominik Rodriguez", "Event-Manager": "Jamie Müller", "Physiotherapeut": "Sam Rodriguez" } },
-  "Evil Geniuses": { players: ["crr", "Firstkiller", "N1tro"], coach: "RawGregory", staff: { "Finanzvorstand": "Morgan Lopez", "PR-Manager": "Morgan Johnson", "Psychologe": "Lucas Müller", "Scout": "Ryan Müller", "Anwalt": "Jordan Davis", "Event-Manager": "Marc Martinez", "Physiotherapeut": "Skyler Müller" } },
-  "FIZ6 Gaming": { players: ["Caard", "hockser", "caleb"], coach: "Chrome", staff: { "Finanzvorstand": "Francis Wilson", "PR-Manager": "Jamie Lopez", "Psychologe": "Jordan Müller", "Scout": "Jamie Dupont", "Anwalt": "Pierre Taylor", "Event-Manager": "Lucas Thomas", "Physiotherapeut": "Casey Wilson" } },
-  "FURIA": { players: ["yanxnz", "Lostt", "Drufinho"], coach: "Kairos", staff: { "Finanzvorstand": "Roberto Silva", "PR-Manager": "Camila Souza", "Psychologe": "Dr. Fernando Costa", "Scout": "Lucas Oliveira", "Anwalt": "Santos & Partners", "Event-Manager": "Beatriz Lima", "Physiotherapeut": "Ricardo Mendes" } },
-  "FUT Esports": { players: ["Superlachie", "Rizzo", "hockser"], coach: "Sizz", staff: { "Finanzvorstand": "Chris Jones", "PR-Manager": "Sam Davis", "Psychologe": "Gabriel Anderson", "Scout": "Gabriel Jones", "Anwalt": "Sam Müller", "Event-Manager": "Robin Davis", "Physiotherapeut": "Sam Wilson" } },
-  "Five Fears": { players: ["Fever", "Firstkiller", "Cheese"], coach: "Eversax", staff: { "Finanzvorstand": "Arthur Davis", "PR-Manager": "Chris Garcia", "Psychologe": "Gabriel Garcia", "Scout": "Chris Taylor", "Anwalt": "Francis Davis", "Event-Manager": "Pierre Wilson", "Physiotherapeut": "Dominik Thomas" } },
-  "FlipSid3 Tactics": { players: ["Satthew", "Comm", "AppJack"], coach: "Sizz", staff: { "Finanzvorstand": "Morgan Johnson", "PR-Manager": "Francis Martinez", "Psychologe": "Dominik Martinez", "Scout": "Arthur Johnson", "Anwalt": "Chris Williams", "Event-Manager": "Marc Johnson", "Physiotherapeut": "Alex Smith" } },
-  "G2 Esports": { players: ["Acronik", "Atow", "Oaly"], coach: "Fireburner", staff: { "Finanzvorstand": "David Rodriguez", "PR-Manager": "Robin Davis", "Psychologe": "Morgan Davis", "Scout": "David Miller", "Anwalt": "Arthur Müller", "Event-Manager": "Sam Davis", "Physiotherapeut": "Robin Silva" } },
-  "GameWard": { players: ["M1k3rules", "Bananahead", "Torsos"], coach: "RawGregory", staff: { "Finanzvorstand": "Jordan Jones", "PR-Manager": "Pierre Müller", "Psychologe": "Ryan Miller", "Scout": "Taylor Garcia", "Anwalt": "Robin Silva", "Event-Manager": "David Hernandez", "Physiotherapeut": "Taylor Martinez" } },
-  "Gen.G Mobil1 Racing": { players: ["hockser", "BeastMode", "Firstkiller"], coach: "Ferra", staff: { "Finanzvorstand": "Jordan Smith", "PR-Manager": "Ryan Jones", "Psychologe": "Arthur Brown", "Scout": "Casey Lopez", "Anwalt": "Alex Williams", "Event-Manager": "Robin Garcia", "Physiotherapeut": "Ryan Davis" } },
-  "Gentle Mates": { players: ["Superlachie", "AppJack", "crr"], coach: "Sizz", staff: { "Finanzvorstand": "Chris Miller", "PR-Manager": "Sven Davis", "Psychologe": "Jamie Anderson", "Scout": "Ryan Hernandez", "Anwalt": "Morgan Taylor", "Event-Manager": "Dominik Anderson", "Physiotherapeut": "Jamie Miller" } },
-  "Ghost Gaming": { players: ["reysbull", "noly", "Allushin"], coach: "Fireburner", staff: { "Finanzvorstand": "Alex Lopez", "PR-Manager": "Sven Johnson", "Psychologe": "Ryan Hernandez", "Scout": "Jordan Johnson", "Anwalt": "Arthur Davis", "Event-Manager": "Marc Martinez", "Physiotherapeut": "Morgan Lopez" } },
-  "God Speed": { players: ["AppJack", "Archie", "crr"], coach: "Jahzo", staff: { "Finanzvorstand": "Dominik Taylor", "PR-Manager": "Gabriel Davis", "Psychologe": "Gabriel Miller", "Scout": "Alex Rodriguez", "Anwalt": "Chris Hernandez", "Event-Manager": "Alex Taylor", "Physiotherapeut": "Skyler Thomas" } },
-  "Godalions": { players: ["Bananahead", "caleb", "kaka"], coach: "Fireburner", staff: { "Finanzvorstand": "Sam Rodriguez", "PR-Manager": "Casey Gonzalez", "Psychologe": "Lucas Silva", "Scout": "Jamie Smith", "Anwalt": "Robin Taylor", "Event-Manager": "Robin Lopez", "Physiotherapeut": "Sven Taylor" } },
-  "GracesBlaze": { players: ["Cheese", "Superlachie", "Metsanauris"], coach: "Ferra", staff: { "Finanzvorstand": "Gabriel Miller", "PR-Manager": "Alex Martinez", "Psychologe": "Alex Thomas", "Scout": "Pierre Gonzalez", "Anwalt": "Casey Taylor", "Event-Manager": "Casey Brown", "Physiotherapeut": "Taylor Silva" } },
-  "GriddyGoose": { players: ["Sypical", "N1tro", "Amphis"], coach: "Sizz", staff: { "Finanzvorstand": "Taylor Müller", "PR-Manager": "David Johnson", "Psychologe": "Lucas Taylor", "Scout": "Sam Smith", "Anwalt": "Ryan Johnson", "Event-Manager": "Chris Miller", "Physiotherapeut": "Jamie Silva" } },
-  "Infamous": { players: ["Lj", "Acronik", "Daniel"], coach: "Eversax", staff: { "Finanzvorstand": "Morgan Smith", "PR-Manager": "Lucas Taylor", "Psychologe": "Jamie Müller", "Scout": "Jamie Miller", "Anwalt": "Sam Jones", "Event-Manager": "Gabriel Brown", "Physiotherapeut": "Chris Anderson" } },
-  "Jungle Juicers": { players: ["caleb", "Lj", "EyeIgnite"], coach: "Chrome", staff: { "Finanzvorstand": "Jordan Jones", "PR-Manager": "Lucas Wilson", "Psychologe": "Francis Rodriguez", "Scout": "Dominik Hernandez", "Anwalt": "Pierre Müller", "Event-Manager": "Sam Davis", "Physiotherapeut": "Arthur Martinez" } },
-  "KINOTROPE gaming": { players: ["Amphis", "Archie", "Evoh"], coach: "Satthew", staff: { "Finanzvorstand": "Arthur Jones", "PR-Manager": "Lucas Johnson", "Psychologe": "Marc Anderson", "Scout": "Lucas Taylor", "Anwalt": "Arthur Lopez", "Event-Manager": "David Lopez", "Physiotherapeut": "Casey Garcia" } },
-  "Karmine Corp": { players: ["vatira", "Atow", "Rise"], coach: "Ferra", staff: { "Finanzvorstand": "Amine M'Barek", "PR-Manager": "Sophie Lefebvre", "Psychologe": "Jean-Luc Dubois", "Scout": "Thomas Petit", "Anwalt": "Cabinet Avocat Paris", "Event-Manager": "Lucas Bernard", "Physiotherapeut": "Marie Curie" } },
-  "Kings of Urban": { players: ["Acronik", "CaioTG1", "Oski"], coach: "Satthew", staff: { "Finanzvorstand": "Jamie Johnson", "PR-Manager": "Sven Miller", "Psychologe": "Jordan Anderson", "Scout": "Sven Anderson", "Anwalt": "Jordan Rodriguez", "Event-Manager": "Marc Davis", "Physiotherapeut": "Sven Johnson" } },
-  "L'antique Esport": { players: ["Superlachie", "crr", "CaioTG1"], coach: "Chrome", staff: { "Finanzvorstand": "Jamie Anderson", "PR-Manager": "Robin Johnson", "Psychologe": "Sven Wilson", "Scout": "Alex Rodriguez", "Anwalt": "Morgan Brown", "Event-Manager": "David Brown", "Physiotherapeut": "Taylor Johnson" } },
-  "Lilmix": { players: ["CaioTG1", "Superlachie", "crr"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Anderson", "PR-Manager": "Sam Martinez", "Psychologe": "Arthur Garcia", "Scout": "Taylor Silva", "Anwalt": "Francis Davis", "Event-Manager": "Taylor Brown", "Physiotherapeut": "Marc Müller" } },
-  "Lotus 8 Esports": { players: ["kaka", "Caard", "Fever"], coach: "RawGregory", staff: { "Finanzvorstand": "Morgan Taylor", "PR-Manager": "Lucas Müller", "Psychologe": "Francis Jones", "Scout": "Pierre Miller", "Anwalt": "Casey Anderson", "Event-Manager": "Jamie Gonzalez", "Physiotherapeut": "Francis Thomas" } },
-  "M80": { players: ["Atow", "Dread", "Joyo"], coach: "Ferra", staff: { "Finanzvorstand": "Chris Miller", "PR-Manager": "Gabriel Müller", "Psychologe": "Arthur Hernandez", "Scout": "Sam Wilson", "Anwalt": "Alex Hernandez", "Event-Manager": "Chris Hernandez", "Physiotherapeut": "Lucas Johnson" } },
-  "MIBR": { players: ["Arsenal", "Markydooda", "BeastMode"], coach: "Jahzo", staff: { "Finanzvorstand": "Arthur Miller", "PR-Manager": "Gabriel Brown", "Psychologe": "Jordan Jones", "Scout": "Sam Jones", "Anwalt": "Dominik Garcia", "Event-Manager": "Francis Williams", "Physiotherapeut": "Francis Brown" } },
-  "Manchester City Esports": { players: ["Cheese", "Evoh", "Retals"], coach: "RawGregory", staff: { "Finanzvorstand": "Robin Müller", "PR-Manager": "Jordan Davis", "Psychologe": "Skyler Dupont", "Scout": "Gabriel Davis", "Anwalt": "David Martinez", "Event-Manager": "Taylor Garcia", "Physiotherapeut": "Casey Anderson" } },
-  "Mock-It Esports": { players: ["Kuxir97", "Oaly", "Oski"], coach: "Fireburner", staff: { "Finanzvorstand": "Sven Anderson", "PR-Manager": "Dominik Jones", "Psychologe": "Ryan Davis", "Scout": "Lucas Rodriguez", "Anwalt": "Arthur Brown", "Event-Manager": "Skyler Martinez", "Physiotherapeut": "Sam Brown" } },
-  "Moist Esports": { players: ["JKnaps", "Chronic", "Rizzo"], coach: "Eversax", staff: { "Finanzvorstand": "Lucas Smith", "PR-Manager": "Jamie Jones", "Psychologe": "Casey Miller", "Scout": "David Anderson", "Anwalt": "Sven Anderson", "Event-Manager": "Francis Lopez", "Physiotherapeut": "Jamie Garcia" } },
-  "NORTHSTAR": { players: ["kaka", "N1tro", "Fever"], coach: "Satthew", staff: { "Finanzvorstand": "Robin Williams", "PR-Manager": "David Rodriguez", "Psychologe": "Sam Hernandez", "Scout": "Sven Taylor", "Anwalt": "Arthur Miller", "Event-Manager": "Chris Dupont", "Physiotherapeut": "Jamie Miller" } },
-  "NOVO Esports": { players: ["Amphis", "gReazymeister", "MajicBear"], coach: "Fireburner", staff: { "Finanzvorstand": "Taylor Miller", "PR-Manager": "Alex Taylor", "Psychologe": "Casey Thomas", "Scout": "Morgan Dupont", "Anwalt": "Sam Wilson", "Event-Manager": "Dominik Gonzalez", "Physiotherapeut": "Dominik Rodriguez" } },
-  "NRG": { players: ["GarrettG", "Justin", "Mist"], coach: "Fireburner", staff: { "Finanzvorstand": "Sarah Jenkins", "PR-Manager": "Mike Peterson", "Psychologe": "Dr. David Brown", "Scout": "Jason Smith", "Anwalt": "Sterling & Co.", "Event-Manager": "Rachel Green", "Physiotherapeut": "Tom Williams" } },
-  "NTX Esports": { players: ["Retals", "noly", "Fever"], coach: "RawGregory", staff: { "Finanzvorstand": "Morgan Miller", "PR-Manager": "Alex Miller", "Psychologe": "Robin Miller", "Scout": "Arthur Wilson", "Anwalt": "Taylor Wilson", "Event-Manager": "Skyler Brown", "Physiotherapeut": "Robin Williams" } },
-  "Next2Nu Esports": { players: ["Daniel", "BeastMode", "JKnaps"], coach: "Chrome", staff: { "Finanzvorstand": "Dominik Lopez", "PR-Manager": "Casey Miller", "Psychologe": "Jordan Dupont", "Scout": "Dominik Martinez", "Anwalt": "Jordan Smith", "Event-Manager": "Sam Gonzalez", "Physiotherapeut": "Robin Thomas" } },
-  "Ninjas in Pyjamas": { players: ["Chronic", "N1tro", "caleb"], coach: "Sizz", staff: { "Finanzvorstand": "Dominik Davis", "PR-Manager": "Morgan Lopez", "Psychologe": "Pierre Anderson", "Scout": "Dominik Thomas", "Anwalt": "Sam Hernandez", "Event-Manager": "Lucas Williams", "Physiotherapeut": "Skyler Martinez" } },
-  "Northern Gaming": { players: ["Maestro", "Cheese", "Acronik"], coach: "Sizz", staff: { "Finanzvorstand": "Ryan Silva", "PR-Manager": "Sven Taylor", "Psychologe": "Casey Brown", "Scout": "Chris Taylor", "Anwalt": "Lucas Taylor", "Event-Manager": "Casey Müller", "Physiotherapeut": "Lucas Jones" } },
-  "Nova Esports": { players: ["Hntr", "Fever", "Metsanauris"], coach: "Satthew", staff: { "Finanzvorstand": "Taylor Anderson", "PR-Manager": "Marc Wilson", "Psychologe": "Morgan Garcia", "Scout": "Jamie Davis", "Anwalt": "Lucas Dupont", "Event-Manager": "Casey Martinez", "Physiotherapeut": "Sam Martinez" } },
-  "NuTorious": { players: ["Superlachie", "JKnaps", "BeastMode"], coach: "Fireburner", staff: { "Finanzvorstand": "Pierre Anderson", "PR-Manager": "Pierre Jones", "Psychologe": "Lucas Miller", "Scout": "Chris Johnson", "Anwalt": "Jordan Miller", "Event-Manager": "Chris Silva", "Physiotherapeut": "Arthur Johnson" } },
-  "OpTic Gaming": { players: ["N1tro", "Kuxir97", "Metsanauris"], coach: "RawGregory", staff: { "Finanzvorstand": "Alex Williams", "PR-Manager": "Marc Martinez", "Psychologe": "Skyler Garcia", "Scout": "Ryan Taylor", "Anwalt": "David Brown", "Event-Manager": "Taylor Dupont", "Physiotherapeut": "Morgan Lopez" } },
-  "Overlooked": { players: ["Maestro", "N1tro", "Cheese"], coach: "Sizz", staff: { "Finanzvorstand": "Francis Brown", "PR-Manager": "Lucas Jones", "Psychologe": "Chris Rodriguez", "Scout": "Jordan Martinez", "Anwalt": "Ryan Silva", "Event-Manager": "Sam Brown", "Physiotherapeut": "Jordan Davis" } },
-  "PSG Esports": { players: ["Retals", "Superlachie", "crr"], coach: "Chrome", staff: { "Finanzvorstand": "Marc Davis", "PR-Manager": "Dominik Silva", "Psychologe": "Taylor Gonzalez", "Scout": "Casey Smith", "Anwalt": "Dominik Jones", "Event-Manager": "Skyler Davis", "Physiotherapeut": "Gabriel Thomas" } },
-  "PWR": { players: ["caleb", "Atow", "Comm"], coach: "Satthew", staff: { "Finanzvorstand": "Sam Jones", "PR-Manager": "Jamie Williams", "Psychologe": "Arthur Miller", "Scout": "Morgan Silva", "Anwalt": "Taylor Garcia", "Event-Manager": "Chris Anderson", "Physiotherapeut": "Skyler Miller" } },
-  "Pioneers": { players: ["hockser", "Amphis", "kaka"], coach: "Fireburner", staff: { "Finanzvorstand": "Taylor Johnson", "PR-Manager": "Dominik Johnson", "Psychologe": "Sam Hernandez", "Scout": "Robin Anderson", "Anwalt": "Sven Müller", "Event-Manager": "Sven Martinez", "Physiotherapeut": "Gabriel Martinez" } },
-  "R8 Esports": { players: ["Bananahead", "Evoh", "Sypical"], coach: "Eversax", staff: { "Finanzvorstand": "Chris Hernandez", "PR-Manager": "Sven Hernandez", "Psychologe": "Jordan Silva", "Scout": "Dominik Davis", "Anwalt": "Casey Brown", "Event-Manager": "Arthur Lopez", "Physiotherapeut": "Sven Williams" } },
-  "Renegades": { players: ["Allushin", "reysbull", "gReazymeister"], coach: "Chrome", staff: { "Finanzvorstand": "Skyler Müller", "PR-Manager": "Dominik Rodriguez", "Psychologe": "Alex Johnson", "Scout": "Jordan Johnson", "Anwalt": "Casey Rodriguez", "Event-Manager": "Dominik Thomas", "Physiotherapeut": "Pierre Johnson" } },
-  "Revelation": { players: ["Caard", "Joyo", "Dread"], coach: "Jahzo", staff: { "Finanzvorstand": "David Smith", "PR-Manager": "Dominik Wilson", "Psychologe": "Casey Brown", "Scout": "Jordan Müller", "Anwalt": "David Taylor", "Event-Manager": "Jamie Anderson", "Physiotherapeut": "Chris Hernandez" } },
-  "Rogue": { players: ["Scream", "Chicago", "Comm"], coach: "Chrome", staff: { "Finanzvorstand": "Arthur Thomas", "PR-Manager": "Taylor Hernandez", "Psychologe": "Chris Wilson", "Scout": "Jamie Williams", "Anwalt": "Robin Jones", "Event-Manager": "Marc Miller", "Physiotherapeut": "Skyler Brown" } },
-  "Selfless Gaming": { players: ["Chicago", "CaioTG1", "Fever"], coach: "Chrome", staff: { "Finanzvorstand": "Dominik Thomas", "PR-Manager": "David Anderson", "Psychologe": "Skyler Gonzalez", "Scout": "Lucas Williams", "Anwalt": "Morgan Johnson", "Event-Manager": "Morgan Anderson", "Physiotherapeut": "Marc Müller" } },
-  "Shopify Rebellion": { players: ["2Piece", "Paarth", "LJ"], coach: "Memory", staff: { "Finanzvorstand": "Jessica Wong", "PR-Manager": "David Miller", "Psychologe": "Elena Rossi", "Scout": "Ryan O'Connor", "Anwalt": "Legal Rebels", "Event-Manager": "Sarah Jenkins", "Physiotherapeut": "Mark Henderson" } },
-  "Spacestation Gaming": { players: ["Sypical", "Daniel", "MajicBear"], coach: "Ferra", staff: { "Finanzvorstand": "Pierre Davis", "PR-Manager": "Alex Silva", "Psychologe": "Jamie Jones", "Scout": "Casey Thomas", "Anwalt": "Sam Gonzalez", "Event-Manager": "Arthur Johnson", "Physiotherapeut": "David Anderson" } },
-  "Splyce": { players: ["Superlachie", "MajicBear", "Kuxir97"], coach: "Eversax", staff: { "Finanzvorstand": "Chris Miller", "PR-Manager": "Pierre Jones", "Psychologe": "Taylor Gonzalez", "Scout": "Lucas Taylor", "Anwalt": "Sven Anderson", "Event-Manager": "Arthur Brown", "Physiotherapeut": "Pierre Dupont" } },
-  "Str1ve eSports": { players: ["Maestro", "Oski", "kaka"], coach: "Sizz", staff: { "Finanzvorstand": "David Rodriguez", "PR-Manager": "Marc Silva", "Psychologe": "Sam Williams", "Scout": "Lucas Wilson", "Anwalt": "Sven Dupont", "Event-Manager": "Lucas Rodriguez", "Physiotherapeut": "Sven Müller" } },
-  "Sunset": { players: ["Joreuz", "Fever", "Allushin"], coach: "Eversax", staff: { "Finanzvorstand": "Skyler Johnson", "PR-Manager": "Arthur Garcia", "Psychologe": "Chris Smith", "Scout": "Alex Rodriguez", "Anwalt": "Gabriel Davis", "Event-Manager": "Morgan Garcia", "Physiotherapeut": "Taylor Hernandez" } },
-  "TSM": { players: ["crr", "Satthew", "gReazymeister"], coach: "Sizz", staff: { "Finanzvorstand": "Morgan Hernandez", "PR-Manager": "Dominik Martinez", "Psychologe": "Marc Garcia", "Scout": "Chris Anderson", "Anwalt": "Robin Silva", "Event-Manager": "Sven Williams", "Physiotherapeut": "Alex Garcia" } },
-  "Team BSK": { players: ["Cheese", "noly", "Oaly"], coach: "Fireburner", staff: { "Finanzvorstand": "Robin Rodriguez", "PR-Manager": "Taylor Rodriguez", "Psychologe": "Robin Jones", "Scout": "Chris Garcia", "Anwalt": "Casey Johnson", "Event-Manager": "Jordan Miller", "Physiotherapeut": "Pierre Hernandez" } },
-  "Team Falcons": { players: ["Trk511", "Ahmad", "Rw9"], coach: "Senzo", staff: { "Finanzvorstand": "Khalid Mansour", "PR-Manager": "Fatima Al-Farsi", "Psychologe": "Omar Hassan", "Scout": "Ibrahim Zaid", "Anwalt": "Riyadh Law Firm", "Event-Manager": "Layla Nasser", "Physiotherapeut": "Youssef Ali" } },
-  "Team Secret": { players: ["Maestro", "Amphis", "Comm"], coach: "Fireburner", staff: { "Finanzvorstand": "David Gonzalez", "PR-Manager": "Dominik Müller", "Psychologe": "Dominik Smith", "Scout": "Skyler Lopez", "Anwalt": "Sven Anderson", "Event-Manager": "Taylor Brown", "Physiotherapeut": "Ryan Müller" } },
-  "Team Silenced": { players: ["Daniel", "Remkoe", "Amphis"], coach: "RawGregory", staff: { "Finanzvorstand": "Casey Rodriguez", "PR-Manager": "Sven Williams", "Psychologe": "Sam Taylor", "Scout": "Casey Dupont", "Anwalt": "Skyler Johnson", "Event-Manager": "Taylor Martinez", "Physiotherapeut": "Francis Silva" } },
-  "Team Vision": { players: ["Oaly", "crr", "Rizzo"], coach: "Ferra", staff: { "Finanzvorstand": "Casey Dupont", "PR-Manager": "Lucas Jones", "Psychologe": "Gabriel Taylor", "Scout": "Robin Smith", "Anwalt": "Robin Williams", "Event-Manager": "Ryan Rodriguez", "Physiotherapeut": "Robin Garcia" } },
-  "Team Vitality": { players: ["zen", "ExoTiiK", "stizzy"], coach: "Eversax", staff: { "Finanzvorstand": "Sonia Manueco", "PR-Manager": "Sarah Mittelette", "Psychologe": "Edgar Chekera", "Scout": "Marc-Antoine Dupont", "Anwalt": "Levine Keszler", "Event-Manager": "Anne Banschbach", "Physiotherapeut": "Ghais „Hyyperio“ Moulai" } },
-  "The Bricks": { players: ["Fever", "Cheese", "kamz"], coach: "Jahzo", staff: { "Finanzvorstand": "Chris Brown", "PR-Manager": "Casey Gonzalez", "Psychologe": "Francis Anderson", "Scout": "Lucas Anderson", "Anwalt": "Pierre Dupont", "Event-Manager": "Jamie Martinez", "Physiotherapeut": "Marc Hernandez" } },
-  "Twisted Minds": { players: ["Hntr", "Kuxir97", "Scream"], coach: "Satthew", staff: { "Finanzvorstand": "Casey Williams", "PR-Manager": "Sven Smith", "Psychologe": "Robin Hernandez", "Scout": "Skyler Williams", "Anwalt": "Dominik Müller", "Event-Manager": "Casey Brown", "Physiotherapeut": "Francis Miller" } },
-  "Unreal Nightmare": { players: ["crr", "Comm", "EyeIgnite"], coach: "Fireburner", staff: { "Finanzvorstand": "Lucas Smith", "PR-Manager": "David Martinez", "Psychologe": "Chris Gonzalez", "Scout": "Sam Dupont", "Anwalt": "Pierre Johnson", "Event-Manager": "Taylor Garcia", "Physiotherapeut": "Dominik Taylor" } },
-  "Virtus.pro": { players: ["gReazymeister", "Fever", "Lj"], coach: "Jahzo", staff: { "Finanzvorstand": "Jamie Wilson", "PR-Manager": "Sam Jones", "Psychologe": "Casey Brown", "Scout": "Alex Müller", "Anwalt": "David Taylor", "Event-Manager": "Lucas Hernandez", "Physiotherapeut": "Dominik Gonzalez" } },
-  "WIP Esports": { players: ["Maestro", "Turo", "hockser"], coach: "Sizz", staff: { "Finanzvorstand": "Lucas Martinez", "PR-Manager": "Chris Davis", "Psychologe": "Robin Garcia", "Scout": "Taylor Gonzalez", "Anwalt": "Sam Dupont", "Event-Manager": "Sven Silva", "Physiotherapeut": "Taylor Anderson" } },
-  "WOO": { players: ["Satthew", "JKnaps", "Chicago"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Silva", "PR-Manager": "Taylor Gonzalez", "Psychologe": "Chris Rodriguez", "Scout": "Chris Garcia", "Anwalt": "Sven Anderson", "Event-Manager": "Pierre Garcia", "Physiotherapeut": "Morgan Garcia" } },
-  "WYLDE": { players: ["BeastMode", "crr", "Torsos"], coach: "Jahzo", staff: { "Finanzvorstand": "Chris Brown", "PR-Manager": "Casey Rodriguez", "Psychologe": "Jamie Smith", "Scout": "Skyler Müller", "Anwalt": "Arthur Miller", "Event-Manager": "David Silva", "Physiotherapeut": "Gabriel Miller" } },
-  "We Dem Girlz": { players: ["Scream", "MajicBear", "noly"], coach: "Satthew", staff: { "Finanzvorstand": "Marc Lopez", "PR-Manager": "Jordan Taylor", "Psychologe": "David Smith", "Scout": "Arthur Anderson", "Anwalt": "Alex Smith", "Event-Manager": "Arthur Miller", "Physiotherapeut": "Marc Hernandez" } },
-  "Wildcard": { players: ["ayyjayy", "kamz", "Torsos"], coach: "Ferra", staff: { "Finanzvorstand": "Alex Davis", "PR-Manager": "Skyler Williams", "Psychologe": "Arthur Hernandez", "Scout": "Chris Dupont", "Anwalt": "Arthur Müller", "Event-Manager": "Gabriel Anderson", "Physiotherapeut": "Sven Johnson" } },
-  "Zookeepers": { players: ["kamz", "N1tro", "Chronic"], coach: "Chrome", staff: { "Finanzvorstand": "Dominik Hernandez", "PR-Manager": "Robin Williams", "Psychologe": "Jamie Davis", "Scout": "Jordan Johnson", "Anwalt": "Pierre Müller", "Event-Manager": "Skyler Lopez", "Physiotherapeut": "David Taylor" } },
-  "iBUYPOWER": { players: ["Turo", "reysbull", "N1tro"], coach: "RawGregory", staff: { "Finanzvorstand": "Chris Brown", "PR-Manager": "Sam Wilson", "Psychologe": "Jordan Lopez", "Scout": "Marc Hernandez", "Anwalt": "Gabriel Müller", "Event-Manager": "Jamie Smith", "Physiotherapeut": "Skyler Smith" } },
+  "25 Shot Club": { players: ["Sypical", "Chicago", "Caard"], coach: "Jahzo", staff: { "Finanzvorstand": "Gabriel Hernandez", "PR-Manager": "Sven Miller", "Psychologe": "Dominik Smith", "Scout": "Morgan Taylor", "Physiotherapeut": "Gabriel Martinez" } },
+  "445": { players: ["Chronic", "caleb", "Metsanauris"], coach: "Jahzo", staff: { "Finanzvorstand": "Chris Smith", "PR-Manager": "Francis Anderson", "Psychologe": "Pierre Taylor", "Scout": "Dominik Smith", "Physiotherapeut": "Dominik Williams" } },
+  "77Blocks": { players: ["Caard", "Sypical", "Dread"], coach: "Satthew", staff: { "Finanzvorstand": "Lucas Müller", "PR-Manager": "Skyler Anderson", "Psychologe": "Jamie Lopez", "Scout": "Chris Smith", "Physiotherapeut": "Casey Silva" } },
+  "BS+COMPETITION": { players: ["Retals", "Archie", "kaka"], coach: "Chrome", staff: { "Finanzvorstand": "Chris Lopez", "PR-Manager": "Dominik Garcia", "Psychologe": "Lucas Dupont", "Scout": "Sven Davis", "Physiotherapeut": "Skyler Thomas" } },
+  "BTF Esports": { players: ["BeastMode", "MajicBear", "Caard"], coach: "Chrome", staff: { "Finanzvorstand": "Arthur Johnson", "PR-Manager": "Ryan Taylor", "Psychologe": "Sam Garcia", "Scout": "Robin Wilson", "Physiotherapeut": "Taylor Lopez" } },
+  "Bonk!": { players: ["Retals", "Superlachie", "Atow"], coach: "Fireburner", staff: { "Finanzvorstand": "Casey Müller", "PR-Manager": "Taylor Brown", "Psychologe": "Sven Davis", "Scout": "Chris Johnson", "Physiotherapeut": "Jamie Davis" } },
+  "Canterbury-Bankstown Bulldogs": { players: ["carca", "kamz", "Satthew"], coach: "Sizz", staff: { "Finanzvorstand": "Jordan Davis", "PR-Manager": "Dominik Martinez", "Psychologe": "David Müller", "Scout": "Marc Thomas", "Physiotherapeut": "Taylor Hernandez" } },
+  "Chiefs Esports Club": { players: ["Metsanauris", "Torsos", "carca"], coach: "Ferra", staff: { "Finanzvorstand": "Dominik Jones", "PR-Manager": "Jamie Martinez", "Psychologe": "Arthur Rodriguez", "Scout": "Skyler Rodriguez", "Physiotherapeut": "Robin Hernandez" } },
+  "Cloud9": { players: ["Torsos", "Metsanauris", "kamz"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Jones", "PR-Manager": "Jordan Smith", "Psychologe": "Ryan Smith", "Scout": "Casey Johnson", "Physiotherapeut": "Morgan Taylor" } },
+  "Complexity Gaming": { players: ["Joreuz", "Retals", "caleb"], coach: "RawGregory", staff: { "Finanzvorstand": "Gabriel Müller", "PR-Manager": "Sam Müller", "Psychologe": "Ryan Thomas", "Scout": "Pierre Smith", "Physiotherapeut": "Jamie Lopez" } },
+  "Dangerous Esports Club": { players: ["Turo", "AppJack", "Amphis"], coach: "Eversax", staff: { "Finanzvorstand": "Morgan Davis", "PR-Manager": "Ryan Thomas", "Psychologe": "Dominik Dupont", "Scout": "Morgan Thomas", "Physiotherapeut": "Marc Rodriguez" } },
+  "Death Cloud Esports": { players: ["Comm", "EyeIgnite", "Scream"], coach: "Ferra", staff: { "Finanzvorstand": "David Anderson", "PR-Manager": "Pierre Dupont", "Psychologe": "Jamie Jones", "Scout": "Sven Silva", "Physiotherapeut": "Jordan Miller" } },
+  "Deleted Gaming": { players: ["N1tro", "Remkoe", "Archie"], coach: "Eversax", staff: { "Finanzvorstand": "Pierre Jones", "PR-Manager": "Gabriel Johnson", "Psychologe": "Lucas Garcia", "Scout": "Skyler Smith", "Physiotherapeut": "Gabriel Miller" } },
+  "Dignitas": { players: ["crr", "caleb", "noly"], coach: "Satthew", staff: { "Finanzvorstand": "Casey Martinez", "PR-Manager": "Gabriel Jones", "Psychologe": "Pierre Dupont", "Scout": "Gabriel Thomas", "Physiotherapeut": "Taylor Miller" } },
+  "Endpoint": { players: ["Metsanauris", "Remkoe", "kamz"], coach: "Chrome", staff: { "Finanzvorstand": "Gabriel Müller", "PR-Manager": "Taylor Thomas", "Psychologe": "Sam Jones", "Scout": "Arthur Hernandez", "Physiotherapeut": "Jamie Thomas" } },
+  "Enisorail": { players: ["Markydooda", "CaioTG1", "Hntr"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Rodriguez", "PR-Manager": "Casey Silva", "Psychologe": "Skyler Brown", "Scout": "Pierre Johnson", "Physiotherapeut": "Gabriel Taylor" } },
+  "Envy": { players: ["Rizzo", "carca", "ayyjayy"], coach: "Ferra", staff: { "Finanzvorstand": "Jamie Brown", "PR-Manager": "Robin Gonzalez", "Psychologe": "Arthur Garcia", "Scout": "Chris Thomas", "Physiotherapeut": "Sam Rodriguez" } },
+  "Evil Geniuses": { players: ["crr", "Firstkiller", "N1tro"], coach: "RawGregory", staff: { "Finanzvorstand": "Morgan Lopez", "PR-Manager": "Morgan Johnson", "Psychologe": "Lucas Müller", "Scout": "Ryan Müller", "Physiotherapeut": "Skyler Müller" } },
+  "FIZ6 Gaming": { players: ["Caard", "hockser", "caleb"], coach: "Chrome", staff: { "Finanzvorstand": "Francis Wilson", "PR-Manager": "Jamie Lopez", "Psychologe": "Jordan Müller", "Scout": "Jamie Dupont", "Physiotherapeut": "Casey Wilson" } },
+  "FURIA": { players: ["yanxnz", "Lostt", "Drufinho"], coach: "Kairos", staff: { "Finanzvorstand": "Roberto Silva", "PR-Manager": "Camila Souza", "Psychologe": "Dr. Fernando Costa", "Scout": "Lucas Oliveira", "Physiotherapeut": "Ricardo Mendes" } },
+  "FUT Esports": { players: ["Superlachie", "Rizzo", "hockser"], coach: "Sizz", staff: { "Finanzvorstand": "Chris Jones", "PR-Manager": "Sam Davis", "Psychologe": "Gabriel Anderson", "Scout": "Gabriel Jones", "Physiotherapeut": "Sam Wilson" } },
+  "Five Fears": { players: ["Fever", "Firstkiller", "Cheese"], coach: "Eversax", staff: { "Finanzvorstand": "Arthur Davis", "PR-Manager": "Chris Garcia", "Psychologe": "Gabriel Garcia", "Scout": "Chris Taylor", "Physiotherapeut": "Dominik Thomas" } },
+  "FlipSid3 Tactics": { players: ["Satthew", "Comm", "AppJack"], coach: "Sizz", staff: { "Finanzvorstand": "Morgan Johnson", "PR-Manager": "Francis Martinez", "Psychologe": "Dominik Martinez", "Scout": "Arthur Johnson", "Physiotherapeut": "Alex Smith" } },
+  "G2 Esports": { players: ["Acronik", "Atow", "Oaly"], coach: "Fireburner", staff: { "Finanzvorstand": "David Rodriguez", "PR-Manager": "Robin Davis", "Psychologe": "Morgan Davis", "Scout": "David Miller", "Physiotherapeut": "Robin Silva" } },
+  "GameWard": { players: ["M1k3rules", "Bananahead", "Torsos"], coach: "RawGregory", staff: { "Finanzvorstand": "Jordan Jones", "PR-Manager": "Pierre Müller", "Psychologe": "Ryan Miller", "Scout": "Taylor Garcia", "Physiotherapeut": "Taylor Martinez" } },
+  "Gen.G Mobil1 Racing": { players: ["hockser", "BeastMode", "Firstkiller"], coach: "Ferra", staff: { "Finanzvorstand": "Jordan Smith", "PR-Manager": "Ryan Jones", "Psychologe": "Arthur Brown", "Scout": "Casey Lopez", "Physiotherapeut": "Ryan Davis" } },
+  "Gentle Mates": { players: ["Superlachie", "AppJack", "crr"], coach: "Sizz", staff: { "Finanzvorstand": "Chris Miller", "PR-Manager": "Sven Davis", "Psychologe": "Jamie Anderson", "Scout": "Ryan Hernandez", "Physiotherapeut": "Jamie Miller" } },
+  "Ghost Gaming": { players: ["reysbull", "noly", "Allushin"], coach: "Fireburner", staff: { "Finanzvorstand": "Alex Lopez", "PR-Manager": "Sven Johnson", "Psychologe": "Ryan Hernandez", "Scout": "Jordan Johnson", "Physiotherapeut": "Morgan Lopez" } },
+  "God Speed": { players: ["AppJack", "Archie", "crr"], coach: "Jahzo", staff: { "Finanzvorstand": "Dominik Taylor", "PR-Manager": "Gabriel Davis", "Psychologe": "Gabriel Miller", "Scout": "Alex Rodriguez", "Physiotherapeut": "Skyler Thomas" } },
+  "Godalions": { players: ["Bananahead", "caleb", "kaka"], coach: "Fireburner", staff: { "Finanzvorstand": "Sam Rodriguez", "PR-Manager": "Casey Gonzalez", "Psychologe": "Lucas Silva", "Scout": "Jamie Smith", "Physiotherapeut": "Sven Taylor" } },
+  "GracesBlaze": { players: ["Cheese", "Superlachie", "Metsanauris"], coach: "Ferra", staff: { "Finanzvorstand": "Gabriel Miller", "PR-Manager": "Alex Martinez", "Psychologe": "Alex Thomas", "Scout": "Pierre Gonzalez", "Physiotherapeut": "Taylor Silva" } },
+  "GriddyGoose": { players: ["Sypical", "N1tro", "Amphis"], coach: "Sizz", staff: { "Finanzvorstand": "Taylor Müller", "PR-Manager": "David Johnson", "Psychologe": "Lucas Taylor", "Scout": "Sam Smith", "Physiotherapeut": "Jamie Silva" } },
+  "Infamous": { players: ["Lj", "Acronik", "Daniel"], coach: "Eversax", staff: { "Finanzvorstand": "Morgan Smith", "PR-Manager": "Lucas Taylor", "Psychologe": "Jamie Müller", "Scout": "Jamie Miller", "Physiotherapeut": "Chris Anderson" } },
+  "Jungle Juicers": { players: ["caleb", "Lj", "EyeIgnite"], coach: "Chrome", staff: { "Finanzvorstand": "Jordan Jones", "PR-Manager": "Lucas Wilson", "Psychologe": "Francis Rodriguez", "Scout": "Dominik Hernandez", "Physiotherapeut": "Arthur Martinez" } },
+  "KINOTROPE gaming": { players: ["Amphis", "Archie", "Evoh"], coach: "Satthew", staff: { "Finanzvorstand": "Arthur Jones", "PR-Manager": "Lucas Johnson", "Psychologe": "Marc Anderson", "Scout": "Lucas Taylor", "Physiotherapeut": "Casey Garcia" } },
+  "Karmine Corp": { players: ["vatira", "Atow", "Rise"], coach: "Ferra", staff: { "Finanzvorstand": "Amine M'Barek", "PR-Manager": "Sophie Lefebvre", "Psychologe": "Jean-Luc Dubois", "Scout": "Thomas Petit", "Physiotherapeut": "Marie Curie" } },
+  "Kings of Urban": { players: ["Acronik", "CaioTG1", "Oski"], coach: "Satthew", staff: { "Finanzvorstand": "Jamie Johnson", "PR-Manager": "Sven Miller", "Psychologe": "Jordan Anderson", "Scout": "Sven Anderson", "Physiotherapeut": "Sven Johnson" } },
+  "L'antique Esport": { players: ["Superlachie", "crr", "CaioTG1"], coach: "Chrome", staff: { "Finanzvorstand": "Jamie Anderson", "PR-Manager": "Robin Johnson", "Psychologe": "Sven Wilson", "Scout": "Alex Rodriguez", "Physiotherapeut": "Taylor Johnson" } },
+  "Lilmix": { players: ["CaioTG1", "Superlachie", "crr"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Anderson", "PR-Manager": "Sam Martinez", "Psychologe": "Arthur Garcia", "Scout": "Taylor Silva", "Physiotherapeut": "Marc Müller" } },
+  "Lotus 8 Esports": { players: ["kaka", "Caard", "Fever"], coach: "RawGregory", staff: { "Finanzvorstand": "Morgan Taylor", "PR-Manager": "Lucas Müller", "Psychologe": "Francis Jones", "Scout": "Pierre Miller", "Physiotherapeut": "Francis Thomas" } },
+  "M80": { players: ["Atow", "Dread", "Joyo"], coach: "Ferra", staff: { "Finanzvorstand": "Chris Miller", "PR-Manager": "Gabriel Müller", "Psychologe": "Arthur Hernandez", "Scout": "Sam Wilson", "Physiotherapeut": "Lucas Johnson" } },
+  "MIBR": { players: ["Arsenal", "Markydooda", "BeastMode"], coach: "Jahzo", staff: { "Finanzvorstand": "Arthur Miller", "PR-Manager": "Gabriel Brown", "Psychologe": "Jordan Jones", "Scout": "Sam Jones", "Physiotherapeut": "Francis Brown" } },
+  "Manchester City Esports": { players: ["Cheese", "Evoh", "Retals"], coach: "RawGregory", staff: { "Finanzvorstand": "Robin Müller", "PR-Manager": "Jordan Davis", "Psychologe": "Skyler Dupont", "Scout": "Gabriel Davis", "Physiotherapeut": "Casey Anderson" } },
+  "Mock-It Esports": { players: ["Kuxir97", "Oaly", "Oski"], coach: "Fireburner", staff: { "Finanzvorstand": "Sven Anderson", "PR-Manager": "Dominik Jones", "Psychologe": "Ryan Davis", "Scout": "Lucas Rodriguez", "Physiotherapeut": "Sam Brown" } },
+  "Moist Esports": { players: ["JKnaps", "Chronic", "Rizzo"], coach: "Eversax", staff: { "Finanzvorstand": "Lucas Smith", "PR-Manager": "Jamie Jones", "Psychologe": "Casey Miller", "Scout": "David Anderson", "Physiotherapeut": "Jamie Garcia" } },
+  "NORTHSTAR": { players: ["kaka", "N1tro", "Fever"], coach: "Satthew", staff: { "Finanzvorstand": "Robin Williams", "PR-Manager": "David Rodriguez", "Psychologe": "Sam Hernandez", "Scout": "Sven Taylor", "Physiotherapeut": "Jamie Miller" } },
+  "NOVO Esports": { players: ["Amphis", "gReazymeister", "MajicBear"], coach: "Fireburner", staff: { "Finanzvorstand": "Taylor Miller", "PR-Manager": "Alex Taylor", "Psychologe": "Casey Thomas", "Scout": "Morgan Dupont", "Physiotherapeut": "Dominik Rodriguez" } },
+  "NRG": { players: ["GarrettG", "Justin", "Mist"], coach: "Fireburner", staff: { "Finanzvorstand": "Sarah Jenkins", "PR-Manager": "Mike Peterson", "Psychologe": "Dr. David Brown", "Scout": "Jason Smith", "Physiotherapeut": "Tom Williams" } },
+  "NTX Esports": { players: ["Retals", "noly", "Fever"], coach: "RawGregory", staff: { "Finanzvorstand": "Morgan Miller", "PR-Manager": "Alex Miller", "Psychologe": "Robin Miller", "Scout": "Arthur Wilson", "Physiotherapeut": "Robin Williams" } },
+  "Next2Nu Esports": { players: ["Daniel", "BeastMode", "JKnaps"], coach: "Chrome", staff: { "Finanzvorstand": "Dominik Lopez", "PR-Manager": "Casey Miller", "Psychologe": "Jordan Dupont", "Scout": "Dominik Martinez", "Physiotherapeut": "Robin Thomas" } },
+  "Ninjas in Pyjamas": { players: ["Chronic", "N1tro", "caleb"], coach: "Sizz", staff: { "Finanzvorstand": "Dominik Davis", "PR-Manager": "Morgan Lopez", "Psychologe": "Pierre Anderson", "Scout": "Dominik Thomas", "Physiotherapeut": "Skyler Martinez" } },
+  "Northern Gaming": { players: ["Maestro", "Cheese", "Acronik"], coach: "Sizz", staff: { "Finanzvorstand": "Ryan Silva", "PR-Manager": "Sven Taylor", "Psychologe": "Casey Brown", "Scout": "Chris Taylor", "Physiotherapeut": "Lucas Jones" } },
+  "Nova Esports": { players: ["Hntr", "Fever", "Metsanauris"], coach: "Satthew", staff: { "Finanzvorstand": "Taylor Anderson", "PR-Manager": "Marc Wilson", "Psychologe": "Morgan Garcia", "Scout": "Jamie Davis", "Physiotherapeut": "Sam Martinez" } },
+  "NuTorious": { players: ["Superlachie", "JKnaps", "BeastMode"], coach: "Fireburner", staff: { "Finanzvorstand": "Pierre Anderson", "PR-Manager": "Pierre Jones", "Psychologe": "Lucas Miller", "Scout": "Chris Johnson", "Physiotherapeut": "Arthur Johnson" } },
+  "OpTic Gaming": { players: ["N1tro", "Kuxir97", "Metsanauris"], coach: "RawGregory", staff: { "Finanzvorstand": "Alex Williams", "PR-Manager": "Marc Martinez", "Psychologe": "Skyler Garcia", "Scout": "Ryan Taylor", "Physiotherapeut": "Morgan Lopez" } },
+  "Overlooked": { players: ["Maestro", "N1tro", "Cheese"], coach: "Sizz", staff: { "Finanzvorstand": "Francis Brown", "PR-Manager": "Lucas Jones", "Psychologe": "Chris Rodriguez", "Scout": "Jordan Martinez", "Physiotherapeut": "Jordan Davis" } },
+  "PSG Esports": { players: ["Retals", "Superlachie", "crr"], coach: "Chrome", staff: { "Finanzvorstand": "Marc Davis", "PR-Manager": "Dominik Silva", "Psychologe": "Taylor Gonzalez", "Scout": "Casey Smith", "Physiotherapeut": "Gabriel Thomas" } },
+  "PWR": { players: ["caleb", "Atow", "Comm"], coach: "Satthew", staff: { "Finanzvorstand": "Sam Jones", "PR-Manager": "Jamie Williams", "Psychologe": "Arthur Miller", "Scout": "Morgan Silva", "Physiotherapeut": "Skyler Miller" } },
+  "Pioneers": { players: ["hockser", "Amphis", "kaka"], coach: "Fireburner", staff: { "Finanzvorstand": "Taylor Johnson", "PR-Manager": "Dominik Johnson", "Psychologe": "Sam Hernandez", "Scout": "Robin Anderson", "Physiotherapeut": "Gabriel Martinez" } },
+  "R8 Esports": { players: ["Bananahead", "Evoh", "Sypical"], coach: "Eversax", staff: { "Finanzvorstand": "Chris Hernandez", "PR-Manager": "Sven Hernandez", "Psychologe": "Jordan Silva", "Scout": "Dominik Davis", "Physiotherapeut": "Sven Williams" } },
+  "Renegades": { players: ["Allushin", "reysbull", "gReazymeister"], coach: "Chrome", staff: { "Finanzvorstand": "Skyler Müller", "PR-Manager": "Dominik Rodriguez", "Psychologe": "Alex Johnson", "Scout": "Jordan Johnson", "Physiotherapeut": "Pierre Johnson" } },
+  "Revelation": { players: ["Caard", "Joyo", "Dread"], coach: "Jahzo", staff: { "Finanzvorstand": "David Smith", "PR-Manager": "Dominik Wilson", "Psychologe": "Casey Brown", "Scout": "Jordan Müller", "Physiotherapeut": "Chris Hernandez" } },
+  "Rogue": { players: ["Scream", "Chicago", "Comm"], coach: "Chrome", staff: { "Finanzvorstand": "Arthur Thomas", "PR-Manager": "Taylor Hernandez", "Psychologe": "Chris Wilson", "Scout": "Jamie Williams", "Physiotherapeut": "Skyler Brown" } },
+  "Selfless Gaming": { players: ["Chicago", "CaioTG1", "Fever"], coach: "Chrome", staff: { "Finanzvorstand": "Dominik Thomas", "PR-Manager": "David Anderson", "Psychologe": "Skyler Gonzalez", "Scout": "Lucas Williams", "Physiotherapeut": "Marc Müller" } },
+  "Shopify Rebellion": { players: ["2Piece", "Paarth", "LJ"], coach: "Memory", staff: { "Finanzvorstand": "Jessica Wong", "PR-Manager": "David Miller", "Psychologe": "Elena Rossi", "Scout": "Ryan O'Connor", "Physiotherapeut": "Mark Henderson" } },
+  "Spacestation Gaming": { players: ["Sypical", "Daniel", "MajicBear"], coach: "Ferra", staff: { "Finanzvorstand": "Pierre Davis", "PR-Manager": "Alex Silva", "Psychologe": "Jamie Jones", "Scout": "Casey Thomas", "Physiotherapeut": "David Anderson" } },
+  "Splyce": { players: ["Superlachie", "MajicBear", "Kuxir97"], coach: "Eversax", staff: { "Finanzvorstand": "Chris Miller", "PR-Manager": "Pierre Jones", "Psychologe": "Taylor Gonzalez", "Scout": "Lucas Taylor", "Physiotherapeut": "Pierre Dupont" } },
+  "Str1ve eSports": { players: ["Maestro", "Oski", "kaka"], coach: "Sizz", staff: { "Finanzvorstand": "David Rodriguez", "PR-Manager": "Marc Silva", "Psychologe": "Sam Williams", "Scout": "Lucas Wilson", "Physiotherapeut": "Sven Müller" } },
+  "Sunset": { players: ["Joreuz", "Fever", "Allushin"], coach: "Eversax", staff: { "Finanzvorstand": "Skyler Johnson", "PR-Manager": "Arthur Garcia", "Psychologe": "Chris Smith", "Scout": "Alex Rodriguez", "Physiotherapeut": "Taylor Hernandez" } },
+  "TSM": { players: ["crr", "Satthew", "gReazymeister"], coach: "Sizz", staff: { "Finanzvorstand": "Morgan Hernandez", "PR-Manager": "Dominik Martinez", "Psychologe": "Marc Garcia", "Scout": "Chris Anderson", "Physiotherapeut": "Alex Garcia" } },
+  "Team BSK": { players: ["Cheese", "noly", "Oaly"], coach: "Fireburner", staff: { "Finanzvorstand": "Robin Rodriguez", "PR-Manager": "Taylor Rodriguez", "Psychologe": "Robin Jones", "Scout": "Chris Garcia", "Physiotherapeut": "Pierre Hernandez" } },
+  "Team Falcons": { players: ["Trk511", "Ahmad", "Rw9"], coach: "Senzo", staff: { "Finanzvorstand": "Khalid Mansour", "PR-Manager": "Fatima Al-Farsi", "Psychologe": "Omar Hassan", "Scout": "Ibrahim Zaid", "Physiotherapeut": "Youssef Ali" } },
+  "Team Secret": { players: ["Maestro", "Amphis", "Comm"], coach: "Fireburner", staff: { "Finanzvorstand": "David Gonzalez", "PR-Manager": "Dominik Müller", "Psychologe": "Dominik Smith", "Scout": "Skyler Lopez", "Physiotherapeut": "Ryan Müller" } },
+  "Team Silenced": { players: ["Daniel", "Remkoe", "Amphis"], coach: "RawGregory", staff: { "Finanzvorstand": "Casey Rodriguez", "PR-Manager": "Sven Williams", "Psychologe": "Sam Taylor", "Scout": "Casey Dupont", "Physiotherapeut": "Francis Silva" } },
+  "Team Vision": { players: ["Oaly", "crr", "Rizzo"], coach: "Ferra", staff: { "Finanzvorstand": "Casey Dupont", "PR-Manager": "Lucas Jones", "Psychologe": "Gabriel Taylor", "Scout": "Robin Smith", "Physiotherapeut": "Robin Garcia" } },
+  "Team Vitality": { players: ["zen", "ExoTiiK", "stizzy"], coach: "Eversax", staff: { "Finanzvorstand": "Sonia Manueco", "PR-Manager": "Sarah Mittelette", "Psychologe": "Edgar Chekera", "Scout": "Marc-Antoine Dupont", "Physiotherapeut": "Ghais „Hyyperio“ Moulai" } },
+  "The Bricks": { players: ["Fever", "Cheese", "kamz"], coach: "Jahzo", staff: { "Finanzvorstand": "Chris Brown", "PR-Manager": "Casey Gonzalez", "Psychologe": "Francis Anderson", "Scout": "Lucas Anderson", "Physiotherapeut": "Marc Hernandez" } },
+  "Twisted Minds": { players: ["Hntr", "Kuxir97", "Scream"], coach: "Satthew", staff: { "Finanzvorstand": "Casey Williams", "PR-Manager": "Sven Smith", "Psychologe": "Robin Hernandez", "Scout": "Skyler Williams", "Physiotherapeut": "Francis Miller" } },
+  "Unreal Nightmare": { players: ["crr", "Comm", "EyeIgnite"], coach: "Fireburner", staff: { "Finanzvorstand": "Lucas Smith", "PR-Manager": "David Martinez", "Psychologe": "Chris Gonzalez", "Scout": "Sam Dupont", "Physiotherapeut": "Dominik Taylor" } },
+  "Virtus.pro": { players: ["gReazymeister", "Fever", "Lj"], coach: "Jahzo", staff: { "Finanzvorstand": "Jamie Wilson", "PR-Manager": "Sam Jones", "Psychologe": "Casey Brown", "Scout": "Alex Müller", "Physiotherapeut": "Dominik Gonzalez" } },
+  "WIP Esports": { players: ["Maestro", "Turo", "hockser"], coach: "Sizz", staff: { "Finanzvorstand": "Lucas Martinez", "PR-Manager": "Chris Davis", "Psychologe": "Robin Garcia", "Scout": "Taylor Gonzalez", "Physiotherapeut": "Taylor Anderson" } },
+  "WOO": { players: ["Satthew", "JKnaps", "Chicago"], coach: "Jahzo", staff: { "Finanzvorstand": "Francis Silva", "PR-Manager": "Taylor Gonzalez", "Psychologe": "Chris Rodriguez", "Scout": "Chris Garcia", "Physiotherapeut": "Morgan Garcia" } },
+  "WYLDE": { players: ["BeastMode", "crr", "Torsos"], coach: "Jahzo", staff: { "Finanzvorstand": "Chris Brown", "PR-Manager": "Casey Rodriguez", "Psychologe": "Jamie Smith", "Scout": "Skyler Müller", "Physiotherapeut": "Gabriel Miller" } },
+  "We Dem Girlz": { players: ["Scream", "MajicBear", "noly"], coach: "Satthew", staff: { "Finanzvorstand": "Marc Lopez", "PR-Manager": "Jordan Taylor", "Psychologe": "David Smith", "Scout": "Arthur Anderson", "Physiotherapeut": "Marc Hernandez" } },
+  "Wildcard": { players: ["ayyjayy", "kamz", "Torsos"], coach: "Ferra", staff: { "Finanzvorstand": "Alex Davis", "PR-Manager": "Skyler Williams", "Psychologe": "Arthur Hernandez", "Scout": "Chris Dupont", "Physiotherapeut": "Sven Johnson" } },
+  "Zookeepers": { players: ["kamz", "N1tro", "Chronic"], coach: "Chrome", staff: { "Finanzvorstand": "Dominik Hernandez", "PR-Manager": "Robin Williams", "Psychologe": "Jamie Davis", "Scout": "Jordan Johnson", "Physiotherapeut": "David Taylor" } },
+  "iBUYPOWER": { players: ["Turo", "reysbull", "N1tro"], coach: "RawGregory", staff: { "Finanzvorstand": "Chris Brown", "PR-Manager": "Sam Wilson", "Psychologe": "Jordan Lopez", "Scout": "Marc Hernandez", "Physiotherapeut": "Skyler Smith" } },
 };
 
 // Echte Nationalitäten für Spieler aus ORG_REAL_ROSTER_NAMES (User-Datei
@@ -305,12 +331,53 @@ function starsToOverall(stars) {
 // mindestens `minHeadroom` über dem aktuellen Overall -- das verhindert, dass
 // eine einzelne, um den Overall gestreute Statachse (±4 bei Spielern, ±8 bei
 // Mitarbeitern) das Potenzial durch Zufall gleich beim Erzeugen überschreitet.
+// QA-Telemetrie (Bot-Ökosystem V12, Phase 11/12 "Cap Clamping"/"Unclamped
+// Distribution") -- rein additiv, hier statt in renderer.js deklariert, da
+// diese Datei laut index.html VOR renderer.js laedt (kein Zugriffsrisiko auf
+// eine noch nicht existierende Variable). Nur befuellt, wenn renderer.js'
+// botEconomyDebugTelemetryEnabled aktiv ist (Cross-File-Zugriff sicher, da
+// beide Skripte zum Aufrufzeitpunkt -- immer erst waehrend echter Gameplay-
+// Logik, nie beim Skript-Laden selbst -- laengst vollstaendig geladen sind).
+let qaRawPotentialLog = [];
+// Bug-Fix (Bot-Ökosystem V13, Root-Cause "High-Overall-Problem" -- per
+// 223.000-Sample-Monte-Carlo-Formeltest QUANTIFIZIERT, siehe Abschlussbericht):
+// `headroom` haengt bisher NUR von `age` ab, nicht davon, wie nah `overall`
+// bereits am 99er-Deckel steht. Ergebnis: Overall>=95 erzeugte UNABHAENGIG
+// vom Alter garantiert Potential=99 (100%), Overall 85-99 gepoolt 73%.
+// `proximityFactor` daempft `headroom` zusaetzlich danach, wie viel Raum bis
+// 99 (`roomLeft`) tatsaechlich noch physisch vorhanden ist -- bei Overall<=69
+// (roomLeft>=30) bleibt der Faktor bei 1.0 (VOELLIG unveraendertes Verhalten
+// fuer Low-/Mid-Overall, per Monte-Carlo-Vergleich verifiziert), erst
+// darueber zunehmend gedaempft.
+// Nachkorrektur (per echtem 3x50-Saison-Regressionslauf ENTDECKT, nicht nur
+// am Generator): die urspruengliche lineare Daempfung (`roomLeft/30` ohne
+// Exponent) war eine UEBERKORREKTUR -- sie liess Potential99 bei S50 auf
+// buchstaeblich 0,0% fallen (verletzt die Auftragsvorgabe "99 muss moeglich
+// bleiben, kein kuenstliches Verbot"), weil bei Overall~90 selbst maximales
+// Alters-/Rausch-Headroom (roomLeft=9 -> Faktor 0.3) nie mehr ausreichte, um
+// die 98,5-Rundungsschwelle zu erreichen. Der Exponent 0.65 (`Math.pow(...,
+// 0.65)`) haelt den Faktor bei mittlerem roomLeft (Overall 85-95, der Bereich
+// in dem reale Top-Rekruten tatsaechlich liegen) spuerbar hoeher, faellt aber
+// weiterhin auf 0 nur exakt bei roomLeft=0 (Overall=99, wo Potential=99 ohnehin
+// trivial ist, siehe max(overall,...)-Clamp unten). Empirisch getunt via
+// monte-carlo-fix-test.js (Overall 80->1.8%, 85->6.6%, 90->16.5%, 95->38.9%,
+// 99->100% trivial); Ergebnis in echter Simulation siehe Abschlussbericht
+// "POST-FIX S50". EIN multiplikativer Term, kein neues Konzept, keine
+// Rang-/Org-Abhaengigkeit.
 function rollPotentialForOverall(overall, age, rng, minHeadroom) {
   const safeAge = (typeof age === 'number' && !Number.isNaN(age)) ? age : 26;
   const safeOverall = (typeof overall === 'number' && !Number.isNaN(overall)) ? overall : 45;
   const ageFactor = Math.max(0, (27 - safeAge) / 13); // ~0 ab 27, ~0.77 bei 17 (jüngstes Spieler-Alter)
-  const headroom = 4 + ageFactor * 26 + (rng() * 2 - 1) * 5;
-  return Math.max(safeOverall, Math.min(99, Math.round(safeOverall + Math.max(minHeadroom || 5, headroom))));
+  const wantedHeadroom = Math.max(minHeadroom || 5, 4 + ageFactor * 26 + (rng() * 2 - 1) * 5);
+  const roomLeft = Math.max(0, 99 - safeOverall);
+  const proximityFactor = Math.pow(Math.min(1, roomLeft / 30), 0.65);
+  const headroom = wantedHeadroom * proximityFactor;
+  const raw = safeOverall + headroom;
+  const clamped = Math.max(safeOverall, Math.min(99, Math.round(raw)));
+  if (typeof botEconomyDebugTelemetryEnabled !== 'undefined' && botEconomyDebugTelemetryEnabled) {
+    qaRawPotentialLog.push({ raw: Math.round(raw * 10) / 10, clamped, overall: safeOverall, age: safeAge });
+  }
+  return clamped;
 }
 
 // User-Korrektur (nach einer ersten, falschen Version dieses Systems): NICHT
@@ -462,6 +529,26 @@ function generateOrgRoster(org) {
   const pickNation = () => pick(nations);
   const pickAvatarId = () => pick(CHARACTER_AVATARS).id;
 
+  // Bug-Fix (Save/Load Integrity V1, Root-Cause "Namenskollision innerhalb
+  // EINER Org"): playerDevelopment/staffDevelopment (renderer.js) sind
+  // ausschließlich über 'orgName::personName' (bzw. '::role::personName')
+  // verschlüsselt, OHNE Kader-Slot-Index -- zwei verschiedene Personen MIT
+  // demselben Namen INNERHALB derselben Org teilen sich dadurch denselben
+  // Tracking-Eintrag, ihre unabhängige Entwicklung vermischt sich in EINEM
+  // Delta-Bucket (uneinheitliche, sowohl positive als auch negative
+  // Abweichungen je Statachse -- entdeckt über einen 20x-Save/Load-Roundtrip-
+  // Test, sichtbar als Stat-Drift auch OHNE jedes Speichern/Laden). Der
+  // vorherige `guard < 40`-Ausstieg gab nach 40 zufälligen Fehlversuchen auf
+  // und akzeptierte stillschweigend eine Dopplung -- da org-seeded RNG
+  // (mulberry32(hashString(org.name))) für JEDE Org deterministisch IMMER
+  // dieselbe Sequenz liefert, war eine solche Kollision KEIN seltener
+  // Zufall, sondern für die betroffene Org (z.B. "Nimbus United") bei JEDEM
+  // Spielstart reproduzierbar garantiert. Fällt der Zufalls-Pfad aus, wird
+  // hier jetzt erschöpfend (aber weiterhin deterministisch aus derselben
+  // Org-RNG-Sequenz) jede Präfix/Suffix- bzw. Vorname/Nachname-Kombination
+  // durchprobiert -- bei 24x24=576 Nickname- bzw. hunderten Namens-
+  // Kombinationen gegenüber ~10-20 Personen pro Org faktisch immer
+  // erfolgreich, echte Erschöpfung bliebe ein reiner Theoriefall.
   function uniqueNickname() {
     let name;
     let guard = 0;
@@ -469,6 +556,15 @@ function generateOrgRoster(org) {
       name = pick(ROSTER_NICK_PREFIXES) + pick(ROSTER_NICK_SUFFIXES);
       guard += 1;
     } while (usedNames.has(name) && guard < 40);
+    if (usedNames.has(name)) {
+      let found = false;
+      for (let pi = 0; pi < ROSTER_NICK_PREFIXES.length && !found; pi++) {
+        for (let si = 0; si < ROSTER_NICK_SUFFIXES.length && !found; si++) {
+          const candidate = ROSTER_NICK_PREFIXES[pi] + ROSTER_NICK_SUFFIXES[si];
+          if (!usedNames.has(candidate)) { name = candidate; found = true; }
+        }
+      }
+    }
     usedNames.add(name);
     return name;
   }
@@ -480,6 +576,18 @@ function generateOrgRoster(org) {
       name = pick(isM ? ROSTER_STAFF_FIRST_NAMES_M : ROSTER_STAFF_FIRST_NAMES_F) + ' ' + pick(ROSTER_STAFF_LAST_NAMES);
       guard += 1;
     } while (usedNames.has(name) && guard < 40);
+    if (usedNames.has(name)) {
+      let found = false;
+      const firstNamePools = [ROSTER_STAFF_FIRST_NAMES_M, ROSTER_STAFF_FIRST_NAMES_F];
+      for (let fp = 0; fp < firstNamePools.length && !found; fp++) {
+        for (let fi = 0; fi < firstNamePools[fp].length && !found; fi++) {
+          for (let li = 0; li < ROSTER_STAFF_LAST_NAMES.length && !found; li++) {
+            const candidate = firstNamePools[fp][fi] + ' ' + ROSTER_STAFF_LAST_NAMES[li];
+            if (!usedNames.has(candidate)) { name = candidate; found = true; }
+          }
+        }
+      }
+    }
     usedNames.add(name);
     return name;
   }
@@ -493,7 +601,15 @@ function generateOrgRoster(org) {
   // renderer.js). Team-Mitarbeiter (rollStaff()) sind im Schnitt älter --
   // eigene, weitere Altersspanne.
   const pickPlayerAge = () => Math.round(17 + rng() * 15);
-  const pickStaffAge = () => Math.round(24 + rng() * 31);
+  // Bug-Fix (Save/Load Integrity V1, Auftragsabschnitt 34): 24-55 lag bis zu
+  // 15 Jahre über RETIREMENT_MAX_AGE=40 (renderer.js) -- neu erzeugtes
+  // Personal konnte direkt zu Karrierebeginn bereits über der Zwangsrente-
+  // Grenze stehen (shouldRetireThisSeason() hätte es schon in Saison 1
+  // zwangsverrentet). Dieselbe Spanne wie die analoge Free-Agent-Alterslogik
+  // (hydrateFreeAgentIdentity(), data/org-rosters.js) -- 24-37, bleibt
+  // deutlich "im Schnitt älter als Spieler (17-32)" (Design-Intent laut
+  // Kommentar oben), aber ohne bereits-quasi-verrentete Personen.
+  const pickStaffAge = () => Math.round(24 + rng() * 13);
 
   // Vertragsbeginn/-ende (Runde 117, User-Vorgabe "Vertragsende und
   // Vertragsbeginn-Logik bauen"): deterministisch relativ zu ROSTER_CAREER_EPOCH
@@ -623,9 +739,55 @@ function rollReplacementPerson(centerStars, role, contractDateAnchor, opts) {
   // bekommen dieselben ROSTER_STAT_KEYS wie Coach, rein additiv, ändert am
   // bestehenden Coach-/Personal-Verhalten nichts.
   const isPlayerLikeRole = isCoachRole || role === 'Starter' || role === 'Sub' || role === 'Reserve';
-  const name = isPlayerLikeRole
-    ? pick(ROSTER_NICK_PREFIXES) + pick(ROSTER_NICK_SUFFIXES)
-    : (Math.random() < 0.5 ? pick(ROSTER_STAFF_FIRST_NAMES_M) : pick(ROSTER_STAFF_FIRST_NAMES_F)) + ' ' + pick(ROSTER_STAFF_LAST_NAMES);
+  // Bug-Fix (Save/Load Integrity V1, Root-Cause "Namenskollision durch
+  // Ersatzperson zur Laufzeit"): rollReplacementPerson() prüfte den neu
+  // gewürfelten Namen bisher GAR NICHT gegen den bestehenden Kader der
+  // Zielorg -- anders als die initiale Kadergenerierung (uniqueNickname(),
+  // generateOrgRoster()) gab es hier keinerlei Kollisionsschutz. Trifft ein
+  // Karriereende-Ersatz (ageAndRetireRosterForSeason()) oder ein
+  // abgeworbener Ersatz (executeStaffSigning()/executePlayerSigning()) rein
+  // zufällig denselben Namen wie ein WEITERHIN aktiver Teamkollege derselben
+  // Org, teilen sich beide denselben playerDevelopment/staffDevelopment-
+  // Tracking-Eintrag (Schlüssel ist orgName[::role]::personName, ohne Kader-
+  // Slot) -- ihre unabhängige Entwicklung vermischt sich dauerhaft in EINEM
+  // Delta-Bucket (per 20x-Save/Load-Roundtrip-Test gefunden: uneinheitliche,
+  // teils gegenläufige Stat-Abweichungen für die betroffene Person, auch
+  // ohne jedes Speichern/Laden). `opts.avoidNames` (vom Aufrufer mit den
+  // aktuellen Namen der WEITERHIN aktiven Kader-Mitglieder derselben Org
+  // gefüllt) wird hier -- exhaustiv, falls nötig -- ausgeschlossen.
+  const avoidNames = opts.avoidNames instanceof Set ? opts.avoidNames : new Set(opts.avoidNames || []);
+  let name;
+  if (isPlayerLikeRole) {
+    let guard = 0;
+    do { name = pick(ROSTER_NICK_PREFIXES) + pick(ROSTER_NICK_SUFFIXES); guard += 1; } while (avoidNames.has(name) && guard < 40);
+    if (avoidNames.has(name)) {
+      let found = false;
+      for (let pi = 0; pi < ROSTER_NICK_PREFIXES.length && !found; pi++) {
+        for (let si = 0; si < ROSTER_NICK_SUFFIXES.length && !found; si++) {
+          const candidate = ROSTER_NICK_PREFIXES[pi] + ROSTER_NICK_SUFFIXES[si];
+          if (!avoidNames.has(candidate)) { name = candidate; found = true; }
+        }
+      }
+    }
+  } else {
+    let guard = 0;
+    do {
+      name = (Math.random() < 0.5 ? pick(ROSTER_STAFF_FIRST_NAMES_M) : pick(ROSTER_STAFF_FIRST_NAMES_F)) + ' ' + pick(ROSTER_STAFF_LAST_NAMES);
+      guard += 1;
+    } while (avoidNames.has(name) && guard < 40);
+    if (avoidNames.has(name)) {
+      let found = false;
+      const firstNamePools = [ROSTER_STAFF_FIRST_NAMES_M, ROSTER_STAFF_FIRST_NAMES_F];
+      for (let fp = 0; fp < firstNamePools.length && !found; fp++) {
+        for (let fi = 0; fi < firstNamePools[fp].length && !found; fi++) {
+          for (let li = 0; li < ROSTER_STAFF_LAST_NAMES.length && !found; li++) {
+            const candidate = firstNamePools[fp][fi] + ' ' + ROSTER_STAFF_LAST_NAMES[li];
+            if (!avoidNames.has(candidate)) { name = candidate; found = true; }
+          }
+        }
+      }
+    }
+  }
   const defaultAgeMin = isPlayerLikeRole ? 17 : 24;
   const defaultAgeMax = isPlayerLikeRole ? 32 : 55;
   const ageMin = opts.ageMin !== undefined ? opts.ageMin : defaultAgeMin;
@@ -681,7 +843,16 @@ function hydrateFreeAgentIdentity(entry, isPlayerAgeRange, role) {
     const nations = CHARACTER_NATIONS.map((n) => n.code);
     entry.country = nations[Math.floor(Math.random() * nations.length)];
     entry.avatarId = CHARACTER_AVATARS[Math.floor(Math.random() * CHARACTER_AVATARS.length)].id;
-    entry.age = isPlayerAgeRange ? Math.round(17 + Math.random() * 15) : Math.round(24 + Math.random() * 31);
+    // Bug-Fix (Bot Ecosystem V6, Phase 4 "realistisches Alter"): die alte
+    // Personal-Altersspanne (24-55) reichte weit über RETIREMENT_MAX_AGE=40
+    // (renderer.js) hinaus -- ein frisch aus dem Pool verpflichteter
+    // Mitarbeiter konnte also bereits im Alter erscheinen, in dem er laut
+    // shouldRetireThisSeason() (Rentenrisiko ab 35, Zwangsrente ab 40) längst
+    // hätte in Rente gehen müssen. Exakt das vom Auftrag benannte Muster
+    // ("39 Jahre erzeugen -> nächste Saison Rente -> wieder erzeugen").
+    // Obergrenze auf 37 gesenkt -- lässt weiterhin erfahrene "Veteran"-
+    // Kandidaten zu, aber keine bereits-quasi-verrenteten mehr.
+    entry.age = isPlayerAgeRange ? Math.round(17 + Math.random() * 15) : Math.round(24 + Math.random() * 13);
     // Personal-Seite: freie Mitarbeiter-Agenten (FREE_AGENT_STAFF, data/free-agents.js)
     // haben nur `name`/`overall` (handkuratierte, feste Werte) -- Attribute
     // werden UM das bestehende `overall` gestreut, `overall` selbst bleibt
@@ -710,6 +881,19 @@ function freeAgentStaffPool(role) {
   return (FREE_AGENT_STAFF[role] || []).map((p) => hydrateFreeAgentIdentity(p, false, role));
 }
 
+// Bug-Fix/Feature (Bot Ecosystem V5, "Coach Market" -- Pflichtfix): Coach
+// nutzt strukturell dieselbe Statachsen-Form wie ein Spieler (siehe
+// FREE_AGENT_COACHES-Kommentar in data/free-agents.js), nicht die
+// STAFF_ROLE_ATTRIBUTES der 6 echten Personal-Rollen -- deshalb ein eigener,
+// aber analog aufgebauter Pool statt eines (strukturell unpassenden)
+// Eintrags in FREE_AGENT_STAFF. `isPlayerAgeRange=true`, damit neu
+// verpflichtete Coaches dieselbe Altersspanne (17-32) wie alle bestehenden
+// Coaches im Spiel haben (rollPlayer()/rollReplacementPerson()s
+// isPlayerLikeRole-Zweig).
+function freeAgentCoachPool() {
+  return FREE_AGENT_COACHES.map((p) => hydrateFreeAgentIdentity(p, true));
+}
+
 // Verwandelt einen Pool-Eintrag beim tatsächlichen Verpflichten in eine
 // eigenständige KOPIE mit echtem Vertrag (der Pool-Eintrag selbst bleibt
 // unverändert -- Vergeben-Status läuft separat über signedFreeAgentPlayers/
@@ -723,6 +907,78 @@ function signFreeAgentStaff(entry, role, contractDateAnchor) {
   const contractStart = contractDateAnchor;
   const contractEnd = addMonthsToDateStr(contractStart, Math.round(12 + Math.random() * 24));
   return { role, ...entry, contractStart, contractEnd };
+}
+// Coach braucht KEIN `role`-Feld (org.roster.coach ist ein eigenes Feld,
+// kein Eintrag in roster.staff[]) -- sonst identisch zu signFreeAgentStaff().
+function signFreeAgentCoach(entry, contractDateAnchor) {
+  const contractStart = contractDateAnchor;
+  const contractEnd = addMonthsToDateStr(contractStart, Math.round(12 + Math.random() * 24));
+  return { ...entry, contractStart, contractEnd };
+}
+// Bug-Fix/Feature (Bot Ecosystem V5): einheitlicher Dispatch fuer "Personal
+// dieser Rolle vom Markt holen" -- Coach ueber den neuen Coach-Pool, alle
+// anderen 6 Rollen wie bisher ueber FREE_AGENT_STAFF. Ersetzt die drei
+// Call-Sites in renderer.js (scoreBotStaffUpgrade/-Downsize/-RecoveryHire),
+// die vorher alle direkt freeAgentStaffPool()/signFreeAgentStaff() riefen
+// und dadurch fuer 'Coach' STUMM einen leeren Pool bekamen (FREE_AGENT_STAFF
+// kennt keinen 'Coach'-Schluessel).
+function freeAgentPersonnelPool(role) {
+  return role === 'Coach' ? freeAgentCoachPool() : freeAgentStaffPool(role);
+}
+function signFreeAgentPersonnel(role, entry, contractDateAnchor) {
+  return role === 'Coach' ? signFreeAgentCoach(entry, contractDateAnchor) : signFreeAgentStaff(entry, role, contractDateAnchor);
+}
+
+// Bug-Fix (Save/Load Integrity V1, Root-Cause "Namenskollision durch
+// signierten Free Agent"): der Free-Agent-Pool (freeAgentPlayerPool()/
+// freeAgentStaffPool()/freeAgentCoachPool()) ist EIGENSTÄNDIG generiert,
+// unabhängig vom Kader der Ziel-Org -- signiert eine Org (Bot oder eigene)
+// zufällig einen Free Agent, dessen Name COINCIDENTALLY mit einem WEITERHIN
+// aktiven Teamkollegen derselben Org übereinstimmt, entsteht exakt dieselbe
+// playerDevelopment/staffDevelopment-Schlüssel-Kollision wie bei
+// rollReplacementPerson() (siehe dortigen Kommentar). Da der Pool-Eintrag
+// selbst (Stats/Overall/Alter) unverändert bleiben soll -- nur der NAME ist
+// für die Kollision relevant -- wird hier NICHT neu gewürfelt, sondern die
+// Person bei Bedarf umbenannt (alle übrigen Eigenschaften bleiben exakt wie
+// vom Pool geliefert). Rückgabe ist bei keiner Kollision identisch zum Input
+// (kein unnötiger Objekt-Klon).
+function renameIfCollision(person, avoidNames, isPlayerLike) {
+  const avoid = avoidNames instanceof Set ? avoidNames : new Set(avoidNames || []);
+  if (!person || !avoid.has(person.name)) return person;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  let name;
+  if (isPlayerLike) {
+    let guard = 0;
+    do { name = pick(ROSTER_NICK_PREFIXES) + pick(ROSTER_NICK_SUFFIXES); guard += 1; } while (avoid.has(name) && guard < 40);
+    if (avoid.has(name)) {
+      let found = false;
+      for (let pi = 0; pi < ROSTER_NICK_PREFIXES.length && !found; pi++) {
+        for (let si = 0; si < ROSTER_NICK_SUFFIXES.length && !found; si++) {
+          const candidate = ROSTER_NICK_PREFIXES[pi] + ROSTER_NICK_SUFFIXES[si];
+          if (!avoid.has(candidate)) { name = candidate; found = true; }
+        }
+      }
+    }
+  } else {
+    let guard = 0;
+    do {
+      name = (Math.random() < 0.5 ? pick(ROSTER_STAFF_FIRST_NAMES_M) : pick(ROSTER_STAFF_FIRST_NAMES_F)) + ' ' + pick(ROSTER_STAFF_LAST_NAMES);
+      guard += 1;
+    } while (avoid.has(name) && guard < 40);
+    if (avoid.has(name)) {
+      let found = false;
+      const firstNamePools = [ROSTER_STAFF_FIRST_NAMES_M, ROSTER_STAFF_FIRST_NAMES_F];
+      for (let fp = 0; fp < firstNamePools.length && !found; fp++) {
+        for (let fi = 0; fi < firstNamePools[fp].length && !found; fi++) {
+          for (let li = 0; li < ROSTER_STAFF_LAST_NAMES.length && !found; li++) {
+            const candidate = firstNamePools[fp][fi] + ' ' + ROSTER_STAFF_LAST_NAMES[li];
+            if (!avoid.has(candidate)) { name = candidate; found = true; }
+          }
+        }
+      }
+    }
+  }
+  return { ...person, name };
 }
 
 // Bestmöglicher LEISTBARER Kandidat aus `pool` für ein Bot-Team, das gerade
