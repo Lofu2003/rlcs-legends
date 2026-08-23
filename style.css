@@ -8533,6 +8533,16 @@ main {
   font-size: 12px;
   color: #9aa1b8;
 }
+/* Hotfix v0.8.1, Bug 5: sichtbarer Cooldown-Hinweis statt eines Buttons, der
+   während der Abklingzeit klickbar bleibt und dann unsichtbar nichts tut. */
+.dashboard-home-scrim-cooldown-note {
+  font-size: 11px;
+  color: #e8a23e;
+  margin-top: 4px;
+}
+.dashboard-home-scrim-cooldown-note.hidden {
+  display: none;
+}
 
 .dashboard-home-scrim-history-item.is-win { color: #8fe7a8; }
 .dashboard-home-scrim-history-item.is-loss { color: #ff9d9d; }

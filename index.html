@@ -111,7 +111,7 @@
       </div>
     </div>
 
-    <p id="mainmenu-version" class="mainmenu-version">v0.8.0</p>
+    <p id="mainmenu-version" class="mainmenu-version">v0.8.1</p>
   </div>
 
   <!-- ── Spielmodus-Auswahl (bei "Neues Spiel") ───────────────────────────── -->
@@ -772,6 +772,7 @@
                     <select id="dashboard-home-scrim-target" class="dashboard-home-scrim-select"></select>
                     <button type="button" id="btn-dashboard-home-scrim-invite" class="dashboard-post-mark-all-btn">Einladen</button>
                   </div>
+                  <div id="dashboard-home-scrim-cooldown-note" class="dashboard-home-scrim-cooldown-note hidden"></div>
                   <div id="dashboard-home-scrim-history" class="dashboard-home-scrim-history"></div>
                 </div>
               </div>
@@ -2143,11 +2144,11 @@
       <div id="negotiation-offer-log" class="negotiation-log"></div>
       <div id="negotiation-offer-fee-field">
         <label class="negotiation-label" for="negotiation-offer-fee">Transferwert-Angebot</label>
-        <input type="number" id="negotiation-offer-fee" class="negotiation-offer-input" min="0" step="1000" />
+        <input type="text" inputmode="numeric" id="negotiation-offer-fee" class="negotiation-offer-input" placeholder="z. B. 25000 oder 25.000" />
       </div>
       <div>
         <label class="negotiation-label" for="negotiation-offer-salary">Gehalts-Angebot (pro Monat)</label>
-        <input type="number" id="negotiation-offer-salary" class="negotiation-offer-input" min="0" step="100" />
+        <input type="text" inputmode="numeric" id="negotiation-offer-salary" class="negotiation-offer-input" placeholder="z. B. 5000 oder 5.000" />
       </div>
       <p id="negotiation-offer-status" class="update-check-status"></p>
       <div class="negotiation-buttons">

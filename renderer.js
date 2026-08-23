@@ -33,6 +33,36 @@ function formatMoney(amount) {
   return Math.round(amount).toLocaleString('de-DE') + ' €';
 }
 
+// Hotfix v0.8.1, Bug 6 (Spieler-Meldung: "25.000 € Angebot wurde als 25 €
+// abgerechnet", P1): Geldwerte im ganzen Spiel werden IMMER als ganze Euro
+// (formatMoney() rundet, keine Cent-Beträge) mit deutschem Tausendertrenner
+// "." angezeigt (toLocaleString('de-DE')) -- ein Eingabefeld, das rohe
+// Nutzereingaben per Number(input.value) liest, interpretiert genau diesen
+// Punkt aber als DEZIMALPUNKT: Number("25.000") ergibt 25, nicht 25000. Root
+// Cause war KEIN einzelner Tippfehler, sondern die Kombination aus (a) einem
+// nativen <input type="number">-Feld, das eine getippte Zeichenkette wie
+// "25.000" unverändert als .value zurückgibt, UND (b) dem Rest des Spiels,
+// der Spieler durch genau dieses "."-Format an anderer Stelle (formatMoney())
+// zum Tippen genau dieser Schreibweise verleitet. Einzige zentrale Stelle,
+// die ab jetzt jede Geld-EINGABE (Gegensatz zu formatMoney()s reiner
+// ANZEIGE) im Spiel parst -- kanonischer Rückgabewert ist immer eine ganze,
+// nicht-negative Zahl in echten Euro, nie ein formatierter String.
+function parseMoneyInput(raw) {
+  if (raw === null || raw === undefined) return 0;
+  let s = String(raw).trim();
+  if (!s) return 0;
+  s = s.replace(/\s/g, '').replace(/€/g, '').replace(/,/g, '.');
+  const dotParts = s.split('.');
+  if (dotParts.length > 1 && dotParts[dotParts.length - 1].length !== 3) {
+    // Letzter Block ist KEIN dreistelliger Tausenderblock (z.B. "25.5") --
+    // tatsächlich ein Dezimalpunkt, auf ganze Euro runden.
+    return Math.max(0, Math.round(Number(s) || 0));
+  }
+  // Alle Punkte sind Tausendertrenner ("25.000", "1.234.567") -- entfernen,
+  // als Ganzzahl lesen.
+  return Math.max(0, Math.round(Number(dotParts.join('')) || 0));
+}
+
 // Spielmodus — aktuell nur 'career' spielbar, 'randomizer' ist als zweiter
 // Modus angekündigt (ausgegraut in der Auswahl) aber noch nicht implementiert.
 // Wird pro Speicherstand mitgespeichert, damit die Fortsetzen-Liste zeigt,
@@ -93,6 +123,14 @@ function quickSimPaceMs() {
 // Historie-Ansicht. Bleibt über die GANZE Karriere bestehen, wird nur bei
 // neuer Karriere geleert.
 let transferLog = []; // { season, from, to, player, price }
+
+// Hotfix v0.8.1, Bug 3: während der laufenden Saison abgeschlossene, aber
+// erst nach Saisonende (firstAllowedTransferJoinDate()) tatsächlich zu
+// vollziehende Verhandlungen -- siehe resolveNegotiationResponses() (Eintrag
+// entsteht) und processDuePendingTransfers() (Eintrag wird ausgeführt).
+// { id, kind: 'player'|'staff', category, personName, role, sellerOrgName,
+//   offerFee, offerSalary, agreedDate, joinDate }
+let pendingTransfers = [];
 
 // ── QA-Karriere-Telemetrie (Bot-Ökosystem V9, Phase 2-3) ────────────────
 // Rein additive, nirgendwo im echten Gameplay ausgewertete Instrumentierung
@@ -2932,7 +2970,11 @@ function maybeTriggerIncomingInterest() {
     pick.kind, 'HIGH', pick.person.name, 'Interesse an einem Wechsel',
     pick.person.name + ' (' + pick.role + ', aktuell ' + org.name + ') ist auf deine Organisation aufmerksam geworden und könnte sich einen Wechsel vorstellen.',
     null,
-    { type: 'openNegotiation', kind: pick.kind, orgName: org.name, personName: pick.person.name, role: pick.role }
+    // Hotfix v0.8.1, Bug 3 ("Interest Request Override"): isIncomingInterest
+    // markiert diese Anfrage als eine, die von der Person SELBST ausgeht --
+    // eine normale Verhandlungssperre (aktuell nur der Coach) darf sie nicht
+    // blockieren, siehe submitNegotiationOffer().
+    { type: 'openNegotiation', kind: pick.kind, orgName: org.name, personName: pick.person.name, role: pick.role, isIncomingInterest: true }
   );
 }
 
@@ -3203,11 +3245,30 @@ function sendScrimInvite(opponentOrgName) {
   // (assignedOrg.lastScrimDate, siehe resolveBotVsBotScrim()) statt eines
   // neu erfundenen, willkürlichen Tages-Caps -- identische Regel für Mensch
   // und Bot.
-  if (assignedOrg.lastScrimDate && daysBetweenDateStrs(assignedOrg.lastScrimDate, careerDate) < BOT_SCRIM_COOLDOWN_DAYS) return;
+  // Hotfix v0.8.1, Bug 5 (Spieler-Meldung: "Scrim-Anfragen funktionieren
+  // manchmal überhaupt nicht"): Root Cause war NICHT ein Zufalls-/Race-Bug,
+  // sondern fehlende Rückmeldung -- alle drei Sperrgründe hier (Cooldown/
+  // bereits laufende Einladung/Gegner nicht mehr verfügbar) brachen bisher
+  // mit einem stummen `return` ab, ohne den Button-Klick sichtbar zu
+  // quittieren. Der Klick "tat" dann scheinbar nichts, exakt das gemeldete
+  // Symptom. Fix: jeder Abbruch bekommt jetzt einen sichtbaren Toast, UND
+  // renderDashboardHomeScrimWidget() deaktiviert den Button bereits während
+  // des Cooldowns, damit der Spieler den Grund gar nicht erst raten muss.
+  if (assignedOrg.lastScrimDate && daysBetweenDateStrs(assignedOrg.lastScrimDate, careerDate) < BOT_SCRIM_COOLDOWN_DAYS) {
+    const daysLeft = BOT_SCRIM_COOLDOWN_DAYS - daysBetweenDateStrs(assignedOrg.lastScrimDate, careerDate);
+    showToast('⏳', 'Noch ' + daysLeft + ' Tag(e) Abklingzeit, bevor der nächste Scrim angefragt werden kann.', 'Scrim');
+    return;
+  }
   const already = scrimInvites.some((i) => i.opponentOrgName === opponentOrgName && (i.status === 'pending' || i.status === 'ready'));
-  if (already) return;
+  if (already) {
+    showToast('⚠️', 'Es gibt bereits eine laufende Scrim-Einladung mit ' + opponentOrgName + '.', 'Scrim');
+    return;
+  }
   const opponentOrg = findOrgByName(opponentOrgName);
-  if (!opponentOrg) return;
+  if (!opponentOrg) {
+    showToast('⚠️', opponentOrgName + ' ist gerade nicht verfügbar -- bitte einen anderen Gegner wählen.', 'Scrim');
+    return;
+  }
   scrimInvites.push({
     id: 'scrim_' + careerDate + '_' + Math.round(Math.random() * 1e6),
     direction: 'outgoing', opponentOrgName,
@@ -3216,6 +3277,7 @@ function sendScrimInvite(opponentOrgName) {
     status: 'pending',
   });
   pushPostMessage('training', 'NORMAL', opponentOrgName, 'Scrim-Einladung verschickt', 'Deine Scrim-Einladung an ' + opponentOrgName + ' wurde verschickt. Antwort folgt in Kürze.', null, null);
+  showToast('✓', 'Scrim-Einladung an ' + opponentOrgName + ' verschickt.', 'Scrim');
   saveGameState();
 }
 
@@ -4180,6 +4242,23 @@ function renderDashboardHomeScrimWidget() {
   const select = document.getElementById('dashboard-home-scrim-target');
   const pendingOutgoingNames = new Set(scrimInvites.filter((i) => i.status === 'pending' || i.status === 'ready').map((i) => i.opponentOrgName));
   select.innerHTML = candidates.map((o) => '<option value="' + escapeHtml(o.name) + '"' + (pendingOutgoingNames.has(o.name) ? ' disabled' : '') + '>' + escapeHtml(o.name) + (pendingOutgoingNames.has(o.name) ? ' (Einladung ausstehend)' : '') + '</option>').join('');
+  // Hotfix v0.8.1, Bug 5: der Cooldown (BOT_SCRIM_COOLDOWN_DAYS) war bisher
+  // NUR in sendScrimInvite() selbst geprüft -- der Button blieb während des
+  // Cooldowns ganz normal klickbar und tat dann sichtbar nichts (siehe
+  // dortiger Kommentar). Hier jetzt sichtbar: Button deaktiviert + verbleibende
+  // Tage direkt im Widget angezeigt, damit der Klick gar nicht erst ins Leere geht.
+  const cooldownDaysLeft = assignedOrg.lastScrimDate
+    ? Math.max(0, BOT_SCRIM_COOLDOWN_DAYS - daysBetweenDateStrs(assignedOrg.lastScrimDate, careerDate))
+    : 0;
+  const inviteBtn = document.getElementById('btn-dashboard-home-scrim-invite');
+  const cooldownEl = document.getElementById('dashboard-home-scrim-cooldown-note');
+  const onCooldown = cooldownDaysLeft > 0;
+  if (inviteBtn) inviteBtn.disabled = onCooldown || candidates.length === 0;
+  if (select) select.disabled = onCooldown || candidates.length === 0;
+  if (cooldownEl) {
+    cooldownEl.textContent = onCooldown ? 'Abklingzeit: noch ' + cooldownDaysLeft + ' Tag(e), bevor der nächste Scrim angefragt werden kann.' : '';
+    cooldownEl.classList.toggle('hidden', !onCooldown);
+  }
 
   const historyEl = document.getElementById('dashboard-home-scrim-history');
   historyEl.innerHTML = scrimHistory.length > 0
@@ -4917,8 +4996,22 @@ function checkoutCart() {
   const items = cartItemsList();
   if (items.length === 0) return;
   const total = cartTotal();
-  if (total > assignedOrg.budget) {
-    showConfirmModal('Budget zu niedrig', 'Der Warenkorb kostet insgesamt ' + formatMoney(total) + ' -- das übersteigt dein aktuelles Budget von ' + formatMoney(assignedOrg.budget) + '.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
+  // Hotfix v0.8.1, Bug 4 (Spieler-Meldung: "Regler zurückschieben lässt Geld
+  // verschwinden"): Shop-Käufe prüften bisher gegen das GESAMTE Budget statt
+  // gegen financeUnallocated() -- ein Kauf konnte dadurch Geld verbrauchen,
+  // das der Spieler bereits einer der 4 Finanz-Kategorien (Transfers/
+  // Gehälter/Marketing/Betrieb) zugeteilt hatte, ohne diese Kategorie zu
+  // verringern. Die Invariante `Budget = Unzugeteilt + Summe(4 Kategorien)`
+  // brach dadurch heimlich (Unzugeteilt landete negativ, financeUnallocated()s
+  // Math.max(0,...) verschluckte das seitdem unsichtbar) -- erst beim
+  // nächsten Regler-Zurückschieben wurde der fehlende Betrag "sichtbar
+  // verschwunden". Fix: Shop-Käufe sind reine Ausgaben aus dem NICHT
+  // zugeteilten Geld (dieselbe Kategorie, in der auch neues Sponsoring-/
+  // Preisgeld landet, siehe collectSponsorGoalReward()/processDuePrizePayouts()),
+  // nie aus bereits verplantem Kategorie-Geld.
+  const unallocated = financeUnallocated();
+  if (total > unallocated) {
+    showConfirmModal('Nicht zugeteiltes Budget zu niedrig', 'Der Warenkorb kostet insgesamt ' + formatMoney(total) + ' -- das übersteigt dein aktuell nicht zugeteiltes Budget von ' + formatMoney(unallocated) + '. Verschiebe auf der Finanzen-Seite einen Regler, um mehr Geld freizugeben.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
     return;
   }
   showConfirmModal('Kauf bestätigen', items.length + ' Artikel für insgesamt ' + formatMoney(total) + ' kaufen?', () => executeCartCheckout(), {});
@@ -4942,7 +5035,11 @@ function executeCartCheckout() {
     // Basecamp-Vorbedingungen gilt (Zeilen direkt darunter). Pro Artikel statt
     // nur einmal fuer die Cart-Summe geprueft, da das Budget INNERHALB dieser
     // Schleife mit jedem Kauf sinkt.
-    if (item.price > assignedOrg.budget) { delete shopCart[item.id]; return; }
+    // Hotfix v0.8.1, Bug 4: gegen financeUnallocated() statt assignedOrg.budget
+    // pruefen (siehe checkoutCart()-Kommentar) -- financeUnallocated() ist live
+    // pro Artikel neu berechnet, sinkt also korrekt mit jedem Kauf innerhalb
+    // dieser Schleife.
+    if (item.price > financeUnallocated()) { delete shopCart[item.id]; return; }
     // Basecamp-Vorbedingung kann sich seit dem Hinzufügen geändert haben (z.B.
     // zwei aufeinanderfolgende Ausbaustufen gleichzeitig im Warenkorb) --
     // pro Artikel erneut prüfen statt blind auszuführen.
@@ -7479,6 +7576,23 @@ function simulateSwissStage(teams, winThreshold, lossThreshold, bestOf, historyS
   }
   let round = 0;
   let repeatFallbackUsed = false;
+  // Hotfix v0.8.1, Spieler-Meldung ("Freilose im LCQ-Swiss dürfen nicht
+  // passieren, wenn das Format eine vollständige Teilnehmerzahl vorsieht"):
+  // die alte Logik gab bei ungerader BUCKET-Größe einem Team einen
+  // künstlichen Freilos-Sieg (kein echtes Match). Root Cause: bei
+  // Feldgrößen, die keine Zweierpotenz sind (z.B. LCQ mit 14/15 Teams statt
+  // der für 16 Teams ausgelegten Bucket-Struktur), wird IRGENDWANN
+  // zwangsläufig ein Bucket ungerade groß, auch wenn die Gesamtzahl gerade
+  // ist. Fix: Standard-Swiss-Verfahren ("pair down") -- das überzählige Team
+  // eines ungeraden Buckets wird NICHT freigelost, sondern in den
+  // nächstschlechteren Bucket derselben Runde weitergereicht und dort
+  // regulär gegen ein echtes Team gepaart. Empirisch verifiziert (Node-
+  // Sandbox, 4000 Durchläufe je Feldgröße 8/12/14/15/16/20/24/28/30/32 mit
+  // Threshold 3/3): bei GERADER Gesamtteilnehmerzahl entsteht dadurch NIE
+  // ein Freilos -- nur bei einer von außen tatsächlich ungeraden
+  // Gesamtzahl (mathematisch unvermeidbar, siehe `forcedByeUsed` unten)
+  // bleibt am Ende ein einzelnes Team ohne Gegner übrig.
+  let forcedByeUsed = false;
 
   const isAlive = (t) => record[t.name].wins < winThreshold && record[t.name].losses < lossThreshold;
 
@@ -7489,34 +7603,34 @@ function simulateSwissStage(teams, winThreshold, lossThreshold, bestOf, historyS
       const key = record[t.name].wins + ',' + record[t.name].losses;
       (buckets[key] = buckets[key] || []).push(t);
     });
-    Object.entries(buckets).forEach(([colKey, bucketTeams]) => {
-      let rowInCol = 0;
-      // Runde 85, User-Vorgabe (LCQ mit realistischer, nicht zweierpotenz-
-      // großer Region-Feldgröße statt exakt 32/16/8): bei ungerader Bucket-
-      // Größe bekommt EIN Team ein Freilos (automatischer Sieg ohne Spiel,
-      // Standard-Praxis bei echten Swiss-Systemen mit unrunden
-      // Teilnehmerzahlen) -- bevorzugt ein Team, das noch kein Freilos in
-      // dieser Stage hatte, damit es sich fair verteilt.
-      let toPair = bucketTeams;
-      if (bucketTeams.length % 2 === 1) {
-        const candidates = bucketTeams.filter((t) => !hadBye.has(t.name));
-        const pool = candidates.length ? candidates : bucketTeams;
-        const byeTeam = pool[Math.floor(Math.random() * pool.length)];
-        hadBye.add(byeTeam.name);
-        record[byeTeam.name].wins++;
-        log.push({ round, colKey, row: rowInCol++, a: byeTeam.name, b: null, winner: byeTeam.name, bye: true });
-        if (record[byeTeam.name].wins === winThreshold) {
-          qualifiedSlots.push({ day: round + 1, row: nextRow(qualifiedRowCounters, round + 1), teamName: byeTeam.name });
-        }
-        toPair = bucketTeams.filter((t) => t !== byeTeam);
+    // Buckets bester Bilanz zuerst verarbeiten (Sieg-minus-Niederlage
+    // absteigend, dann mehr Siege zuerst) -- ein durchgereichtes Team landet
+    // dadurch immer im NÄCHSTSCHLECHTEREN Bucket, nie in einem besseren.
+    const orderedKeys = Object.keys(buckets).sort((ka, kb) => {
+      const [wa, la] = ka.split(',').map(Number);
+      const [wb, lb] = kb.split(',').map(Number);
+      return (wb - lb) - (wa - la) || wb - wa;
+    });
+    let floater = null;
+    orderedKeys.forEach((colKey) => {
+      let bucketTeams = buckets[colKey].slice();
+      if (floater) {
+        bucketTeams = [...bucketTeams, floater];
+        floater = null;
       }
-      let pairing = pairWithoutRepeats(toPair, played);
+      if (bucketTeams.length % 2 === 1) {
+        // Alle Teams in diesem Bucket haben identische Bilanz -- welches
+        // konkret weiterwandert ist reine Zuteilung, kein Fairness-Verlust.
+        floater = bucketTeams.pop();
+      }
+      let rowInCol = 0;
+      let pairing = pairWithoutRepeats(bucketTeams, played);
       if (!pairing) {
         // Extremer Ausnahmefall (siehe Kommentar oben): keine wiederholungs-
         // freie Paarung möglich -- letzter Ausweg, EINE Wiederholung zulassen,
         // statt die gesamte Simulation abstürzen zu lassen.
         repeatFallbackUsed = true;
-        const shuffled = shuffleArray(toPair);
+        const shuffled = shuffleArray(bucketTeams);
         pairing = shuffled.map((t, i) => (i % 2 === 0 ? [t, shuffled[i + 1]] : null)).filter(Boolean);
       }
       pairing.forEach(([a, b]) => {
@@ -7534,6 +7648,21 @@ function simulateSwissStage(teams, winThreshold, lossThreshold, bestOf, historyS
         }
       });
     });
+    if (floater) {
+      // Nur erreichbar, wenn die INSGESAMT lebende Teamzahl dieser Runde
+      // ungerade ist (bei geradem Startfeld -- garantiert für Open/LCQ,
+      // siehe resolveOpenEvent()/resolveLcqEvent() -- kann das nicht
+      // passieren) -- echter, unvermeidbarer Freilos-Sieg als letzter
+      // Ausweg statt eines unvollständigen/abstürzenden Turniers.
+      forcedByeUsed = true;
+      hadBye.add(floater.name);
+      record[floater.name].wins++;
+      const colKey = record[floater.name].wins - 1 + ',' + record[floater.name].losses;
+      log.push({ round, colKey, row: 0, a: floater.name, b: null, winner: floater.name, bye: true });
+      if (record[floater.name].wins === winThreshold) {
+        qualifiedSlots.push({ day: round + 1, row: nextRow(qualifiedRowCounters, round + 1), teamName: floater.name });
+      }
+    }
   }
 
   const qualified = teams
@@ -7555,6 +7684,7 @@ function simulateSwissStage(teams, winThreshold, lossThreshold, bestOf, historyS
     qualifiedSlots,
     eliminatedSlots,
     repeatFallbackUsed,
+    forcedByeUsed,
   };
 }
 
@@ -7723,6 +7853,28 @@ function simulateAflBracket(upperTeams, lowerTeams, bestOf, historySet) {
 function seedByStrength(teams, groupCount) {
   const ordered = teams.slice().sort((a, b) => (b.strength || 0) - (a.strength || 0));
   return seedIntoRoundRobinGroups(ordered, groupCount);
+}
+
+// Hotfix v0.8.1, Bug 1 (Spieler-Meldung "Freilose im LCQ-Swiss"): reiner
+// Round-Robin kann problemlos ungerade Gruppengrößen vertragen,
+// simulateSwissStage() dagegen braucht (siehe dortiger Kommentar) eine
+// GERADE Gruppengröße, um garantiert freilos-frei zu bleiben.
+// seedIntoRoundRobinGroups() liefert bei manchen Gesamtgrößen (z.B. 30 auf 2
+// Gruppen) zwei UNGERADE Gruppen (15/15) -- diese Funktion balanciert das
+// danach nach: bei einem GERADEN Gesamtfeld gibt es immer eine gerade Anzahl
+// ungerader Gruppen, das schwächste Team einer ungeraden Gruppe wandert
+// jeweils in eine andere ungerade Gruppe, bis alle Gruppen gerade sind. Bei
+// einem ungeraden Gesamtfeld bleibt zwangsläufig genau eine Gruppe ungerade
+// (mathematisch unvermeidbar, siehe forcedByeUsed in simulateSwissStage()).
+function seedIntoSwissGroupsEven(orderedTeams, groupCount) {
+  const groups = seedIntoRoundRobinGroups(orderedTeams, groupCount);
+  for (let i = 0; i < groups.length; i++) {
+    if (groups[i].length % 2 !== 0) {
+      const j = groups.findIndex((g, idx) => idx !== i && g.length % 2 !== 0);
+      if (j !== -1) groups[i].push(groups[j].pop());
+    }
+  }
+  return groups;
 }
 
 // ── Anti-Rematch-Seeding (Runde 103, komplette User-Vorgabe: "wenn Team A
@@ -8348,8 +8500,14 @@ function resolveLcqEvent(event, region) {
   const ranked = seasonLeaderboardForRegion(region); // absteigend nach Saison-Punkten
   const byeEntries = ranked.slice(band.lcqRangeStart - 1, band.lcqRangeEnd);
   const koEntries = ranked.slice(band.lcqRangeEnd);
-  const byeTeams = byeEntries.map((e) => findOrgByName(e.orgName)).filter(Boolean);
-  const koTeams = koEntries.map((e) => findOrgByName(e.orgName)).filter(Boolean);
+  // Hotfix v0.8.1, Bug 2 (Spieler-Meldung "eigene Org verschwindet aus dem
+  // LCQ"): findOrgByName() sucht NUR in ORGANIZATIONS und kennt eine per
+  // Auswahlmenü erstellte eigene Org NIE (siehe resolveOrgByNameOrOwn()-
+  // Kommentar) -- eine für die Ranglisten-Teilnahme qualifizierte, aber
+  // selbst erstellte Spieler-Org fiel dadurch hier lautlos aus byeTeams/
+  // koTeams (und damit aus dem gesamten Swiss-Feld) heraus.
+  const byeTeams = byeEntries.map((e) => resolveOrgByNameOrOwn(e.orgName)).filter(Boolean);
+  const koTeams = koEntries.map((e) => resolveOrgByNameOrOwn(e.orgName)).filter(Boolean);
 
   // Ziel: 32 Teams für die Swiss-Stage. Unser Regionen-Pool ist endlich (28-
   // 34 nicht direkt qualifizierte Teams je nach Region, siehe
@@ -8362,7 +8520,12 @@ function resolveLcqEvent(event, region) {
   const swissField = [...byeTeams, ...koResult.survivors];
   // Masterprompt-Auftrag Abschnitt 27: gleiche Cross-Turnier-Rematch-
   // Vermeidung wie bei resolveOpenEvent() für die anfängliche Swiss-Gruppenaufteilung.
-  const swissGroups = reduceRematchCollisionsMultiStart(seedByStrength(swissField, 2), buildMatchHistorySet([]));
+  // Hotfix v0.8.1, Bug 1: seedIntoSwissGroupsEven() statt seedIntoRoundRobinGroups()
+  // (via seedByStrength()) -- garantiert beide Swiss-Gruppen eine GERADE Teamzahl,
+  // Voraussetzung dafür, dass simulateSwissStage()s Pair-Down-Logik keine Freilose
+  // erzeugt (siehe dortiger Kommentar).
+  const swissFieldOrdered = swissField.slice().sort((a, b) => (b.strength || 0) - (a.strength || 0));
+  const swissGroups = reduceRematchCollisionsMultiStart(seedIntoSwissGroupsEven(swissFieldOrdered, 2), buildMatchHistorySet([]));
   // Bug-Fix (Runde 105, aufgedeckt durch die seasonLeaderboardForRegion()-
   // Korrektur oben: der Regionen-Pool schrumpfte dadurch auf die TATSÄCHLICH
   // qualifizierten Orgas, z.B. 28 statt der ursprünglich angenommenen 32-64 --
@@ -8568,11 +8731,15 @@ function correctAflBracketConnections(treeId, shape, matches, connections) {
 // checkTournamentResolutions() garantiert die richtige chronologische
 // Reihenfolge -- LCQ liegt im Kalender vor Worlds).
 function resolveWorldsEvent(event) {
+  // Hotfix v0.8.1, Bug 2 (dieselbe Root Cause wie in resolveLcqEvent()):
+  // findOrgByName() findet eine selbst erstellte Spieler-Org nie -- ist die
+  // eigene Org direkt qualifiziert ODER LCQ-Champion, wäre sie hier lautlos
+  // aus dem Worlds-Feld gefallen. resolveOrgByNameOrOwn() statt findOrgByName().
   const directField = [];
   Object.keys(LCQ_ELIGIBILITY_BANDS).forEach((region) => {
     const top = seasonLeaderboardForRegion(region).slice(0, LCQ_ELIGIBILITY_BANDS[region].autoQualifyTop);
     top.forEach((entry) => {
-      const org = findOrgByName(entry.orgName);
+      const org = resolveOrgByNameOrOwn(entry.orgName);
       if (org) directField.push({ org, points: entry.points });
     });
   });
@@ -8582,7 +8749,7 @@ function resolveWorldsEvent(event) {
 
   const lcqResults = seasonTournamentResults.lcq || {};
   const lcqChampions = LCQ_REGIONS
-    .map((region) => lcqResults[region] && findOrgByName(lcqResults[region].championName))
+    .map((region) => lcqResults[region] && resolveOrgByNameOrOwn(lcqResults[region].championName))
     .filter(Boolean);
 
   const playInField = [...directPlayIn, ...lcqChampions]; // 4 + 4 = 8 Teams
@@ -8620,7 +8787,7 @@ function resolveWorldsEvent(event) {
   const nonAdvancing = []; // Platz 3/4 pro Gruppe -> Platz 9-16 (nach Bilanz sortiert)
   groupResults.forEach((res) => {
     res.standings.forEach((s, i) => {
-      if (i < 2) advancing.push(findOrgByName(s.orgName));
+      if (i < 2) advancing.push(resolveOrgByNameOrOwn(s.orgName));
       else nonAdvancing.push(s);
     });
   });
@@ -11007,8 +11174,13 @@ function signStaffMember(row) {
   const isCoach = role === 'Coach';
   const isOwnOrgRow = row.org && assignedOrg && row.org.name === assignedOrg.name;
   if (isOwnOrgRow) return; // Button ist für eigene Zeilen nativ disabled, dies ist nur ein zweites Sicherheitsnetz
-  if (!isTransferWindowOpen(careerDate)) {
-    showConfirmModal('Transferfenster geschlossen', 'Personal kann nur während eines offenen Transferfensters verhandelt werden.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
+  // Hotfix v0.8.1, Bug 3: Personal (außer Coach) darf jetzt auch während der
+  // laufenden Saison verhandelt werden -- der tatsächliche Wechsel wird nur
+  // noch bis firstAllowedTransferJoinDate() aufgeschoben (siehe
+  // resolveNegotiationResponses()/processDuePendingTransfers()). Für den
+  // Coach gilt die bisherige Saisonbeschränkung unverändert weiter.
+  if (isCoach && !isTransferWindowOpen(careerDate)) {
+    showConfirmModal('Transferfenster geschlossen', 'Der Coach kann nur während eines offenen Transferfensters verhandelt werden.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
     return;
   }
   const current = isCoach ? (assignedOrg.roster && assignedOrg.roster.coach) : (assignedOrg.roster && assignedOrg.roster.staff.find((s) => s.role === role));
@@ -11277,7 +11449,7 @@ function personAlreadySecuredByPlayer(kind, orgName, personName, role) {
   return (assignedOrg.roster.staff || []).some((s) => s && !s.vacant && s.name === personName && s.role === role);
 }
 
-function openNegotiationModal(kind, orgName, personName, role) {
+function openNegotiationModal(kind, orgName, personName, role, isIncomingInterest) {
   const row = kind === 'player' ? findScoutingPlayerRow(orgName, personName) : findScoutingStaffRow(orgName, personName, role);
   // Bug-Fix (User-Meldung: "Verhandlung starten"-Button aus einer Post-
   // Nachricht führt zu Scouting, aber der Verhandlungschat öffnet sich
@@ -11340,7 +11512,7 @@ function openNegotiationModal(kind, orgName, personName, role) {
   const person = kind === 'player' ? row.player : row.person;
   const displayRole = kind === 'player' ? row.role : role;
   const isFreeAgent = !row.org;
-  negotiationModalContext = { kind, orgName, personName, role: displayRole };
+  negotiationModalContext = { kind, orgName, personName, role: displayRole, isIncomingInterest: !!isIncomingInterest };
 
   document.getElementById('negotiation-offer-person-name').textContent = person.name + ' (' + displayRole + ')';
   document.getElementById('negotiation-offer-subtitle').textContent = isFreeAgent
@@ -11394,14 +11566,25 @@ function submitNegotiationOffer() {
   // eigentlichen Mutationsstelle zuverlässig einen zweiten, parallelen
   // pendingNegotiations-Eintrag für dieselbe Person.
   const existingBeforeSubmit = findPendingNegotiationFor(kind, orgName, personName, role);
+  // Hotfix v0.8.1, Bug 3: eine bereits vereinbarte, nur noch auf ihr joinDate
+  // wartende Einigung (pendingTransfers) bleibt bis zur tatsächlichen
+  // Ausführung im Scouting-Pool sichtbar (die Person wechselt ja bewusst erst
+  // dann den Kader) -- ohne diesen Check könnte eine zweite, parallele
+  // Verhandlung für dieselbe Person gestartet werden (dieselbe Duplikat-
+  // Verhandlungs-Gefahr wie beim bestehenden pendingNegotiations-Check oben).
+  const alreadyPendingTransfer = pendingTransfers.some((pt) => pt.kind === kind && pt.personName === personName && pt.role === role);
+  if (alreadyPendingTransfer) {
+    statusEl.textContent = personName + ' hat dein Angebot bereits angenommen -- der Wechsel steht noch aus (siehe Postfach).';
+    return;
+  }
   if (existingBeforeSubmit && existingBeforeSubmit.status === 'pending') {
     statusEl.textContent = 'Du hast bereits ein Angebot an ' + personName + ' geschickt -- die Antwort steht noch aus.';
     return;
   }
 
   const isFreeAgent = !row.org;
-  const offerFee = isFreeAgent ? 0 : Math.max(0, Math.round(Number(document.getElementById('negotiation-offer-fee').value) || 0));
-  const offerSalary = Math.max(0, Math.round(Number(document.getElementById('negotiation-offer-salary').value) || 0));
+  const offerFee = isFreeAgent ? 0 : parseMoneyInput(document.getElementById('negotiation-offer-fee').value);
+  const offerSalary = parseMoneyInput(document.getElementById('negotiation-offer-salary').value);
 
   // Bug-Fix: Diese Prüfungen lebten bisher NUR in signScoutingPlayer()/
   // signStaffMember() (dem Klick-Vorlauf über die Scouting-Seite) -- der
@@ -11410,7 +11593,23 @@ function submitNegotiationOffer() {
   // aber DIREKT auf, ohne diesen Vorlauf. submitNegotiationOffer() ist die
   // tatsächliche Mutationsstelle und muss deshalb selbst die Autorität sein
   // (Auftragsabschnitt 24: Game-System validiert, nicht die UI, die dorthin führt).
-  if (!isTransferWindowOpen(careerDate)) { statusEl.textContent = 'Nur im geöffneten Transferfenster möglich.'; return; }
+  // Hotfix v0.8.1, Bug 3: nur noch der Coach ist an das Transferfenster
+  // gebunden (bestehende Saisonbeschränkung bleibt für ihn unverändert) --
+  // Spieler und übriges Personal dürfen jetzt jederzeit verhandelt werden,
+  // der tatsächliche Wechsel wird stattdessen bis firstAllowedTransferJoinDate()
+  // aufgeschoben (siehe resolveNegotiationResponses()). "Interest Request
+  // Override" (Auftragsabschnitt "Interest Request Override"): eine vom
+  // Personal/Spieler SELBST ausgehende Kontaktaufnahme (negotiationModalContext.
+  // isIncomingInterest) oder die Fortsetzung einer bereits laufenden
+  // Verhandlung (existingBeforeSubmit -- Antwort auf ein Gegenangebot) darf
+  // die Coach-Saisonsperre ebenfalls nicht blockieren, sonst liefe ein
+  // bereits begonnenes Gespräch mitten im Fenster-Wechsel plötzlich ins Leere.
+  const isCoachNegotiation = kind === 'staff' && role === 'Coach';
+  const windowBypass = !!(negotiationModalContext.isIncomingInterest || existingBeforeSubmit);
+  if (isCoachNegotiation && !windowBypass && !isTransferWindowOpen(careerDate)) {
+    statusEl.textContent = 'Der Coach kann nur im geöffneten Transferfenster verhandelt werden.';
+    return;
+  }
   if (kind === 'staff') {
     const isCoach = role === 'Coach';
     const current = isCoach ? assignedOrg.roster.coach : assignedOrg.roster.staff.find((s) => s.role === role);
@@ -11753,11 +11952,6 @@ function resolveNegotiationResponses() {
       pushPostMessage('player', 'HIGH', 'Kader-Management', 'Angebot angenommen, aber kein Kaderplatz', personLabel + ' hat dein Angebot angenommen -- dein Kader ist inzwischen aber voll. Der Transfer wurde storniert.', null, { type: 'openPage', page: 'roster' });
       return;
     }
-    if (!isTransferWindowOpen(careerDate)) {
-      neg.status = 'failed';
-      pushPostMessage(category, 'HIGH', 'Transferabteilung', 'Angebot angenommen, aber Transferfenster zu', personLabel + ' hat dein Angebot angenommen -- das Transferfenster ist inzwischen aber geschlossen. Der Transfer wurde storniert.', null, { type: 'openPage', page: 'scouting' });
-      return;
-    }
     if (neg.kind === 'staff') {
       const isCoach = neg.role === 'Coach';
       const current = isCoach ? assignedOrg.roster.coach : assignedOrg.roster.staff.find((s) => s.role === neg.role);
@@ -11768,14 +11962,83 @@ function resolveNegotiationResponses() {
       }
     }
     neg.status = 'accepted';
-    if (neg.kind === 'player') executePlayerSigning(row, neg.offerFee, { silent: true });
-    else executeStaffSigning(row, neg.offerFee);
-    const acceptMsg = pushPostMessage(category, 'HIGH', senderName, 'Verhandlung erfolgreich!', personLabel + ' hat dein Angebot angenommen!', null, null);
-    enrichNegotiationReplyWithAi(acceptMsg ? acceptMsg.id : null, null, row.org || { name: 'Frei' }, person, neg.role, 'Du nimmst das Angebot des Managers an und freust dich auf die Zusammenarbeit.');
+    // Hotfix v0.8.1, Bug 3: Einigung ist ab sofort auch während der laufenden
+    // Saison möglich -- der tatsächliche Wechsel wird bis
+    // firstAllowedTransferJoinDate() aufgeschoben (= sofort, falls wir uns
+    // bereits im/nach dem offenen Transferfenster befinden -- exakt das
+    // bisherige, unveränderte Verhalten -- sonst der 1. Dezember dieses
+    // Kalenderjahres, der Tag nach Ende der Weltmeisterschaft). KEIN
+    // Geld/Kader wird schon jetzt angefasst, das passiert atomar erst bei
+    // der tatsächlichen Ausführung, siehe processDuePendingTransfers().
+    const joinDate = firstAllowedTransferJoinDate(careerDate);
+    if (joinDate <= careerDate) {
+      if (neg.kind === 'player') executePlayerSigning(row, neg.offerFee, { silent: true });
+      else executeStaffSigning(row, neg.offerFee);
+      const acceptMsg = pushPostMessage(category, 'HIGH', senderName, 'Verhandlung erfolgreich!', personLabel + ' hat dein Angebot angenommen!', null, null);
+      enrichNegotiationReplyWithAi(acceptMsg ? acceptMsg.id : null, null, row.org || { name: 'Frei' }, person, neg.role, 'Du nimmst das Angebot des Managers an und freust dich auf die Zusammenarbeit.');
+    } else {
+      pendingTransfers.push({
+        id: 'pt-' + Date.now() + '-' + Math.floor(Math.random() * 1e6),
+        kind: neg.kind, category, personName: neg.personName, role: neg.role,
+        sellerOrgName: row.org ? row.org.name : null,
+        offerFee: neg.offerFee, offerSalary: neg.offerSalary,
+        agreedDate: careerDate, joinDate,
+      });
+      const acceptMsg = pushPostMessage(category, 'HIGH', senderName, 'Einigung erzielt -- Wechsel nach Saisonende', personLabel + ' hat dein Angebot angenommen! Der Wechsel wird offiziell vollzogen, sobald die laufende Saison beendet ist -- ' + personLabel + ' wechselt am ' + formatContractDate(joinDate) + ' zu dir.', null, { type: 'openPage', page: 'transfers' });
+      enrichNegotiationReplyWithAi(acceptMsg ? acceptMsg.id : null, null, row.org || { name: 'Frei' }, person, neg.role, 'Du nimmst das Angebot des Managers an und freust dich auf die Zusammenarbeit, auch wenn der eigentliche Wechsel erst nach Saisonende ansteht.');
+    }
   });
   // 'countered' bleibt bestehen (wartet auf die Antwort des Managers), siehe
   // findPendingNegotiationFor()/negotiationLockStatus() oben.
   pendingNegotiations = pendingNegotiations.filter((n) => n.status === 'pending' || n.status === 'countered');
+  saveGameState();
+}
+
+// Hotfix v0.8.1, Bug 3: führt jeden fälligen (joinDate <= careerDate)
+// pendingTransfers-Eintrag atomar aus -- dieselben Re-Prüfungen wie in
+// resolveNegotiationResponses() (seit der Einigung können Monate vergangen
+// sein: Finanzen, Kaderplatz, Rollen-Slot, Person selbst noch verfügbar),
+// da bis hierher WEDER Geld noch Kader angefasst wurden. Ist die Person
+// inzwischen nicht mehr auffindbar (verkauft/zurückgetreten/anderweitig
+// verpflichtet -- "Bot replacement"), wird der Transfer sauber storniert,
+// OHNE dass jemals Geld abgebucht wurde (kein Rückerstattungs-/Doppelbuchungs-
+// Risiko).
+function processDuePendingTransfers() {
+  if (pendingTransfers.length === 0) return;
+  const due = pendingTransfers.filter((pt) => pt.joinDate <= careerDate);
+  if (due.length === 0) return;
+  due.forEach((pt) => {
+    const row = pt.kind === 'player' ? findScoutingPlayerRow(pt.sellerOrgName, pt.personName) : findScoutingStaffRow(pt.sellerOrgName, pt.personName, pt.role);
+    const personLabel = pt.personName + (pt.role ? ' (' + pt.role + ')' : '');
+    if (!row) {
+      pushPostMessage(pt.category, 'HIGH', 'Transferabteilung', 'Wechsel nicht mehr möglich', personLabel + ' ist inzwischen nicht mehr verfügbar -- der bereits vereinbarte Wechsel konnte nicht vollzogen werden. Es wurde kein Geld abgebucht.', null, null);
+      return;
+    }
+    if (pt.offerFee > (financeAllocation.transfers || 0) || pt.offerFee > assignedOrg.budget) {
+      pushPostMessage('finance', 'HIGH', 'Finanzabteilung', 'Wechsel nicht mehr finanzierbar', personLabel + ' wollte heute offiziell zu dir wechseln -- dein Budget reicht inzwischen aber nicht mehr aus. Der Transfer wurde storniert.', null, { type: 'openPage', page: 'finance' });
+      return;
+    }
+    if ((totalMonthlySalaryCommitment(assignedOrg) + pt.offerSalary) > (financeAllocation.salaries || 0)) {
+      pushPostMessage('finance', 'HIGH', 'Finanzabteilung', 'Wechsel nicht mehr finanzierbar', personLabel + ' wollte heute offiziell zu dir wechseln -- dein Gehälter-Budget reicht inzwischen aber nicht mehr aus. Der Transfer wurde storniert.', null, { type: 'openPage', page: 'finance' });
+      return;
+    }
+    if (pt.kind === 'player' && reserveSlotsOccupied() >= KADER_RESERVE_SLOTS) {
+      pushPostMessage('player', 'HIGH', 'Kader-Management', 'Wechsel nicht mehr möglich', personLabel + ' wollte heute offiziell zu dir wechseln -- dein Kader ist inzwischen aber voll. Der Transfer wurde storniert.', null, { type: 'openPage', page: 'roster' });
+      return;
+    }
+    if (pt.kind === 'staff') {
+      const isCoach = pt.role === 'Coach';
+      const current = isCoach ? assignedOrg.roster.coach : assignedOrg.roster.staff.find((s) => s.role === pt.role);
+      if (current && !current.vacant) {
+        pushPostMessage('staff', 'HIGH', 'Personalabteilung', 'Wechsel nicht mehr möglich', personLabel + ' wollte heute offiziell zu dir wechseln -- die Position ist inzwischen aber wieder besetzt. Der Transfer wurde storniert.', null, { type: 'openPage', page: 'staff' });
+        return;
+      }
+    }
+    if (pt.kind === 'player') executePlayerSigning(row, pt.offerFee, { silent: true });
+    else executeStaffSigning(row, pt.offerFee);
+    pushPostMessage(pt.category, 'HIGH', 'Transferabteilung', 'Wechsel offiziell vollzogen', personLabel + ' ist ab heute offiziell Teil deiner Organisation -- die im Verlauf der Saison vereinbarte Einigung wurde jetzt vollzogen.', null, null);
+  });
+  pendingTransfers = pendingTransfers.filter((pt) => pt.joinDate > careerDate);
   saveGameState();
 }
 
@@ -11881,10 +12144,10 @@ function reapplyPlayerTransferReplacements() {
 // hier als Gate erhalten. Budget-/Gehalts-Prüfung hängt jetzt vom
 // tatsächlich EINGEGEBENEN Angebot ab, siehe submitNegotiationOffer().
 function signScoutingPlayer(row) {
-  if (!isTransferWindowOpen(careerDate)) {
-    showConfirmModal('Transferfenster geschlossen', 'Verhandlungen sind nur vom 1. Dezember bis 15. Januar möglich.', () => {}, { hideCancel: true, confirmLabel: 'Verstanden' });
-    return;
-  }
+  // Hotfix v0.8.1, Bug 3: Spieler dürfen jetzt auch während der laufenden
+  // Saison verhandelt werden -- kein Transferfenster-Gate mehr hier (der
+  // tatsächliche Wechsel wird bis firstAllowedTransferJoinDate() aufgeschoben,
+  // siehe resolveNegotiationResponses()/processDuePendingTransfers()).
   // Runde 122, User-Vorgabe: "wenn man dann bei scouting mehr kaufen will
   // kommt Hinweis das man kein Platz mehr hat und ein Spieler vorher
   // verkaufen muss" -- 6 Reserve-Plätze, zählt auch schon unterwegs
@@ -20050,6 +20313,9 @@ function advanceOneCalendarDay() {
   // Runde 122: verbucht fällige (7 Tage alte) Spieler-Neuzugänge, siehe
   // queuePlayerArrival()/processDuePlayerArrivals().
   processDuePlayerArrivals();
+  // Hotfix v0.8.1, Bug 3: vollzieht während der Saison vereinbarte, bis
+  // Saisonende aufgeschobene Transfers, sobald ihr joinDate erreicht ist.
+  processDuePendingTransfers();
   // Bug-Fix (User-Meldung: "Vertragsdauer geht nicht"): contractEnd wurde
   // bisher NIRGENDS mit careerDate verglichen, siehe checkContractExpirations().
   checkContractExpirations();
@@ -20402,6 +20668,7 @@ function confirmOrgAndProceed() {
   // buildCustomOrgFromForm() -- bei den 87 bestehenden Orgas (generateOrgRoster())
   // ist immer ein Sub vorhanden.
   transferLog = [];
+  pendingTransfers = []; // Hotfix v0.8.1, Bug 3
   qaRetirementLog = [];
   qaChampionLog = [];
   qaConsentChecks = [];
@@ -21219,7 +21486,7 @@ function collectSaveState() {
   return {
     version: 38, gameMode, careerCharacter, assignedOrg,
     careerState, careerBotTeams, careerRivalRecords,
-    transferLog, careerPlaytimeSeconds,
+    transferLog, careerPlaytimeSeconds, pendingTransfers,
     ceoFireable, achievementsEnabled, consecutivePoorSeasons, careerEnded, transfersLockedUntil, unlockedAchievements,
     careerDate, financeAllocation, financeAllocationIsEuro: true, careerSeasonIncomeTotal,
     sponsorState, careerTotalWins, careerTotalLosses, careerSponsorIncomeTotal,
@@ -21369,6 +21636,10 @@ async function loadGameState() {
   careerBotTeams = data.careerBotTeams || null; // ältere Spielstände (v1/v2) hatten das noch nicht
   careerRivalRecords = data.careerRivalRecords || {};
   transferLog = data.transferLog || []; // ältere Spielstände (v1-v5) hatten das noch nicht
+  // Hotfix v0.8.1, Bug 3: v0.8.0- und ältere Spielstände kannten aufgeschobene
+  // Transfers noch nicht -- rein additiv, keine Migration nötig (leere Liste
+  // entspricht exakt dem alten Verhalten: keine offenen aufgeschobenen Transfers).
+  pendingTransfers = data.pendingTransfers || [];
   careerPlaytimeSeconds = data.careerPlaytimeSeconds || 0; // ältere Spielstände kannten noch keine Spielzeit
   // ältere Spielstände (v1-v9) kannten die Vertragsklauseln noch nicht --
   // Fallback: deaktiviert/ungesperrt, wie es vor dieser Runde immer war.
@@ -21398,6 +21669,25 @@ async function loadGameState() {
     };
   } else {
     financeAllocation = data.financeAllocation || { transfers: 0, salaries: 0, marketing: 0, operations: 0 };
+  }
+  // Hotfix v0.8.1, Bug 4, Selbstheilung für v0.8.0-Spielstände: der jetzt
+  // behobene Shop-Kauf-Bug (siehe checkoutCart()-Kommentar) konnte VOR diesem
+  // Hotfix einen unsichtbaren Fehlbetrag hinterlassen haben -- die Summe der 4
+  // Kategorien übersteigt dann assignedOrg.budget, financeUnallocated()s
+  // Math.max(0,...) verschluckt das seitdem dauerhaft. Kein neues Save-
+  // Format/keine Versionsbump nötig (unconditional self-healing, wie jede
+  // andere Migration in diesem Spielstand-Format): übersteigt die Summe das
+  // echte Budget, werden alle 4 Kategorien proportional so weit gekürzt, dass
+  // ihre Summe wieder exakt dem echten Budget entspricht -- assignedOrg.budget
+  // selbst bleibt unangetastet, kein Geld wird dem Spieler zusätzlich
+  // abgezogen, nur die (ohnehin nie eingelöste) Kategorie-Planung wird an die
+  // Realität angeglichen.
+  if (assignedOrg) {
+    const allocSum = financeAllocatedSum();
+    if (allocSum > assignedOrg.budget && allocSum > 0) {
+      const scale = Math.max(0, assignedOrg.budget) / allocSum;
+      FINANCE_ALLOC_KEYS.forEach((k) => { financeAllocation[k] = Math.round((financeAllocation[k] || 0) * scale); });
+    }
   }
   careerSeasonIncomeTotal = data.careerSeasonIncomeTotal || 0;
   // ältere Spielstände (v1-v13) kannten den Sponsoring-Lebenszyklus noch
@@ -23613,7 +23903,10 @@ function postActionButtonHtml(action) {
     // wird als leere Zeichenkette codiert -- exakt der bereits überall sonst
     // im Verhandlungssystem verwendete Free-Agent-Sentinel (siehe
     // findScoutingPlayerRow()/negotiationLockStatus() `(orgName || '')`).
-    return '<button type="button" class="menu-btn menu-btn-primary" data-post-action-open-negotiation="' + action.kind + '::' + (action.orgName || '') + '::' + action.personName + '::' + action.role + '">Verhandlung starten</button>';
+    // Hotfix v0.8.1, Bug 3: isIncomingInterest als 5. Feld angehängt (leerer
+    // String = false, altes Format ohne dieses Feld bleibt beim Split
+    // ebenfalls einfach "" = false -- rückwärtskompatibel).
+    return '<button type="button" class="menu-btn menu-btn-primary" data-post-action-open-negotiation="' + action.kind + '::' + (action.orgName || '') + '::' + action.personName + '::' + action.role + '::' + (action.isIncomingInterest ? '1' : '') + '">Verhandlung starten</button>';
   }
   // User-Auftrag (Scrim spielbar wie ein Match): "Match spielen"/"Ablehnen"
   // erscheinen nur, solange die Einladung tatsächlich noch 'ready' ist --
@@ -23691,9 +23984,9 @@ function renderDashboardPostPanel() {
     if (botOfferBtn) botOfferBtn.addEventListener('click', () => openBotOfferOnOwnPlayerModal());
     const negotiationBtn = detailContent.querySelector('[data-post-action-open-negotiation]');
     if (negotiationBtn) negotiationBtn.addEventListener('click', () => {
-      const [kind, orgName, personName, role] = negotiationBtn.dataset.postActionOpenNegotiation.split('::');
+      const [kind, orgName, personName, role, isIncomingInterest] = negotiationBtn.dataset.postActionOpenNegotiation.split('::');
       selectDashboardPage('scouting');
-      openNegotiationModal(kind, orgName, personName, role);
+      openNegotiationModal(kind, orgName, personName, role, isIncomingInterest === '1');
     });
     const playScrimBtn = detailContent.querySelector('[data-post-action-play-scrim]');
     if (playScrimBtn) playScrimBtn.addEventListener('click', () => {
@@ -23899,6 +24192,16 @@ document.getElementById('btn-dashboard-roster-details').addEventListener('click'
 
 document.getElementById('btn-negotiation-offer-cancel').addEventListener('click', closeNegotiationModal);
 document.getElementById('btn-negotiation-offer-send').addEventListener('click', submitNegotiationOffer);
+// Hotfix v0.8.1, Bug 6: die beiden Angebots-Felder sind seit diesem Hotfix
+// type="text" (statt type="number", siehe parseMoneyInput()-Kommentar) --
+// hier nur noch Ziffern/Punkt/Komma zulassen, damit sie sich weiterhin wie
+// ein Zahlenfeld anfühlen (kein Freitext-Verhalten).
+['negotiation-offer-fee', 'negotiation-offer-salary'].forEach((id) => {
+  document.getElementById(id).addEventListener('input', (e) => {
+    const cleaned = e.target.value.replace(/[^0-9.,]/g, '');
+    if (cleaned !== e.target.value) e.target.value = cleaned;
+  });
+});
 
 document.getElementById('btn-sponsor-request-close').addEventListener('click', closeSponsorRequestPopup);
 document.getElementById('btn-sponsor-request-cancel').addEventListener('click', closeSponsorRequestPopup);

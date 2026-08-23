@@ -376,6 +376,27 @@ function isTransferWindowOpen(dateStr) {
   return monthDay >= TRANSFER_WINDOW_START_MONTH_DAY || monthDay <= TRANSFER_WINDOW_END_MONTH_DAY;
 }
 
+// Hotfix v0.8.1, Bug 3 (User-Vorgabe: Verhandlungen sollen auch während der
+// laufenden Saison möglich sein, der tatsächliche Wechsel aber frühestens am
+// Tag nach dem Ende des World-Championship-Turniers stattfinden). Worlds
+// endet laut TOURNAMENT_EVENT_END_MONTH (worlds:11) IMMER am letzten Tag des
+// Novembers -- "Tag danach" ist also IMMER der 1. Dezember, unabhängig von
+// Saisonnummer/Spielstand (kein Nachschlagen von buildSeasonTournamentSchedule()
+// nötig, das würde nach dem Saison-Rollover Anfang Januar bereits die
+// Worlds-Termine der FOLGE-Saison liefern -- ein volles Jahr zu spät für
+// Angebote, die noch innerhalb des ohnehin schon offenen Transferfensters
+// angenommen werden). Sind wir bereits im (oder weiterhin im, über den
+// Jahreswechsel hinweg) offenen Transferfenster -- also nach dem Ende der
+// GERADE abgelaufenen Worlds -- ist der Wechsel schon heute erlaubt (deckt
+// sich 1:1 mit dem bisherigen, unveränderten Verhalten für Angebote, die
+// bereits im Fenster angenommen werden). Sonst (Jan16-Nov30): frühestens der
+// 1. Dezember DIESES Kalenderjahres.
+function firstAllowedTransferJoinDate(dateStr) {
+  if (isTransferWindowOpen(dateStr)) return dateStr;
+  const year = dateStr.slice(0, 4);
+  return year + '-' + TRANSFER_WINDOW_START_MONTH_DAY;
+}
+
 // Runde 101: eigene Farbe fürs Kalender-Balken (renderer.js
 // tournamentPhaseMapForMonth()) -- bewusst deutlich von allen
 // TOURNAMENT_EVENT_DEFS-Farben unterscheidbar (Gold/Amber statt der
