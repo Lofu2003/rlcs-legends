@@ -2797,7 +2797,7 @@ function calculateBoardSupport(org) {
 // seitdem JEDES weitere Geld, egal ob durch Regler-Verringern oder
 // Vorstandsbudget-Einnahmen). Fix: der Abzug ist jetzt IMMER symmetrisch --
 // die Kategorie darf mit ins Minus gehen (zeigt sich als roter Warn-Wert auf
-// der Finanzen-Seite, siehe renderFinanceAllocSliders()), damit die Summe
+// der Finanzen-Seite, siehe renderFinanceAllocControllers()), damit die Summe
 // der 4 Kategorien IMMER exakt mit dem tatsächlichen Budgetabzug übereinstimmt.
 function applyMonthlyClubFinances() {
   const budgetBefore = assignedOrg.budget;
@@ -3795,7 +3795,7 @@ function checkSponsorGoals() {
 // Dashboard-Umbau der stabile, karrierelange Geldwert, siehe
 // resetSeasonScopedDashboardState()-Kommentar "KEINE Budget-Änderung hier").
 // Da financeAllocation seit dieser Runde feste €-Beträge statt Prozente sind
-// (siehe renderFinanceAllocSliders()), landet der Betrag automatisch in
+// (siehe renderFinanceAllocControllers()), landet der Betrag automatisch in
 // "nicht eingeteiltes Geld" -- KEINE der 4 Kategorien wird automatisch
 // mit-erhöht, User-Vorgabe exakt so.
 function collectSponsorGoalReward(name, i) {
@@ -4472,9 +4472,11 @@ function renderFinancePie() {
 }
 
 // Wie viel eine Kategorie MAXIMAL halten könnte (eigener Betrag + noch
-// freies Geld) -- die eigentliche Zuteilungs-Obergrenze, aber NICHT mehr das
-// `max`-Attribut des <input type="range"> selbst (siehe Kommentar an
-// renderFinanceAllocSliders() für den Grund).
+// freies Geld) -- die eigentliche Zuteilungs-Obergrenze für setFinanceAllocation()
+// (auch für den MAX-Button: "aktueller Wert + gesamtes momentan verfügbares
+// nicht zugeteiltes Geld", exakt diese Formel). Name blieb "SliderCap" aus
+// der Zeit vor dem Finance-UI-Rework, die Formel selbst ist unverändert
+// gültig -- kein Umbenennen nur um des Umbenennens willen.
 function financeSliderCap(key) {
   return financeAllocation[key] + financeUnallocated();
 }
@@ -4495,7 +4497,7 @@ function financeSliderCap(key) {
 // zeigte trotzdem dauerhaft 0/zu wenig). Fix: dieselbe proportionale
 // Kürzung ist jetzt eine eigene, jederzeit aufrufbare Funktion -- läuft
 // nicht mehr nur beim Laden, sondern vor JEDER Anzeige der Finanzen-Seite
-// (renderFinanceAllocSliders()) UND nach jedem Tagfortschritt
+// (renderFinanceAllocControllers()) UND nach jedem Tagfortschritt
 // (advanceOneCalendarDay()), heilt eine solche Situation also spätestens
 // beim nächsten Rendern/Tagwechsel, nicht erst beim nächsten App-Neustart.
 // Ist die Summe bereits <= Budget, passiert nichts (reines No-Op, beliebig
@@ -4520,62 +4522,128 @@ function reconcileFinanceAllocation() {
   });
 }
 
-// Bug-Fix (User-Meldung: "ab einer gewissen Summe kann man nicht mehr weiter
-// Geld in eine Kategorie reinpacken"): der Regler-eigene Cap
-// (financeSliderCap()) ist ein sich bei JEDER anderen Aktion verschiebendes
-// Ziel -- das `max`-Attribut eines <input type="range"> wurde bisher exakt
-// auf diesen wandernden Cap gesetzt. Browser scheinen native Drag-Gesten
-// bei genügend großen Beträgen/oft genug wechselndem `max` nicht mehr
-// zuverlässig bis zum echten Ende durchzuziehen (das eigentliche Symptom
-// ließ sich mit einer echten Maus-Drag-Simulation nicht sauber isolieren,
-// aber ein sich laufend veränderndes `max` ist der bekannteste Auslöser
-// für genau diese Klasse Problem bei Range-Inputs). Fix: das `max`-Attribut
-// ist jetzt IMMER das komplette Budget (`assignedOrg.budget`) -- ändert sich
-// nur noch, wenn neues Geld dazukommt, nie durch bloßes Verschieben eines
-// Reglers. Die eigentliche Deckelung (nie mehr zuteilen als vorhanden)
-// passiert stattdessen rein in JS im Input-Handler (siehe unten) -- kein
-// Geld wird dadurch erzeugt oder vernichtet, nur die Regler-Mechanik selbst
-// wurde robuster gemacht, exakt wie gewünscht.
-function renderFinanceAllocSliders(skipKey) {
-  // Hotfix v0.8.2: nur bei einem VOLLSTÄNDIGEN Render (kein aktiver Drag,
-  // skipKey undefiniert) heilen -- während einer laufenden Geste (skipKey
-  // gesetzt, siehe 'input'-Handler unten) NICHT eingreifen, sonst könnte das
-  // die gerade gezogene Slider-Position mitten in der nativen Drag-Geste
-  // stören. Ein etwaiges Defizit kann durch die Regler-Mechanik selbst nicht
-  // NEU entstehen (siehe financeSliderCap()) -- reicht also, es beim
-  // Gestenende/Seitenaufruf zu heilen, siehe reconcileFinanceAllocation().
-  if (skipKey === undefined) reconcileFinanceAllocation();
+// Finance UI Rework (User-Vorgabe: "Slider komplett entfernen, Regler
+// erreichen irgendwann ihr Maximum, große Beträge lassen sich damit schlecht
+// einstellen"): kein <input type="range"> mehr, kein Slider-Maximum, keine
+// Pixelposition als Datenquelle. Jede Kategorie hat stattdessen einen
+// kompakten Schritt-/Direkteingabe-Controller ([-Groß][-Klein][Betrag,
+// klickbar][+Klein][+Groß] + [MIN]/[MAX]-Zeile). Einziger Mutationspfad ist
+// setFinanceAllocation() (siehe dort) -- exakt dieselbe Deckelungslogik
+// (financeSliderCap()) wie beim alten Regler-Handler, nur nicht mehr an eine
+// Drag-Geste/Pixelposition gebunden.
+
+// Rundet auf eine der 4 Größenklassen (Faktor 10 zueinander), je nach
+// GESAMTbudget (nicht der einzelnen Kategorie) -- "nachvollziehbare
+// Größenlogik", User-Beispiele: klein=100/1K, mittel=1K/10K, groß=10K/100K,
+// sehr groß=100K/1M. Reine Zehnerpotenzen, leicht erklärbar, wächst mit dem
+// Vereinsvermögen automatisch mit (auch bei Milliardenbeträgen), ohne dass
+// die Bedienung "am Ende" ist -- das war der ganze Sinn der Slider-Entfernung.
+function financeStepSizesForBudget(totalBudget) {
+  const b = Math.abs(totalBudget || 0);
+  if (b < 100000) return { small: 100, large: 1000 };
+  if (b < 1000000) return { small: 1000, large: 10000 };
+  if (b < 10000000) return { small: 10000, large: 100000 };
+  if (b < 100000000) return { small: 100000, large: 1000000 };
+  return { small: 1000000, large: 10000000 };
+}
+
+// Kompakte Button-Beschriftung ("10K", "1M") -- kein Vorzeichen (das steht
+// als eigenes -/+ davor, siehe HTML) und kein "€" (kein Platz auf dem Button,
+// der zentrale Betrag daneben zeigt den echten formatierten Wert).
+function financeStepLabel(amount) {
+  const abs = Math.abs(Math.round(amount));
+  if (abs >= 1000000) {
+    const m = abs / 1000000;
+    return (Number.isInteger(m) ? m : m.toFixed(1)) + 'M';
+  }
+  if (abs >= 1000) return Math.round(abs / 1000) + 'K';
+  return String(abs);
+}
+
+// EINZIGE Stelle, die financeAllocation[category] verändert (Auftragsvorgabe
+// "kein unabhängiges Addieren/Subtrahieren an mehreren Stellen" -- exakt EIN
+// zentraler Transferpfad). Nimmt einen ZIEL-Betrag (nicht ein Delta) entgegen,
+// berechnet intern die Differenz, klemmt sie auf das mathematisch Mögliche
+// und schreibt sie in EINEM Schritt. "Nicht zugeteilt" wird dabei nie
+// separat angefasst -- es ist rein abgeleitet (financeUnallocated() =
+// budget - Summe(4 Kategorien)), verändert sich also automatisch exakt
+// gegenläufig, Geld kann so strukturell nicht verschwinden oder entstehen.
+// Obergrenze: nie mehr als aktueller Wert + gerade verfügbares nicht
+// zugeteiltes Geld (financeSliderCap()). Untergrenze: 0 -- AUSSER der Cap
+// selbst ist bereits negativ (seltener Rand: ein automatisch entstandenes
+// Gehälter-/Ablöse-Defizit, siehe applyMonthlyClubFinances(), übersteigt
+// sogar das gesamte nicht zugeteilte Geld) -- dann ist 0 nicht erreichbar,
+// ohne Geld zu erzeugen, der Cap selbst ist der bestmögliche Wert.
+function setFinanceAllocation(category, targetAmount) {
+  if (!assignedOrg || !FINANCE_ALLOC_KEYS.includes(category) || !Number.isFinite(targetAmount)) {
+    return { applied: (assignedOrg && financeAllocation[category]) || 0, clamped: false };
+  }
+  const cap = financeSliderCap(category);
+  const wanted = Math.round(targetAmount);
+  const lowerBound = Math.min(0, cap);
+  const clampedValue = Math.max(lowerBound, Math.min(wanted, cap));
+  financeAllocation[category] = clampedValue;
+  return { applied: clampedValue, clamped: clampedValue !== wanted };
+}
+
+// Aktuell im Direkteingabe-Modus befindliche Kategorie (null = keine) --
+// verhindert, dass ein Re-Render (z.B. durch einen anderen Button-Klick
+// nebenan) das gerade offene Eingabefeld unter dem Spieler wegreißt.
+let financeEditingCategory = null;
+
+function renderFinanceAllocControllers() {
+  // Heilt ein etwaiges Ungleichgewicht (siehe reconcileFinanceAllocation()-
+  // Kommentar) vor JEDER Anzeige -- die neuen Controller können selbst keins
+  // erzeugen (siehe setFinanceAllocation()), das ist ein reines Sicherheitsnetz.
+  reconcileFinanceAllocation();
   const totalBudget = Math.max(1, assignedOrg.budget);
+  const steps = financeStepSizesForBudget(assignedOrg.budget);
+  const unallocated = financeUnallocated();
+
   FINANCE_ALLOC_KEYS.forEach((key) => {
     const amount = financeAllocation[key];
-    const slider = document.getElementById('dashboard-finance-' + key + '-slider');
-    // Der gerade per Maus gezogene Regler wird während der eigenen Geste
-    // nicht angefasst (weder max noch value) -- verhindert, dass ein
-    // Neu-Setzen mitten in der nativen Drag-Geste sie stört. Die anderen 3
-    // dürfen sich currently ruhig live aktualisieren (kein aktiver Drag dort).
-    if (key !== skipKey) {
-      slider.max = totalBudget;
-      // Bug-Fix (Audit-Runde): `min` blieb bisher beim nativen Default 0 --
-      // ist `amount` durch ein Gehälter-Defizit negativ, ließ sich der Regler
-      // dadurch nur noch auf EINEN einzigen Fixwert (financeSliderCap(), s.u.)
-      // "springen" statt sich graduell bedienen zu lassen (jede Ziehbewegung
-      // >= 0 lag ja über einem negativen/kleinen Cap). Der Boden ist einfach
-      // der aktuelle (ggf. negative) Betrag selbst -- weiter INS Minus ziehen
-      // kann man ohnehin nicht (das passiert nur automatisch, s.o.), aber
-      // graduell IN RICHTUNG des Cap zurückziehen jetzt schon.
-      slider.min = Math.min(0, amount);
-      slider.step = 1;
-      slider.value = amount;
+    const item = document.querySelector('.dashboard-finance-alloc-item[data-finance-category="' + key + '"]');
+    if (!item) return;
+    const cap = amount + unallocated;
+
+    // Während der Spieler GENAU diese Kategorie per Direkteingabe bearbeitet,
+    // Wert-Anzeige/Eingabefeld unangetastet lassen (siehe financeEditingCategory) --
+    // Step-Buttons/MIN/MAX/Balken dürfen sich trotzdem live aktualisieren.
+    if (financeEditingCategory !== key) {
+      const valueEl = item.querySelector('.dashboard-finance-alloc-value');
+      valueEl.textContent = formatMoneyShort(amount);
+      valueEl.classList.toggle('is-deficit', amount < 0);
+      const inputEl = item.querySelector('.dashboard-finance-value-input');
+      inputEl.classList.add('hidden');
+      item.querySelector('.dashboard-finance-value-btn').classList.remove('hidden');
     }
-    // Kann jetzt negativ sein (Gehälter-Deficit, siehe applyMonthlyClubFinances())
-    // -- echten Wert weiterhin anzeigen (nicht auf 0 verstecken), aber als
-    // Warnung rot einfärben, damit sichtbar ist, dass dort ein Fehlbetrag
-    // offen ist statt dass Geld scheinbar spurlos verschwindet.
-    const valueEl = document.getElementById('dashboard-finance-' + key + '-value');
-    valueEl.textContent = formatMoneyShort(amount);
-    valueEl.classList.toggle('is-deficit', amount < 0);
+
+    const stepBtns = item.querySelectorAll('.dashboard-finance-step-btn');
+    stepBtns.forEach((btn) => {
+      const stepIdx = Number(btn.dataset.financeStep);
+      const isLarge = Math.abs(stepIdx) === 2;
+      const isMinus = stepIdx < 0;
+      const stepAmount = isLarge ? steps.large : steps.small;
+      btn.querySelector('.dashboard-finance-step-label').textContent = (isMinus ? '-' : '+') + financeStepLabel(stepAmount);
+      // Deaktivieren, wenn diese Richtung ohnehin nichts mehr bewirken könnte
+      // (schon bei 0 bzw. schon am Cap) -- reine UX-Klarheit, setFinanceAllocation()
+      // würde denselben Klick ohnehin sicher auf denselben Wert klemmen.
+      btn.disabled = isMinus ? amount <= Math.min(0, cap) : amount >= cap;
+    });
+
+    const minBtn = item.querySelector('[data-finance-action="min"]');
+    const maxBtn = item.querySelector('[data-finance-action="max"]');
+    minBtn.disabled = amount <= Math.min(0, cap);
+    maxBtn.disabled = amount >= cap;
+
+    const barFill = item.querySelector('.dashboard-finance-bar-fill');
+    const pct = totalBudget > 0 ? Math.max(0, Math.min(100, (amount / totalBudget) * 100)) : 0;
+    barFill.style.width = pct + '%';
   });
-  document.getElementById('dashboard-finance-unallocated-value').textContent = formatMoneyShort(financeUnallocated());
+
+  document.getElementById('dashboard-finance-unallocated-value').textContent = formatMoneyShort(unallocated);
+  document.getElementById('dashboard-finance-allocated-total').textContent = formatMoney(financeAllocatedSum());
+  document.getElementById('dashboard-finance-unallocated-total').textContent = formatMoney(unallocated);
   renderFinancePie();
 }
 
@@ -4704,7 +4772,7 @@ function renderDashboardFinancePanel() {
   document.getElementById('dashboard-finance-cashflow-income').textContent = '+' + formatMoneyShort(income).replace(' €', '');
   document.getElementById('dashboard-finance-cashflow-expense').textContent = '-' + formatMoneyShort(expenses).replace(' €', '');
 
-  renderFinanceAllocSliders();
+  renderFinanceAllocControllers();
   renderFinanceCFO();
   renderFinanceChart();
   renderFinanceTransactions();
@@ -21727,7 +21795,7 @@ async function loadGameState() {
   }
   // Hotfix v0.8.1/v0.8.2, Selbstheilung: siehe reconcileFinanceAllocation()-
   // Kommentar -- läuft hier weiterhin beim Laden, zusätzlich jetzt auch
-  // laufend während der Sitzung (renderFinanceAllocSliders()/
+  // laufend während der Sitzung (renderFinanceAllocControllers()/
   // advanceOneCalendarDay()), nicht mehr nur einmalig hier.
   reconcileFinanceAllocation();
   careerSeasonIncomeTotal = data.careerSeasonIncomeTotal || 0;
@@ -22982,30 +23050,67 @@ document.getElementById('btn-dashboard-settings-exit').addEventListener('click',
   saveGameState();
   goToMenu();
 });
-// User-Wunsch: kein Regler darf über das insgesamt verfügbare Geld hinaus
-// nach rechts gezogen werden -- Obergrenze ist "eigener aktueller Betrag PLUS
-// aktuell noch nicht eingeteiltes Geld" (siehe financeSliderCap()). Neues
-// Einkommen erhöht NIE automatisch einen Regler, nur "nicht eingeteiltes
-// Geld" wächst (siehe financeUnallocated()) -- der Spieler entscheidet
-// manuell, wann/wohin er es verschiebt. Bug-Fix (siehe renderFinanceAllocSliders()-
-// Kommentar): die Deckelung passiert jetzt rein hier im Handler ("Gummiband"
-// -- zieht man über die eigene Kapazität hinaus, schnappt der Regler auf den
-// tatsächlich noch verfügbaren Betrag zurück), das <input>-`max` selbst
-// bleibt immer das volle Budget und schrumpft nie mehr pro Regler-Bewegung.
-FINANCE_ALLOC_KEYS.forEach((key) => {
-  const slider = document.getElementById('dashboard-finance-' + key + '-slider');
-  slider.addEventListener('input', (e) => {
-    const raw = Number(e.target.value);
-    const cap = financeSliderCap(key);
-    const clamped = Math.min(raw, cap);
-    if (clamped !== raw) e.target.value = clamped; // nur korrigieren, wenn tatsächlich über die eigene Kapazität hinaus gezogen wurde
-    financeAllocation[key] = clamped;
-    renderFinanceAllocSliders(key); // eigenen Regler während der laufenden Geste nicht anfassen
-  });
-  slider.addEventListener('change', () => {
-    renderFinanceAllocSliders(); // nach Loslassen alle 4 (inkl. des eigenen) sauber synchronisieren
+// Finance UI Rework: Slider-Wiring durch Button-/Direkteingabe-Wiring
+// ersetzt -- EINZIGER Mutationspfad bleibt setFinanceAllocation() (siehe
+// dort), egal ob der Klick von einem Schritt-Button, MIN, MAX oder der
+// Direkteingabe kommt.
+document.querySelectorAll('.dashboard-finance-alloc-item').forEach((item) => {
+  const category = item.dataset.financeCategory;
+  const valueBtn = item.querySelector('.dashboard-finance-value-btn');
+  const inputEl = item.querySelector('.dashboard-finance-value-input');
+
+  function commitAndRerender(target, clampedMessage) {
+    const result = setFinanceAllocation(category, target);
+    if (clampedMessage && result.clamped) showToast('⚠️', clampedMessage, 'Finanzen');
+    renderFinanceAllocControllers();
     saveGameState();
     refreshDashboardSidebarBadges();
+  }
+
+  item.querySelectorAll('[data-finance-action="step"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const stepIdx = Number(btn.dataset.financeStep);
+      const isLarge = Math.abs(stepIdx) === 2;
+      const isMinus = stepIdx < 0;
+      const steps = financeStepSizesForBudget(assignedOrg.budget);
+      const delta = (isLarge ? steps.large : steps.small) * (isMinus ? -1 : 1);
+      commitAndRerender((financeAllocation[category] || 0) + delta);
+    });
+  });
+  item.querySelector('[data-finance-action="min"]').addEventListener('click', () => commitAndRerender(0));
+  item.querySelector('[data-finance-action="max"]').addEventListener('click', () => commitAndRerender(financeSliderCap(category)));
+
+  function openEdit() {
+    financeEditingCategory = category;
+    inputEl.value = String(Math.max(0, Math.round(financeAllocation[category] || 0)));
+    valueBtn.classList.add('hidden');
+    inputEl.classList.remove('hidden');
+    inputEl.focus();
+    inputEl.select();
+  }
+  function closeEdit(commit) {
+    if (financeEditingCategory !== category) return; // schon anderweitig geschlossen (siehe Enter+blur-Kommentar unten)
+    financeEditingCategory = null;
+    if (commit) commitAndRerender(parseMoneyInput(inputEl.value), 'Nicht genügend nicht zugeteiltes Budget.');
+    else renderFinanceAllocControllers();
+  }
+
+  valueBtn.addEventListener('click', openEdit);
+  // Enter bestätigt, Escape verwirft -- ein danach folgendes 'blur' (Fokus
+  // verlässt das jetzt versteckte Feld) würde sonst ein zweites Mal
+  // schließen wollen; der financeEditingCategory-Check oben macht das sicher
+  // (zweiter Aufruf trifft bereits null, kein Doppel-Commit).
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); closeEdit(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeEdit(false); }
+  });
+  inputEl.addEventListener('blur', () => closeEdit(true));
+  // Reiner Tipp-Filter (kein type="number" mehr, siehe parseMoneyInput()-
+  // Kommentar zum "25.000 -> 25"-Bug) -- lässt Ziffern/Punkt/Komma zu, damit
+  // sich das Feld weiterhin wie ein Zahlenfeld anfühlt.
+  inputEl.addEventListener('input', () => {
+    const cleaned = inputEl.value.replace(/[^0-9.,]/g, '');
+    if (cleaned !== inputEl.value) inputEl.value = cleaned;
   });
 });
 document.querySelectorAll('.dashboard-sponsors-subtab').forEach((btn) => {

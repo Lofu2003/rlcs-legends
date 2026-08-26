@@ -111,7 +111,7 @@
       </div>
     </div>
 
-    <p id="mainmenu-version" class="mainmenu-version">v0.8.2</p>
+    <p id="mainmenu-version" class="mainmenu-version">v0.8.3</p>
   </div>
 
   <!-- ── Spielmodus-Auswahl (bei "Neues Spiel") ───────────────────────────── -->
@@ -888,6 +888,14 @@
                   <span class="dashboard-finance-summary-label">Gesamtausgaben</span>
                   <span id="dashboard-finance-expenses" class="dashboard-finance-summary-value dashboard-finance-value-expense"></span>
                 </div>
+                <div class="dashboard-finance-summary-item">
+                  <span class="dashboard-finance-summary-label">Zugeteilt</span>
+                  <span id="dashboard-finance-allocated-total" class="dashboard-finance-summary-value"></span>
+                </div>
+                <div class="dashboard-finance-summary-item">
+                  <span class="dashboard-finance-summary-label">Nicht zugeteilt</span>
+                  <span id="dashboard-finance-unallocated-total" class="dashboard-finance-summary-value dashboard-finance-value-unallocated"></span>
+                </div>
                 <div id="dashboard-finance-pending-prize-item" class="dashboard-finance-summary-item hidden">
                   <span class="dashboard-finance-summary-label">Nicht zugeteiltes Budget (Preisgeld)</span>
                   <span id="dashboard-finance-pending-prize" class="dashboard-finance-summary-value dashboard-finance-value-pending"></span>
@@ -907,37 +915,89 @@
                   </div>
                 </div>
                 <div class="dashboard-finance-alloc-list">
-                  <div class="dashboard-finance-alloc-item">
+                  <div class="dashboard-finance-alloc-item" data-finance-category="transfers">
                     <div class="dashboard-finance-alloc-header">
                       <span class="dashboard-finance-alloc-swatch dashboard-finance-swatch-transfers"></span>
                       <span class="dashboard-finance-alloc-label">Transfers</span>
-                      <span id="dashboard-finance-transfers-value" class="dashboard-finance-alloc-value"></span>
                     </div>
-                    <input id="dashboard-finance-transfers-slider" type="range" min="0" max="100000" step="100" class="dashboard-finance-alloc-slider" />
+                    <div class="dashboard-finance-controller">
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="-2"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="-1"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-value-btn" data-finance-action="edit">
+                        <span class="dashboard-finance-alloc-value"></span>
+                      </button>
+                      <input type="text" inputmode="numeric" class="dashboard-finance-value-input hidden" />
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="1"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="2"><span class="dashboard-finance-step-label"></span></button>
+                    </div>
+                    <div class="dashboard-finance-minmax-row">
+                      <button type="button" class="dashboard-finance-minmax-btn" data-finance-action="min">MIN</button>
+                      <div class="dashboard-finance-bar-track"><div class="dashboard-finance-bar-fill dashboard-finance-swatch-transfers"></div></div>
+                      <button type="button" class="dashboard-finance-minmax-btn" data-finance-action="max">MAX</button>
+                    </div>
                   </div>
-                  <div class="dashboard-finance-alloc-item">
+                  <div class="dashboard-finance-alloc-item" data-finance-category="salaries">
                     <div class="dashboard-finance-alloc-header">
                       <span class="dashboard-finance-alloc-swatch dashboard-finance-swatch-salaries"></span>
                       <span class="dashboard-finance-alloc-label">Gehälter</span>
-                      <span id="dashboard-finance-salaries-value" class="dashboard-finance-alloc-value"></span>
                     </div>
-                    <input id="dashboard-finance-salaries-slider" type="range" min="0" max="100000" step="100" class="dashboard-finance-alloc-slider" />
+                    <div class="dashboard-finance-controller">
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="-2"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="-1"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-value-btn" data-finance-action="edit">
+                        <span class="dashboard-finance-alloc-value"></span>
+                      </button>
+                      <input type="text" inputmode="numeric" class="dashboard-finance-value-input hidden" />
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="1"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="2"><span class="dashboard-finance-step-label"></span></button>
+                    </div>
+                    <div class="dashboard-finance-minmax-row">
+                      <button type="button" class="dashboard-finance-minmax-btn" data-finance-action="min">MIN</button>
+                      <div class="dashboard-finance-bar-track"><div class="dashboard-finance-bar-fill dashboard-finance-swatch-salaries"></div></div>
+                      <button type="button" class="dashboard-finance-minmax-btn" data-finance-action="max">MAX</button>
+                    </div>
                   </div>
-                  <div class="dashboard-finance-alloc-item">
+                  <div class="dashboard-finance-alloc-item" data-finance-category="marketing">
                     <div class="dashboard-finance-alloc-header">
                       <span class="dashboard-finance-alloc-swatch dashboard-finance-swatch-marketing"></span>
                       <span class="dashboard-finance-alloc-label">Marketing</span>
-                      <span id="dashboard-finance-marketing-value" class="dashboard-finance-alloc-value"></span>
                     </div>
-                    <input id="dashboard-finance-marketing-slider" type="range" min="0" max="100000" step="100" class="dashboard-finance-alloc-slider" />
+                    <div class="dashboard-finance-controller">
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="-2"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="-1"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-value-btn" data-finance-action="edit">
+                        <span class="dashboard-finance-alloc-value"></span>
+                      </button>
+                      <input type="text" inputmode="numeric" class="dashboard-finance-value-input hidden" />
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="1"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="2"><span class="dashboard-finance-step-label"></span></button>
+                    </div>
+                    <div class="dashboard-finance-minmax-row">
+                      <button type="button" class="dashboard-finance-minmax-btn" data-finance-action="min">MIN</button>
+                      <div class="dashboard-finance-bar-track"><div class="dashboard-finance-bar-fill dashboard-finance-swatch-marketing"></div></div>
+                      <button type="button" class="dashboard-finance-minmax-btn" data-finance-action="max">MAX</button>
+                    </div>
                   </div>
-                  <div class="dashboard-finance-alloc-item">
+                  <div class="dashboard-finance-alloc-item" data-finance-category="operations">
                     <div class="dashboard-finance-alloc-header">
                       <span class="dashboard-finance-alloc-swatch dashboard-finance-swatch-operations"></span>
                       <span class="dashboard-finance-alloc-label">Betriebskosten</span>
-                      <span id="dashboard-finance-operations-value" class="dashboard-finance-alloc-value"></span>
                     </div>
-                    <input id="dashboard-finance-operations-slider" type="range" min="0" max="100000" step="100" class="dashboard-finance-alloc-slider" />
+                    <div class="dashboard-finance-controller">
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="-2"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="-1"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-value-btn" data-finance-action="edit">
+                        <span class="dashboard-finance-alloc-value"></span>
+                      </button>
+                      <input type="text" inputmode="numeric" class="dashboard-finance-value-input hidden" />
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="1"><span class="dashboard-finance-step-label"></span></button>
+                      <button type="button" class="dashboard-finance-step-btn" data-finance-action="step" data-finance-step="2"><span class="dashboard-finance-step-label"></span></button>
+                    </div>
+                    <div class="dashboard-finance-minmax-row">
+                      <button type="button" class="dashboard-finance-minmax-btn" data-finance-action="min">MIN</button>
+                      <div class="dashboard-finance-bar-track"><div class="dashboard-finance-bar-fill dashboard-finance-swatch-operations"></div></div>
+                      <button type="button" class="dashboard-finance-minmax-btn" data-finance-action="max">MAX</button>
+                    </div>
                   </div>
                 </div>
               </div>
