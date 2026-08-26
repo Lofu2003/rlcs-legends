@@ -4479,6 +4479,47 @@ function financeSliderCap(key) {
   return financeAllocation[key] + financeUnallocated();
 }
 
+// Hotfix v0.8.2, Spieler-Meldung ("Regler schnell hin und her, verdientes
+// Geld landet nicht sicher bei nicht eingeteiltem Budget, verschwindet ins
+// Nichts"): Root Cause der ursprünglichen Kategorie-übersteigt-Budget-
+// Situation (Shop-Käufe aus einer Kategorie statt aus financeUnallocated())
+// wurde in v0.8.1 behoben -- die dazugehörige Selbstheilung lief dort aber
+// NUR EINMAL, beim Laden (siehe loadGameState()). Entsteht (z.B. durch einen
+// noch unbekannten Randfall, oder einfach weil eine v0.8.0-Karriere seit dem
+// Update durchgehend weitergespielt statt neu geladen wurde) IRGENDWANN
+// WÄHREND einer laufenden Sitzung erneut eine Situation, in der die Summe
+// der 4 Kategorien das echte Budget übersteigt, blieb financeUnallocated()s
+// Math.max(0,...) für den GESAMTEN Rest der Sitzung bei 0 hängen -- jede
+// weitere Regler-Bewegung UND jedes neue Einkommen wirkte dadurch, als würde
+// Geld "verschwinden" (es landete korrekt im Budget, aber "nicht eingeteilt"
+// zeigte trotzdem dauerhaft 0/zu wenig). Fix: dieselbe proportionale
+// Kürzung ist jetzt eine eigene, jederzeit aufrufbare Funktion -- läuft
+// nicht mehr nur beim Laden, sondern vor JEDER Anzeige der Finanzen-Seite
+// (renderFinanceAllocSliders()) UND nach jedem Tagfortschritt
+// (advanceOneCalendarDay()), heilt eine solche Situation also spätestens
+// beim nächsten Rendern/Tagwechsel, nicht erst beim nächsten App-Neustart.
+// Ist die Summe bereits <= Budget, passiert nichts (reines No-Op, beliebig
+// oft aufrufbar). Letzte Kategorie bekommt den exakten Rest statt
+// unabhängig gerundet zu werden -- verhindert eine Rundungsdrift von 1-3
+// Cent/Euro durch vier separat gerundete Werte.
+function reconcileFinanceAllocation() {
+  if (!assignedOrg) return;
+  const allocSum = financeAllocatedSum();
+  if (allocSum <= assignedOrg.budget || allocSum <= 0) return;
+  const targetSum = Math.max(0, assignedOrg.budget);
+  const scale = targetSum / allocSum;
+  let runningSum = 0;
+  FINANCE_ALLOC_KEYS.forEach((k, i) => {
+    if (i === FINANCE_ALLOC_KEYS.length - 1) {
+      financeAllocation[k] = targetSum - runningSum;
+    } else {
+      const scaled = Math.round((financeAllocation[k] || 0) * scale);
+      financeAllocation[k] = scaled;
+      runningSum += scaled;
+    }
+  });
+}
+
 // Bug-Fix (User-Meldung: "ab einer gewissen Summe kann man nicht mehr weiter
 // Geld in eine Kategorie reinpacken"): der Regler-eigene Cap
 // (financeSliderCap()) ist ein sich bei JEDER anderen Aktion verschiebendes
@@ -4496,6 +4537,14 @@ function financeSliderCap(key) {
 // Geld wird dadurch erzeugt oder vernichtet, nur die Regler-Mechanik selbst
 // wurde robuster gemacht, exakt wie gewünscht.
 function renderFinanceAllocSliders(skipKey) {
+  // Hotfix v0.8.2: nur bei einem VOLLSTÄNDIGEN Render (kein aktiver Drag,
+  // skipKey undefiniert) heilen -- während einer laufenden Geste (skipKey
+  // gesetzt, siehe 'input'-Handler unten) NICHT eingreifen, sonst könnte das
+  // die gerade gezogene Slider-Position mitten in der nativen Drag-Geste
+  // stören. Ein etwaiges Defizit kann durch die Regler-Mechanik selbst nicht
+  // NEU entstehen (siehe financeSliderCap()) -- reicht also, es beim
+  // Gestenende/Seitenaufruf zu heilen, siehe reconcileFinanceAllocation().
+  if (skipKey === undefined) reconcileFinanceAllocation();
   const totalBudget = Math.max(1, assignedOrg.budget);
   FINANCE_ALLOC_KEYS.forEach((key) => {
     const amount = financeAllocation[key];
@@ -20375,6 +20424,12 @@ function advanceOneCalendarDay() {
   // Erst der nächste, bewusste Klick auf den Button startet den Ticker
   // (siehe Listener auf btn-dashboard-advance-day / triggerPendingOwnMatch()).
   pendingOwnMatch = findOwnMatchToday();
+  // Hotfix v0.8.2: nach allen Geldereignissen des Tages (Gehälter/Vorstands-
+  // budget/Sponsoring/Transfers/Preisgeld) einmal reconcileFinanceAllocation()
+  // -- Sicherheitsnetz, damit ein etwaiges Defizit spätestens hier geheilt
+  // ist, auch wenn der Spieler die Finanzen-Seite gar nicht öffnet, siehe
+  // dortiger Kommentar.
+  reconcileFinanceAllocation();
 }
 
 function advanceDashboardDay() {
@@ -21670,25 +21725,11 @@ async function loadGameState() {
   } else {
     financeAllocation = data.financeAllocation || { transfers: 0, salaries: 0, marketing: 0, operations: 0 };
   }
-  // Hotfix v0.8.1, Bug 4, Selbstheilung für v0.8.0-Spielstände: der jetzt
-  // behobene Shop-Kauf-Bug (siehe checkoutCart()-Kommentar) konnte VOR diesem
-  // Hotfix einen unsichtbaren Fehlbetrag hinterlassen haben -- die Summe der 4
-  // Kategorien übersteigt dann assignedOrg.budget, financeUnallocated()s
-  // Math.max(0,...) verschluckt das seitdem dauerhaft. Kein neues Save-
-  // Format/keine Versionsbump nötig (unconditional self-healing, wie jede
-  // andere Migration in diesem Spielstand-Format): übersteigt die Summe das
-  // echte Budget, werden alle 4 Kategorien proportional so weit gekürzt, dass
-  // ihre Summe wieder exakt dem echten Budget entspricht -- assignedOrg.budget
-  // selbst bleibt unangetastet, kein Geld wird dem Spieler zusätzlich
-  // abgezogen, nur die (ohnehin nie eingelöste) Kategorie-Planung wird an die
-  // Realität angeglichen.
-  if (assignedOrg) {
-    const allocSum = financeAllocatedSum();
-    if (allocSum > assignedOrg.budget && allocSum > 0) {
-      const scale = Math.max(0, assignedOrg.budget) / allocSum;
-      FINANCE_ALLOC_KEYS.forEach((k) => { financeAllocation[k] = Math.round((financeAllocation[k] || 0) * scale); });
-    }
-  }
+  // Hotfix v0.8.1/v0.8.2, Selbstheilung: siehe reconcileFinanceAllocation()-
+  // Kommentar -- läuft hier weiterhin beim Laden, zusätzlich jetzt auch
+  // laufend während der Sitzung (renderFinanceAllocSliders()/
+  // advanceOneCalendarDay()), nicht mehr nur einmalig hier.
+  reconcileFinanceAllocation();
   careerSeasonIncomeTotal = data.careerSeasonIncomeTotal || 0;
   // ältere Spielstände (v1-v13) kannten den Sponsoring-Lebenszyklus noch
   // nicht (nur das alte, flache signedSponsors-Array aus Runde 38, das jetzt
