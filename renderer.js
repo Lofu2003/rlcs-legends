@@ -611,13 +611,6 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach((el) => el.classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
   document.getElementById('app-atmosphere').classList.toggle('hidden', !SHARED_ATMOSPHERE_SCREENS.includes(id));
-  // Bug-Fix (Masterprompt-Feature Tutorial): bricht der Spieler den vom
-  // Tutorial-Button gestarteten "Neues Spiel"-Ablauf vorzeitig ab (Zurück-
-  // Button irgendwo in Slot-/Charakter-/Org-Auswahl), landet er wieder auf
-  // 'screen-menu' -- ohne diesen Reset würde tutorialPending bestehen bleiben
-  // und beim NÄCHSTEN, ganz normalen "Neues Spiel" unerwartet das Tutorial
-  // auslösen.
-  if (id === 'screen-menu') tutorialPending = false;
 }
 
 // ── Intro-Video (spielt bei JEDEM App-Start einmal ab, bewusst ohne
@@ -891,7 +884,13 @@ function closeCharacterOverlay() {
     if (done) return;
     done = true;
     overlay.classList.remove('is-closing');
-    openSlotPicker('new');
+    // Erzwungener Tutorial-Spielstand (siehe btn-tutorial-Handler): dieser
+    // Weg kommt NIE über den Slot-Picker hierher (der wird bewusst
+    // übersprungen) -- "Zurück" muss deshalb zum Hauptmenü statt zu einem nie
+    // gezeigten Slot-Picker führen. goToMenu() setzt tutorialCareerFlowActive
+    // dabei bereits zurück auf false.
+    if (tutorialCareerFlowActive) goToMenu();
+    else openSlotPicker('new');
   }
   overlay.classList.add('is-closing');
   overlay.addEventListener('animationend', finish, { once: true });
@@ -1345,7 +1344,21 @@ function backToCharacterFromOrgMode() {
 // selectOrgMode()), "Weiter" bestätigt dann erst wirklich.
 let selectedOrgMode = null;
 
+// Erzwungener Tutorial-Spielstand (User-Vorgabe): true zwischen Klick auf den
+// Hauptmenü-Button "Tutorial" (frischer Start, kein bestehender Tutorial-
+// Spielstand gefunden) und confirmOrgAndProceed() -- erzwingt in dieser
+// Zeitspanne den "eigene Org erstellen"-Pfad MIT automatisch aufgefülltem
+// Kader/Personal (siehe goToOrgModeSelect()/goToOrgCreate() unten), damit der
+// Tutorial-Lauf nie auf einer unvollständigen/vakanten bestehenden Bot-Org
+// landen und dadurch in einem Schritt hängen bleiben kann (z.B. "Öffne einen
+// Spieler", falls eine Bot-Org zufällig einen leeren Kaderslot hätte).
+let tutorialCareerFlowActive = false;
+
 function goToOrgModeSelect() {
+  // Siehe tutorialCareerFlowActive-Kommentar: übernimmt eine bestehende Org
+  // NIE für den erzwungenen Tutorial-Spielstand -- direkt zur garantiert
+  // vollständigen Eigene-Org-Erstellung, ohne die Auswahl überhaupt zu zeigen.
+  if (tutorialCareerFlowActive) { goToOrgCreate(); return; }
   selectedOrgMode = null;
   document.querySelectorAll('.org-mode-card').forEach((c) => c.classList.remove('is-selected'));
   document.getElementById('btn-org-mode-continue').disabled = true;
@@ -1416,7 +1429,14 @@ function goToOrgCreate() {
   document.querySelectorAll('#org-create-difficulty-options .org-create-option').forEach((b) => b.classList.toggle('is-active', b.dataset.value === 'normal'));
 
   orgCreateFillAgents = true;
-  document.getElementById('btn-org-create-fill-agents').classList.add('is-active');
+  const fillAgentsBtn = document.getElementById('btn-org-create-fill-agents');
+  fillAgentsBtn.classList.add('is-active');
+  // Siehe tutorialCareerFlowActive-Kommentar: für den erzwungenen Tutorial-
+  // Spielstand bleibt "Mit Free Agents auffüllen" fest AN und ist nicht
+  // abschaltbar -- garantiert einen vollständigen Kader/Personal, damit kein
+  // Tutorial-Schritt (z.B. "Öffne einen Spieler") mangels Daten hängen bleibt.
+  fillAgentsBtn.disabled = tutorialCareerFlowActive;
+  fillAgentsBtn.title = tutorialCareerFlowActive ? 'Im Tutorial-Spielstand fest aktiv, damit der Kader garantiert vollständig ist.' : '';
 
   selectedOrgCreateLogoUrl = null;
   renderOrgCreateLogoPreview();
@@ -2099,6 +2119,7 @@ function goToOrgContract(org, backScreen) {
   document.getElementById('org-contract-date').textContent = formatContractSignDate(new Date());
 
   document.getElementById('opt-ceo-fireable').classList.add('is-active');
+  document.getElementById('opt-tutorial-enabled').classList.add('is-active'); // Tutorial V2: Default AN (Auftragsabschnitt 33)
   document.querySelectorAll('.org-contract-lock-option').forEach((b) => b.classList.toggle('is-active', b.dataset.value === '1'));
 
   clearContractSignature();
@@ -3014,6 +3035,7 @@ function maybeTriggerIllness() {
       null,
       { type: 'openPage', page: isPlayerRole ? 'roster' : 'staff' }
     );
+    tutorialOnEvent('ILLNESS_TRIGGERED', { personName: person.name, role });
   });
 }
 
@@ -3278,6 +3300,7 @@ function sendScrimInvite(opponentOrgName) {
   });
   pushPostMessage('training', 'NORMAL', opponentOrgName, 'Scrim-Einladung verschickt', 'Deine Scrim-Einladung an ' + opponentOrgName + ' wurde verschickt. Antwort folgt in Kürze.', null, null);
   showToast('✓', 'Scrim-Einladung an ' + opponentOrgName + ' verschickt.', 'Scrim');
+  tutorialOnEvent('SCRIM_SENT', { opponentOrgName });
   saveGameState();
 }
 
@@ -4195,7 +4218,10 @@ function renderDashboardHomePanel() {
   document.getElementById('dashboard-home-ranking-body').querySelectorAll('[data-stats-org]').forEach((el) => {
     el.addEventListener('click', () => {
       const orgName = el.dataset.statsOrg;
-      const targetOrg = findOrgByName(orgName);
+      // Org-Resolution-Hardening: diese Zeile schließt laut Kommentar oben
+      // bewusst die eigene Org ein -- findOrgByName() fand sie nie, wodurch
+      // ein Klick auf die eigene Zeile den Regionsfilter nicht setzte.
+      const targetOrg = resolveOrgByNameOrOwn(orgName);
       statsActiveTab = 'teams';
       if (targetOrg) statsRegionFilter = orgRegion(targetOrg.country) || statsRegionFilter;
       statsPage = 1;
@@ -4350,6 +4376,10 @@ function selectDashboardPage(id) {
   if (isTraining) renderDashboardTrainingPanel();
   if (isMessages) renderDashboardMessagesPanel();
   if (isPost) renderDashboardPostPanel();
+  // Tutorial V2: echte Navigation als Event gemeldet (Auftragsabschnitt 30)
+  // -- treibt sowohl wartende Core-Schritte ("Öffne deinen Kader" etc.) als
+  // auch Contextual Mini Tutorials beim ERSTEN Öffnen einer Seite an.
+  tutorialOnEvent('NAVIGATION_OPENED', { page: id });
 }
 
 // Nutzt die ECHTEN appSettings (siehe screen-settings weiter oben im Code) --
@@ -4373,6 +4403,55 @@ function renderDashboardSettingsPanel() {
   document.getElementById('dashboard-settings-window-size').value = appSettings.windowSize;
   document.getElementById('dashboard-settings-ui-scale').value = String(appSettings.uiScale);
   document.getElementById('dashboard-settings-fullscreen').classList.toggle('is-active', appSettings.displayMode === 'fullscreen');
+  renderDashboardSettingsTutorialSection();
+}
+
+// Tutorial V2 (Auftragsabschnitt 34/36): Einstellungen->Tutorial ist der
+// zentrale Hilfe-Einstiegspunkt für eine bereits laufende Karriere -- Core
+// erneut ansehen, Contextual-Hinweise zurücksetzen, Tutorial-Hinweise
+// generell ab-/anschalten. KEIN separates Wiki, nur diese eine kompakte
+// Sektion.
+function renderDashboardSettingsTutorialSection() {
+  document.getElementById('dashboard-settings-tutorial-enabled').classList.toggle('is-active', tutorialEnabled);
+  const statusLabel = tutorialCoreStatus === 'complete' ? 'Grundlagen-Tutorial abgeschlossen'
+    : tutorialCoreStatus === 'active' ? 'Grundlagen-Tutorial läuft noch'
+    : tutorialCoreStatus === 'skipped' ? 'Grundlagen-Tutorial übersprungen'
+    : 'Grundlagen-Tutorial noch nicht gestartet';
+  document.getElementById('dashboard-settings-tutorial-status').textContent = statusLabel;
+}
+
+function toggleTutorialEnabledSetting() {
+  tutorialEnabled = !tutorialEnabled;
+  saveGameState();
+  renderDashboardSettingsTutorialSection();
+}
+
+function restartCoreTutorialFromSettings() {
+  tutorialEnabled = true;
+  tutorialCoreStatus = 'active';
+  tutorialCoreStepIndex = 0;
+  saveGameState();
+  startTutorial();
+}
+
+// Auftragsabschnitt 36 (verbindlich): Reset darf AUSSCHLIESSLICH den
+// Tutorial-Zustand betreffen -- Budget/Kader/Ranking/Training bleiben exakt
+// unangetastet, da hier gezielt nur die drei tutorialXxx-Variablen berührt
+// werden, keine sonstige Karrieredaten.
+function resetTutorialProgressFromSettings() {
+  showConfirmModal(
+    'Tutorial zurücksetzen?',
+    'Das Grundlagen-Tutorial und alle kurzen Hinweise zu einzelnen Bereichen werden zurückgesetzt und beim nächsten Öffnen erneut angezeigt. Deine Karriere (Kader, Budget, Ranking, Training) bleibt dabei komplett unverändert.',
+    () => {
+      tutorialCoreStatus = 'not_started';
+      tutorialCoreStepIndex = 0;
+      tutorialContextualSeen = {};
+      saveGameState();
+      renderDashboardSettingsTutorialSection();
+      showToast('✓', 'Tutorial wurde zurückgesetzt.', 'Tutorial');
+    },
+    { confirmLabel: 'Zurücksetzen' }
+  );
 }
 
 // Bug-Fix (Audit): persistAppSettings() rief bisher IMMER auch
@@ -4583,6 +4662,7 @@ function setFinanceAllocation(category, targetAmount) {
   const lowerBound = Math.min(0, cap);
   const clampedValue = Math.max(lowerBound, Math.min(wanted, cap));
   financeAllocation[category] = clampedValue;
+  tutorialOnEvent('BUDGET_CHANGED', { category, amount: clampedValue });
   return { applied: clampedValue, clamped: clampedValue !== wanted };
 }
 
@@ -8450,12 +8530,20 @@ function resolveMajorEvent(event) {
   const isParis = event.key === 'major2';
   const perGroupAdvance = isParis ? 3 : 2;
 
+  // Org-Resolution-Hardening: findOrgByName() sucht NUR in ORGANIZATIONS und
+  // findet eine per Auswahlmenü selbst erstellte Spieler-Org NIE (siehe
+  // resolveOrgByNameOrOwn()-Kommentar) -- entry.orgName kommt hier aus
+  // seasonLeaderboardForRegion(), das die eigene Org ausdrücklich einschließt
+  // (regionOrgs() mischt sie ein). Qualifiziert sich die eigene Org für einen
+  // Major, fiel sie bisher HIER lautlos aus dem Teilnehmerfeld -- reproduziert
+  // und bestätigt (siehe _major-bug-repro.js-Testlauf). Derselbe Fix wie in
+  // resolveLcqEvent()/resolveWorldsEvent()/resolveOpenEvent().
   const field = [];
   Object.keys(MAJOR_REGION_SLOTS).forEach((region) => {
     const slots = MAJOR_REGION_SLOTS[region];
     const top = seasonLeaderboardForRegion(region).slice(0, slots);
     top.forEach((entry) => {
-      const org = findOrgByName(entry.orgName);
+      const org = resolveOrgByNameOrOwn(entry.orgName);
       if (org) field.push({ org, points: entry.points });
     });
   });
@@ -8482,7 +8570,13 @@ function resolveMajorEvent(event) {
   groupResults.forEach((res) => {
     res.standings.forEach((s, i) => {
       if (i < perGroupAdvance) {
-        (i === 0 ? upperSeeds : lowerSeeds).push(findOrgByName(s.orgName));
+        // Org-Resolution-Hardening: dieselbe findOrgByName()-Schwäche wie
+        // oben beim Feldaufbau -- s.orgName kann (nach dem Fix oben) auch die
+        // eigene Org sein, sobald sie es bis in die Gruppenphase-Standings
+        // schafft. Ohne diesen Fix würde hier ein undefined-Eintrag in
+        // upperSeeds/lowerSeeds landen, der simulateAflBracket() abstürzen
+        // lässt (live reproduziert, siehe _major-bug-repro.js).
+        (i === 0 ? upperSeeds : lowerSeeds).push(resolveOrgByNameOrOwn(s.orgName));
       } else {
         // Nicht-fortgekommene Gruppen-Plätze auf die 3 MAJOR_POINTS_TABLE-
         // Tiers (15-16/12-14/9-11) verteilt -- schlechtester Rang IMMER auf
@@ -9532,7 +9626,13 @@ function reapplyPlayerDevelopmentToRosters() {
     if (sepIdx === -1) return;
     const orgName = key.slice(0, sepIdx);
     const playerName = key.slice(sepIdx + 2);
-    const org = findOrgByName(orgName);
+    // Org-Resolution-Hardening: orgName kann die eigene Org sein (Spieler
+    // trainieren auch im eigenen Kader) -- findOrgByName() fand sie nie,
+    // wodurch org.strength/die Save-Selbstheilungs-Fixes unten NIE auf den
+    // eigenen Kader angewendet wurden (Statwerte selbst blieben unbetroffen,
+    // da assignedOrg direkt serialisiert wird -- kein Drift, aber die
+    // Selbstheilungslogik lief bisher am eigenen Team vorbei).
+    const org = resolveOrgByNameOrOwn(orgName);
     if (!org || !org.roster) return;
     // Bug-Fix (Trainingssystem): Reserve-Spieler ergänzt -- sie sind vom
     // match-getriebenen System ausgeschlossen (siehe applyPlayerDevelopmentForGame()),
@@ -9597,7 +9697,9 @@ function resetPlayerDevelopmentToBaseline() {
     if (sepIdx === -1) return;
     const orgName = key.slice(0, sepIdx);
     const playerName = key.slice(sepIdx + 2);
-    const org = findOrgByName(orgName);
+    // Org-Resolution-Hardening: siehe reapplyPlayerDevelopmentToRosters() --
+    // orgName kann die eigene Org sein, findOrgByName() fand sie nie.
+    const org = resolveOrgByNameOrOwn(orgName);
     if (!org || !org.roster) return;
     const roster = [...(org.roster.starters || []), org.roster.sub, ...(org.roster.reserve || [])].filter(Boolean);
     const player = roster.find((p) => p.name === playerName);
@@ -9954,7 +10056,10 @@ function statsRecentResultRowHtml(entry) {
 
 function renderStatsDetailPanel(orgName) {
   selectedStatsOrgName = orgName;
-  const org = findOrgByName(orgName);
+  // Org-Resolution-Hardening: orgName kann die eigene Org sein (Zeile mit
+  // is-own-org wird bewusst mit angezeigt/klickbar gemacht), findOrgByName()
+  // findet sie nie -- Panel blieb bisher beim eigenen Team leer (früher return).
+  const org = resolveOrgByNameOrOwn(orgName);
   if (!org) return;
 
   document.getElementById('dashboard-stats-detail-logo').innerHTML = statsRowLogoHtml(org);
@@ -10442,6 +10547,7 @@ function openPersonInfo(orgName, personName, role, origin) {
   hideDashboardSubpagesForNavigation();
   personInfoIdentity = { orgName, personName, role };
   personInfoOrigin = resolvedOrigin;
+  tutorialOnEvent('PLAYER_SELECTED', { orgName, personName, role, origin: resolvedOrigin });
   document.getElementById('dashboard-page-person-info').classList.remove('hidden');
   document.getElementById('dashboard-page-title').textContent = 'Profil';
   renderPersonInfoPanel();
@@ -11013,7 +11119,6 @@ function scoutingRowHtml(row) {
         '<div class="dashboard-stats-row-logo">' + statsRowLogoHtml(row.org) + '</div>' +
         '<span class="dashboard-transfers-cell-name" title="' + row.org.name + '">' + row.org.name + '</span>' +
       '</div>';
-  const windowOpen = isTransferWindowOpen(careerDate);
   const reserveHasRoom = reserveSlotsOccupied() < KADER_RESERVE_SLOTS;
   // Masterprompt-Auftrag (Vertragsverhandlungen): Budget/Gehalt sind seit der
   // Verhandlungslogik kein hartes Vorab-Lock mehr -- der Preis wird erst im
@@ -11022,14 +11127,23 @@ function scoutingRowHtml(row) {
   // Masterprompt-Auftrag (Abschnitt 25-26): dritter Sperr-Zustand neben
   // Transferfenster/Kaderplatz -- siehe negotiationLockStatus().
   const lockStatus = negotiationLockStatus('player', row.org ? row.org.name : '', row.player.name, row.role);
+  // Bug-Fix (Tutorial V2.1, live gefunden): Hotfix v0.8.1 Bug 3 entfernte das
+  // Transferfenster-Gate für SPIELER bewusst aus signScoutingPlayer() (siehe
+  // dortigen Kommentar, "kein Transferfenster-Gate mehr hier") -- dieser
+  // Button hier blieb aber weiterhin an isTransferWindowOpen() gebunden und
+  // zeigte dadurch fälschlich "Nur im geöffneten Transferfenster möglich" an,
+  // obwohl ein Klick (derselbe Button!) die Verhandlung tatsächlich anstandslos
+  // öffnete -- rein kosmetisch falsch, aber genau die Art Widerspruch, die
+  // einen neuen Spieler (und ein Tutorial, das die echte Regel korrekt
+  // erklären soll) in die Irre führt. Kein Transferfenster-Gate mehr für
+  // Spieler, exakt wie im echten Klick-Handler.
   // 'countered' bleibt klickbar (Manager MUSS antworten können), siehe
   // signScoutingPlayer()/openNegotiationModal().
-  const canSign = windowOpen && reserveHasRoom && (!lockStatus.locked || lockStatus.reason === 'countered');
-  const disabledReason = !windowOpen ? 'Nur im geöffneten Transferfenster möglich'
-    : (!reserveHasRoom ? 'Kein Platz mehr im Kader -- verkaufe zuerst einen Spieler'
+  const canSign = reserveHasRoom && (!lockStatus.locked || lockStatus.reason === 'countered');
+  const disabledReason = !reserveHasRoom ? 'Kein Platz mehr im Kader -- verkaufe zuerst einen Spieler'
     : (lockStatus.reason === 'pending' ? 'Angebot bereits verschickt, Antwort steht noch aus'
     : (lockStatus.reason === 'countered' ? 'Gegenangebot erhalten -- Verhandlung fortsetzen'
-    : (lockStatus.reason === 'rejected' ? 'Hat kürzlich abgelehnt -- erst ab ' + formatContractDate(lockStatus.untilDate) + ' wieder verhandelbar' : ''))));
+    : (lockStatus.reason === 'rejected' ? 'Hat kürzlich abgelehnt -- erst ab ' + formatContractDate(lockStatus.untilDate) + ' wieder verhandelbar' : '')));
   const signBtnLabel = lockStatus.reason === 'pending' ? 'Angebot gesendet' : (lockStatus.reason === 'countered' ? 'Gegenangebot!' : (lockStatus.reason === 'rejected' ? 'Abgelehnt' : 'Verhandeln'));
   const knowledgeTier = scoutingKnowledgeTierForRow(row);
   return (
@@ -11191,6 +11305,15 @@ function scoutingStaffRowHtml(row) {
   // stumm nichts zu tun. Eigene-Org-Zeilen (man "verpflichtet" nicht die
   // eigenen aktuellen Mitarbeiter) bleiben nativ disabled -- da gibt es
   // nichts zu erklären.
+  // Bug-Fix (Tutorial V2.1, live gefunden -- siehe identischer Kommentar in
+  // scoutingRowHtml()): Hotfix v0.8.1 Bug 3 bindet laut signStaffMember() nur
+  // noch den COACH ans Transferfenster ("für Personal (außer Coach) darf jetzt
+  // auch während der laufenden Saison verhandelt werden") -- dieser Button
+  // ignorierte die Coach-Ausnahme bisher komplett und zeigte für JEDES
+  // Personal "Transferfenster geschlossen" an, obwohl ein Klick bei
+  // Nicht-Coach-Rollen anstandslos funktionierte. Jetzt exakt dieselbe
+  // Coach-Sonderregel wie im echten Klick-Handler.
+  const isCoachRow = row.role === 'Coach';
   const isTransferOpen = isTransferWindowOpen(careerDate);
   // Masterprompt-Auftrag (Vertragsverhandlungen): Budget/Gehalt sind kein
   // hartes Vorab-Lock mehr -- der Preis wird erst im Verhandlungs-Angebot
@@ -11198,10 +11321,10 @@ function scoutingStaffRowHtml(row) {
   // Masterprompt-Auftrag (Abschnitt 25-26): dritter Sperr-Zustand, gleiches
   // Muster wie bei scoutingRowHtml() -- siehe negotiationLockStatus().
   const lockStatus = negotiationLockStatus('staff', row.org ? row.org.name : '', row.person.name, row.role);
-  const canSign = !isOwnOrgRow && isTransferOpen && (!lockStatus.locked || lockStatus.reason === 'countered');
+  const canSign = !isOwnOrgRow && (!isCoachRow || isTransferOpen) && (!lockStatus.locked || lockStatus.reason === 'countered');
   let disabledReason = '';
   if (isOwnOrgRow) disabledReason = 'Bereits dein eigenes Personal';
-  else if (!isTransferOpen) disabledReason = 'Transferfenster geschlossen';
+  else if (isCoachRow && !isTransferOpen) disabledReason = 'Der Coach kann nur im geöffneten Transferfenster verhandelt werden';
   else if (lockStatus.reason === 'pending') disabledReason = 'Angebot bereits verschickt, Antwort steht noch aus';
   else if (lockStatus.reason === 'countered') disabledReason = 'Gegenangebot erhalten -- Verhandlung fortsetzen';
   else if (lockStatus.reason === 'rejected') disabledReason = 'Hat kürzlich abgelehnt -- erst ab ' + formatContractDate(lockStatus.untilDate) + ' wieder verhandelbar';
@@ -11664,6 +11787,7 @@ function openNegotiationModal(kind, orgName, personName, role, isIncomingInteres
   }
 
   document.getElementById('negotiation-offer-modal').classList.remove('hidden');
+  tutorialOnEvent('NEGOTIATION_OPENED', { kind, orgName, personName, role });
 }
 
 function closeNegotiationModal() {
@@ -12586,6 +12710,7 @@ function openRegistrationStatus(event) {
 
 function registerForOpenQualifier(eventKey) {
   openQualifierRegistrations[eventKey] = true;
+  tutorialOnEvent('TOURNAMENT_REGISTERED', { eventKey });
   saveGameState();
 }
 
@@ -15571,7 +15696,11 @@ function clearPersonDevelopmentEntry(orgName, role, personName) {
     if (role === 'Sub') {
       delete playerTransferReplacements[orgName + '::sub'];
     } else if (role === 'Starter') {
-      const org = findOrgByName(orgName);
+      // Org-Resolution-Hardening: orgName ist hier oft assignedOrg.name
+      // (Zeilen mit clearPersonDevelopmentEntry(assignedOrg.name, ...)) --
+      // findOrgByName() fand sie nie, wodurch der Ghost-Object-Fix oben genau
+      // fürs eigene Team nie griff.
+      const org = resolveOrgByNameOrOwn(orgName);
       const idx = org && org.roster && org.roster.starters ? org.roster.starters.findIndex((p) => p && p.name === personName) : -1;
       if (idx !== -1) delete playerTransferReplacements[orgName + '::starters::' + idx];
     }
@@ -15659,7 +15788,10 @@ function reapplyStaffDevelopmentToRosters() {
     const orgName = parts[0];
     const role = parts[1];
     const personName = parts.slice(2).join('::');
-    const org = findOrgByName(orgName);
+    // Org-Resolution-Hardening: orgName kann die eigene Org sein
+    // (applyDailyStaffTraining() befüllt staffDevelopment mit assignedOrg.name)
+    // -- findOrgByName() fand sie nie, siehe reapplyPlayerDevelopmentToRosters().
+    const org = resolveOrgByNameOrOwn(orgName);
     if (!org || !org.roster) return;
     const person = role === 'Coach' ? org.roster.coach : (org.roster.staff || []).find((s) => s && !s.vacant && s.role === role && s.name === personName);
     if (!person || person.name !== personName) return;
@@ -15716,7 +15848,8 @@ function resetStaffDevelopmentToBaseline() {
     const orgName = parts[0];
     const role = parts[1];
     const personName = parts.slice(2).join('::');
-    const org = findOrgByName(orgName);
+    // Org-Resolution-Hardening: siehe reapplyStaffDevelopmentToRosters().
+    const org = resolveOrgByNameOrOwn(orgName);
     if (!org || !org.roster) return;
     const person = role === 'Coach' ? org.roster.coach : (org.roster.staff || []).find((s) => s && !s.vacant && s.role === role && s.name === personName);
     if (!person || person.name !== personName) return;
@@ -20419,7 +20552,12 @@ function advanceOneCalendarDay() {
   // Runde 102: MUSS vor checkTournamentResolutions() laufen, damit die
   // Turnier-Auflösung ab dem Rollover-Tag sofort die neue Saison sieht
   // (siehe checkSeasonRolloverIfDue()).
+  const seasonBeforeRollover = careerState.seasonNumber;
   checkSeasonRolloverIfDue();
+  // Tutorial V2: echter Saisonwechsel als Event gemeldet (Auftragsabschnitt
+  // 24 "Saisonende") -- Vergleich statt Polling, läuft ohnehin bereits einmal
+  // pro Tagfortschritt.
+  if (careerState.seasonNumber !== seasonBeforeRollover) tutorialOnEvent('SEASON_ROLLOVER', {});
   resolveSponsorResponses();
   // Runde 85: löst jedes Turnier-Event genau einmal automatisch auf, sobald
   // sein Anmeldeschluss erreicht ist (siehe checkTournamentResolutions()).
@@ -20814,6 +20952,18 @@ function confirmOrgAndProceed() {
   // gelten für die gesamte Karriere, werden hier einmalig fest eingefroren.
   ceoFireable = document.getElementById('opt-ceo-fireable').classList.contains('is-active');
   achievementsEnabled = ceoFireable; // dieselbe Checkbox steuert beides (siehe Vertragstext)
+  // Tutorial V2 (Auftragsabschnitt 33, "Beim neuen Spiel: Option anbieten"):
+  // derselbe Vertrags-Screen-Haken wie opt-ceo-fireable direkt darüber, auch
+  // Default EIN (siehe goToOrgContract()). Voller State-Reset nötig, weil
+  // dieselben modul-weiten Variablen laut etabliertem Muster (siehe
+  // resetPlayerDevelopmentToBaseline()-Kommentar) über "Neue Karriere starten"
+  // INNERHALB DERSELBEN Electron-Sitzung hinweg bestehen bleiben -- ohne
+  // Reset würde eine zweite Karriere in derselben Sitzung den Core-Fortschritt
+  // der ersten erben.
+  tutorialEnabled = document.getElementById('opt-tutorial-enabled').classList.contains('is-active');
+  tutorialCoreStatus = 'not_started';
+  tutorialCoreStepIndex = 0;
+  tutorialContextualSeen = {};
   consecutivePoorSeasons = 0;
   careerEnded = false;
   unlockedAchievements = [];
@@ -20963,37 +21113,289 @@ function confirmOrgAndProceed() {
   renderAll();
   saveGameState();
   goToDashboard();
-  // Masterprompt-Feature (Tutorial): startet automatisch, sobald die frisch
-  // erstellte Karriere tatsächlich im Dashboard steht -- reine Wiederverwendung
-  // des kompletten bestehenden "Neues Spiel"-Ablaufs (Slot-Auswahl/Charakter-
-  // erstellung/Org-Wahl), kein separater Tutorial-Sonderpfad.
-  if (tutorialPending) { tutorialPending = false; startTutorial(); }
+  // Tutorial V2 (Auftragsabschnitt 33): startet automatisch für JEDE neue
+  // Karriere, sobald sie tatsächlich im Dashboard steht -- gesteuert über den
+  // Vertrags-Screen-Haken (opt-tutorial-enabled, siehe goToOrgContract()),
+  // unabhängig davon, über welchen Hauptmenü-Button "Neues Spiel" gestartet
+  // wurde. Reine Wiederverwendung des kompletten bestehenden "Neues Spiel"-
+  // Ablaufs (Slot-Auswahl/Charaktererstellung/Org-Wahl), kein separater
+  // Tutorial-Sonderpfad.
+  // Siehe tutorialCareerFlowActive-Kommentar: Job erledigt, sobald die
+  // Karriere tatsächlich steht -- verhindert, dass das Flag in eine
+  // eventuelle SPÄTERE, ganz normale "Neues Spiel"-Karriere hineinwirkt.
+  tutorialCareerFlowActive = false;
+  if (tutorialEnabled) startTutorial();
 }
 
-// ── Tutorial (Masterprompt-Auftrag) ─────────────────────────────────────────
-// Echte Schritt-für-Schritt-Führung über die TATSÄCHLICHE UI (Sidebar-Buttons
-// per data-page-Selektor gefunden, keine Screenshots/statischen Bilder) --
-// Spotlight aus 4 Abdunklungs-Streifen um das jeweilige Zielelement, das
-// selbst per .tutorial-highlight-Klasse sichtbar/klickbar über der
-// Abdunklung liegt. Navigiert währenddessen wirklich zur jeweiligen Seite
-// (selectDashboardPage()), damit man den echten Seiteninhalt sieht, nicht
-// nur den Sidebar-Button.
-let tutorialPending = false;
+// ── Tutorial / Onboarding V2 (Masterprompt-Auftrag "Interactive Tutorial &
+// Onboarding V2") ────────────────────────────────────────────────────────
+// Ersetzt das alte rein lineare Klick-durch-Popups-Tutorial (10 feste Info-
+// Karten ohne echte Interaktion, keine Persistenz) durch ein zweistufiges,
+// ECHT interaktives System, das dieselbe bewährte Anzeige-Infrastruktur von
+// vorher wiederverwendet (4-Streifen-Spotlight, Sprechblasen-Positionierung,
+// Resize-Handling -- alles unverändert, siehe positionTutorialSpotlight()/
+// positionTutorialCallout() weiter unten):
+//
+// 1) CORE ONBOARDING: eine feste Schrittfolge (TUTORIAL_CORE_STEPS) direkt
+//    nach Karrierestart. Schritte mit `requiredEvent` warten auf eine ECHTE
+//    Spieleraktion (die Sprechblase versteckt in diesem Fall den "Weiter"-
+//    Button) -- die Aktion selbst wird an ihrer echten Stelle im Code über
+//    tutorialOnEvent(eventName, payload) gemeldet (siehe dortigen Kommentar),
+//    kein Polling/Timer. Info-Schritte (kein requiredEvent) haben normal
+//    einen "Weiter"-Button.
+// 2) CONTEXTUAL MINI TUTORIALS: kurze (1-3 Schritte) Einmal-Erklärungen, die
+//    beim ERSTEN Öffnen eines Systems erscheinen (TUTORIAL_CONTEXTUAL_STEPS),
+//    unabhängig vom Core-Fortschritt, aber nie gleichzeitig mit ihm oder
+//    einem anderen Contextual-Tutorial (siehe maybeStartContextualTutorial()).
+//
+// Persistenz (siehe collectSaveState()/loadGameState()): tutorialEnabled
+// (Master-Schalter), tutorialCoreStatus/tutorialCoreStepIndex (Core-
+// Fortschritt), tutorialContextualSeen (flache { key: true }-Karte, exakt
+// dasselbe Muster wie das bereits bestehende shownOwnMatchSteps).
+let tutorialEnabled = true;
+let tutorialCoreStatus = 'not_started'; // 'not_started' | 'active' | 'complete' | 'skipped'
+let tutorialCoreStepIndex = 0;
+let tutorialContextualSeen = {};
+
+// Laufzeit-Zustand (NICHT gespeichert -- wird aus obigem Zustand hergeleitet,
+// sobald ein Tutorial (wieder) angezeigt wird).
 let tutorialActive = false;
+let tutorialGroup = null; // 'core' oder ein Schlüssel aus TUTORIAL_CONTEXTUAL_STEPS
 let tutorialStepIndex = 0;
 
-const TUTORIAL_STEPS = [
-  { title: 'Willkommen als Manager!', text: 'Dieses kurze Tutorial zeigt dir die wichtigsten Bereiche deines neuen Dashboards. Du kannst es jederzeit über "Überspringen" beenden.', page: 'home', target: null },
-  { title: 'Startseite', text: 'Hier siehst du den Zustand deines Kaders, anstehende Turniere, die letzten Ergebnisse -- und kannst Scrims (Trainingsspiele gegen andere Organisationen) organisieren.', page: 'home', target: '[data-page="home"]' },
-  { title: 'Kader', text: 'Hier verwaltest du deine Spieler -- wer startet, wer ist Sub, wer sitzt in der Reserve.', page: 'roster', target: '[data-page="roster"]' },
-  { title: 'Training', text: 'Hier weist du deinem Team Trainingsschwerpunkte zu -- ein guter Coach beschleunigt die Entwicklung spürbar.', page: 'training', target: '[data-page="training"]' },
-  { title: 'Scouting', text: 'Hier findest du neue Spieler und Personal. "Verhandeln" startet eine echte Verhandlung über Gehalt und Ablöse -- kein garantierter Zuschlag.', page: 'scouting', target: '[data-page="scouting"]' },
-  { title: 'Personal', text: 'Coach, Scout, Analyst, Psychologe, Physiotherapeut und mehr -- jede Rolle bringt echte, spürbare Vorteile für dein Team.', page: 'staff', target: '[data-page="staff"]' },
-  { title: 'Turniere', text: 'Hier läuft der komplette Turnierkalender deiner Saison, von der Qualifikation bis zur Weltmeisterschaft.', page: 'tournaments', target: '[data-page="tournaments"]' },
-  { title: 'Post', text: 'Dein Postfach -- Finanzen, Transfers, Verhandlungsantworten, Krankmeldungen und mehr laufen hier zusammen.', page: 'post', target: '[data-page="post"]' },
-  { title: 'Finanzen', text: 'Behalte dein Budget im Blick und fordere bei Bedarf einen Finanzbericht von deinem Finanzvorstand an.', page: 'finance', target: '[data-page="finance"]' },
-  { title: 'Los geht\'s!', text: 'Das war\'s! Du kennst jetzt die wichtigsten Bereiche. Viel Erfolg als Manager.', page: 'home', target: null },
+function tutorialActiveSteps() {
+  return tutorialGroup === 'core' ? TUTORIAL_CORE_STEPS : (TUTORIAL_CONTEXTUAL_STEPS[tutorialGroup] || []);
+}
+
+// Kader-/Personal-/Trainingsseite zeigen keine numerische "Stärke"-Kennzahl
+// (das Spiel nutzt durchgehend Sterne, siehe #dashboard-person-info-stars) --
+// Tutorialtexte dürfen deshalb NICHT von "GES" sprechen, nur von Sternen.
+const TUTORIAL_CORE_STEPS = [
+  {
+    id: 'welcome', title: 'Willkommen als Manager!', target: null,
+    text: () => 'Du übernimmst ab jetzt ' + assignedOrg.name + '. Dieses kurze, interaktive Tutorial zeigt dir Schritt für Schritt die wichtigsten Aufgaben -- du kannst es jederzeit über "Überspringen" beenden.',
+  },
+  {
+    id: 'home-overview', title: 'Deine Startseite', target: '#dashboard-home-status-banner',
+    text: () => 'Oben rechts läuft das aktuelle Datum -- ein Klick auf "WEITER" lässt einen Tag vergehen. Dieses Banner zeigt dir sofort, ob bei deinem Team etwas Dringendes ansteht. Rechts daneben findest du anstehende Turniere, deine letzten Ergebnisse und die Saison-Rangliste deiner Region.',
+  },
+  {
+    id: 'goto-roster', title: 'Dein Kader', target: '[data-page="roster"]', requiredEvent: 'NAVIGATION_OPENED',
+    requiredEventMatch: (p) => p.page === 'roster',
+    text: () => 'Bevor dein Team antreten kann, solltest du wissen, wer aktuell für dich spielt. Öffne deinen Kader.',
+  },
+  {
+    id: 'roster-explain', title: 'Starter, Sub und Reserve', target: '#dashboard-roster-starters',
+    text: () => 'Hier siehst du deine Starter (die aktive Aufstellung), deinen Sub (Ersatzspieler) und deine Reserve. Über die Pfeile kannst du Spieler zwischen diesen Positionen verschieben.',
+  },
+  {
+    id: 'roster-open-player', title: 'Spielerprofil', target: '#dashboard-roster-starters', requiredEvent: 'PLAYER_SELECTED',
+    text: () => 'Öffne einen Spieler, um sein Profil zu sehen -- klicke einfach auf das "?" auf einer der Karten.',
+  },
+  {
+    id: 'roster-player-explain', title: 'Was die Werte bedeuten', target: '#dashboard-person-info-stars',
+    text: () => 'Die Sterne zeigen die aktuelle Stärke dieser Person. Das "Potenzial" daneben ist die maximal mögliche Entwicklung -- weitere Attribute beeinflussen einzelne Leistungsbereiche.',
+  },
+  {
+    id: 'goto-staff', title: 'Dein Personal', target: '[data-page="staff"]', requiredEvent: 'NAVIGATION_OPENED',
+    requiredEventMatch: (p) => p.page === 'staff',
+    text: () => 'Spieler sind nicht alles -- auch dein Personal hat großen Einfluss. Öffne dein Personal.',
+  },
+  {
+    id: 'staff-coach-explain',
+    title: 'Der Coach',
+    targetFn: () => (document.querySelector('[data-staff-role="Coach"]') && document.querySelector('[data-staff-role="Coach"]').closest('.dashboard-staff-card')) || document.querySelector('[data-staff-hire-goto="Coach"]'),
+    text: () => {
+      const hasCoach = !!(assignedOrg.roster && assignedOrg.roster.coach);
+      const roles = 'Coach, Scout, Analyst, Finanzvorstand, PR-Manager, Psychologe und Physiotherapeut';
+      return hasCoach
+        ? 'Der Coach ist deine wichtigste Personal-Rolle -- ohne ihn läuft kein tägliches Spielertraining. Weitere Rollen (' + roles + ') bringen jeweils eigene Vorteile, die du nach und nach kennenlernst.'
+        : 'Aktuell hast du noch keinen Coach -- ohne ihn läuft kein tägliches Spielertraining. Über Scouting kannst du einen einstellen. Weitere Rollen sind ' + roles + '.';
+    },
+  },
+  {
+    id: 'goto-training', title: 'Training', target: '[data-page="training"]', requiredEvent: 'NAVIGATION_OPENED',
+    requiredEventMatch: (p) => p.page === 'training',
+    text: () => 'Öffne das Training, um zu sehen, wie sich deine Spieler weiterentwickeln.',
+  },
+  {
+    id: 'training-assign', title: 'Training zuweisen', requiredEvent: 'TRAINING_ASSIGNED',
+    targetFn: () => document.querySelector('[data-training-set-mode]') || document.querySelector('[data-training-set-category]') || document.getElementById('dashboard-page-title'),
+    skipIf: () => !(assignedOrg.roster && assignedOrg.roster.coach) || trainingCapacityAssignments(assignedOrg).some((a) => a && a.category),
+    text: () => 'Wähle bei einem Spieler einen Trainingsschwerpunkt (oder Automatik) aus -- probier es einfach aus.',
+  },
+  {
+    id: 'training-explain', title: 'Training eingerichtet', target: '#dashboard-page-title',
+    text: () => {
+      const hasCoach = !!(assignedOrg.roster && assignedOrg.roster.coach);
+      if (!hasCoach) return 'Ohne Coach hat eine Trainingszuweisung noch keine Wirkung -- sobald du einen einstellst, verbessert Training deine Spieler mit der Zeit. Das Potenzial bleibt dabei immer der maximale Rahmen.';
+      return 'Training verbessert deine Spieler mit der Zeit -- ein guter Coach beschleunigt das zusätzlich. Das Potenzial bleibt dabei immer der maximale Rahmen, den ein Spieler erreichen kann.';
+    },
+  },
+  {
+    id: 'goto-finance', title: 'Finanzen', target: '[data-page="finance"]', requiredEvent: 'NAVIGATION_OPENED',
+    requiredEventMatch: (p) => p.page === 'finance',
+    text: () => 'Öffne die Finanzen, um dein Budget zu verwalten.',
+  },
+  {
+    id: 'finance-explain', title: 'Budget verwalten', target: '#dashboard-finance-unallocated-value',
+    text: () => 'Nicht zugeteiltes Budget: ' + formatMoney(financeUnallocated()) + '. Bei den Kategorien darunter (Transfers, Gehälter, Marketing, Betrieb) kannst du per Klick oder Direkteingabe Geld zuweisen -- die Summe bleibt dabei immer gleich, du verschiebst nur. Probier ruhig aus, einen Betrag zu verschieben.',
+  },
+  {
+    id: 'goto-tournaments', title: 'Turniere', target: '[data-page="tournaments"]', requiredEvent: 'NAVIGATION_OPENED',
+    requiredEventMatch: (p) => p.page === 'tournaments',
+    text: () => 'Öffne die Turniere, um zu sehen, wo du in der Saison stehst.',
+  },
+  {
+    id: 'tournaments-explain', title: 'Deine Saison', target: '#dashboard-tournaments-list',
+    text: () => {
+      // Bug-Fix (Pre-Release-Gate, live per Resume-Test gefunden -- P1):
+      // TOURNAMENT_EVENT_DEFS ist die rohe, statische Vorlagen-Liste OHNE
+      // phaseDates (die werden erst pro Saison von buildSeasonTournamentSchedule()
+      // berechnet, siehe dortigen Kommentar) -- openRegistrationStatus() griff
+      // hier auf event.phaseDates.registration.start zu und stürzte ab, sobald
+      // rosterMeetsTournamentMinimum() true war (jeder normale, ausreichend
+      // besetzte Kader) und der open0-Zweig erreicht wurde. Absturz reproduziert
+      // beim Tutorial-Resume genau an diesem Schritt. Fix: die echte,
+      // saisongebundene Terminplanung verwenden, exakt wie renderDashboardTournamentsPanel() es tut.
+      const q = currentSeasonTournamentSchedule().find((e) => e.key === 'open0');
+      const status = q ? openRegistrationStatus(q) : 'unavailable';
+      const base = 'Deine Saison führt von der Qualifikation über die Opens bis zu Major und Weltmeisterschaft. Hier siehst du, für welche Events du angemeldet bzw. qualifiziert bist.';
+      if (status === 'open' && !openQualifierRegistrations.open0) return base + ' Die Anmeldung zum Open Qualifier läuft gerade -- öffne ihn über "DETAILS" und melde dich an.';
+      if (status === 'autoRegistered' || openQualifierRegistrations.open0) return base + ' Du bist aktuell qualifiziert bzw. angemeldet.';
+      if (status === 'closed' || status === 'notQualified') return base + ' Für das aktuelle Event bist du diese Saison nicht mehr dabei -- die nächste Chance kommt automatisch.';
+      return base + ' Aktuell ist keine Anmeldung offen -- das nächste Event zeigt sich automatisch, sobald es soweit ist.';
+    },
+  },
+  {
+    id: 'core-complete', title: 'Grundlagen abgeschlossen', target: null,
+    text: () => 'Du kennst jetzt die Grundlagen deiner Organisation. Weitere Systeme -- etwa Scouting, Shop, Strategien oder Sponsoring -- werden dir kurz erklärt, sobald du sie zum ersten Mal öffnest.',
+  },
 ];
+
+// Kurze (1-3 Schritte), einmalige Erklärungen beim ERSTEN Öffnen eines
+// Systems -- unabhängig vom Core-Fortschritt (siehe maybeStartContextualTutorial()).
+// Jeder Schlüssel entspricht exakt einem Sidebar-data-page-Wert bzw. einem
+// eigenen Event-Namen (firstMatch/negotiation/illness/seasonEnd).
+//
+// Tutorial V2.1 (Polish-Runde): jeder targetFn folgt derselben Fallback-
+// Reihenfolge (Auftragsabschnitt 16) -- 1. konkretes Interaktionselement,
+// 2. konkretes Informationspanel, 3. Unterbereich, 4. Seitencontainer/
+// #dashboard-page-title NUR als letzter Fallback, falls das dynamische
+// Element (noch) nicht existiert (z.B. leerer Warenkorb, leeres Postfach).
+// Nie ein Crash: jede Kette endet in || null, resolveTutorialTarget() fängt
+// das bereits ab (siehe dortigen try/catch).
+const TUTORIAL_CONTEXTUAL_STEPS = {
+  tactics: [
+    { id: 'tactics-1', title: 'Strategie auswählen',
+      targetFn: () => document.getElementById('dashboard-tactics-strip') || document.getElementById('dashboard-tactics-arena') || document.getElementById('dashboard-page-title'),
+      text: () => 'Hier wählst du deine Strategie -- sie beeinflusst wirklich, wie dein Team im Match auftritt. Presets sind vorgefertigt, du kannst aber auch eigene Regler einstellen.' },
+    { id: 'tactics-2', title: 'Vor- und Nachteile',
+      targetFn: () => document.getElementById('dashboard-tactics-detail') || document.getElementById('dashboard-tactics-arena') || document.getElementById('dashboard-page-title'),
+      text: () => 'Jede Strategie hat echte Vorteile und Nachteile sowie ein eigenes Risiko-Niveau -- wähl am besten passend zu deinem Kader und zum jeweiligen Gegner, nicht blind die "stärkste".' },
+  ],
+  shop: [
+    { id: 'shop-1', title: 'Ausrüstung',
+      targetFn: () => document.querySelector('[data-shop-item]') || document.getElementById('dashboard-shop-grid') || document.getElementById('dashboard-page-title'),
+      text: () => 'Jedes Ausrüstungsstück kostet Geld und gibt dafür einen echten Statbonus, der auf deine Spieler wirkt -- bessere (teurere) Ausrüstung bringt einen größeren Bonus.' },
+    { id: 'shop-2', title: 'Kaufen und Ausrüsten',
+      targetFn: () => (document.querySelector('[data-shop-item]') && document.querySelector('[data-shop-item] .dashboard-shop-card-footer')) || document.getElementById('dashboard-shop-grid') || document.getElementById('dashboard-page-title'),
+      text: () => 'Preis und Bonus stehen direkt auf der Karte. Ein Kauf geht erst über den Warenkorb, danach musst du das Teil noch aktiv ausrüsten. Du musst hier nichts kaufen -- schau dich erstmal nur um.' },
+  ],
+  basecamp: [
+    { id: 'basecamp-1', title: 'Dein Basecamp',
+      targetFn: () => document.getElementById('dashboard-basecamp-hero') || document.getElementById('dashboard-page-title'),
+      text: () => 'Hier siehst du den aktuellen Ausbaustand deines Basecamps -- deiner langfristigen Organisations-Infrastruktur.' },
+    { id: 'basecamp-2', title: 'Echte Boni',
+      targetFn: () => document.getElementById('dashboard-basecamp-bonus-panel') || document.getElementById('dashboard-basecamp-equip-grid') || document.getElementById('dashboard-page-title'),
+      text: () => 'Hier stehen die tatsächlich aktiven Gesamtboni deines Basecamps -- sie wirken zusätzlich zu deiner Ausrüstung. Ausbaustufen kaufst du im Shop.' },
+  ],
+  scouting: [
+    { id: 'scouting-1', title: 'Scouting', target: '#dashboard-page-title',
+      text: () => 'Hier findest du neue Spieler und Personal, gefiltert nach Rolle. Ohne eigenen Scout sind manche Werte nur ungenau sichtbar -- ein guter Scout macht deine Einschätzung genauer.' },
+    { id: 'scouting-2', title: 'Verhandeln',
+      targetFn: () => document.querySelector('.dashboard-scouting-sign-btn') || document.getElementById('dashboard-page-title'),
+      text: () => '"Verhandeln" startet eine echte Verhandlung über Gehalt und Ablöse -- kein garantierter Zuschlag, das Gegenüber kann auch ablehnen oder ein Gegenangebot machen.' },
+  ],
+  sponsors: [
+    { id: 'sponsors-1', title: 'Sponsor auswählen',
+      targetFn: () => document.getElementById('dashboard-sponsors-grid') || document.getElementById('dashboard-page-title'),
+      text: () => 'Hier siehst du mögliche Sponsoren mit unterschiedlichen Bedingungen und Einnahmen -- wähle einen aus, um Details zu sehen.' },
+    { id: 'sponsors-2', title: 'Bewerbung statt Zusage',
+      targetFn: () => (document.getElementById('dashboard-sponsors-detail') && !document.getElementById('dashboard-sponsors-detail').classList.contains('hidden') && document.getElementById('sponsor-detail-actions')) || document.getElementById('dashboard-sponsors-grid') || document.getElementById('dashboard-page-title'),
+      text: () => 'Mit "Angebot" bewirbst du dich um diesen Sponsor -- der Sponsor entscheidet dann selbst, ob er zustimmt. Je stärker dein Team und je besser deine Reputation, desto wahrscheinlicher die Zusage; dein PR-Manager verbessert beides.' },
+  ],
+  messages: [
+    { id: 'messages-1', title: 'Nachrichten', target: '#dashboard-page-title',
+      text: () => 'Hier schreibst du direkt mit deinen Spielern und deinem Personal -- die Antworten passen sich an Rolle und Situation an.' },
+    { id: 'messages-2', title: 'Worte haben Folgen', target: '#dashboard-page-title',
+      text: () => 'Was du sagst, kann etwas bewirken: Lob, Kritik oder gar Drohungen können je nach Situation Zufriedenheit, Motivation, Beziehung oder sogar das Kündigungsrisiko beeinflussen. Du musst niemanden beleidigen, um das auszuprobieren.' },
+  ],
+  post: [
+    { id: 'post-1', title: 'Deine Nachrichten',
+      targetFn: () => document.querySelector('[data-post-message]') || document.getElementById('dashboard-post-list-view') || document.getElementById('dashboard-page-title'),
+      text: () => 'Dein Postfach sammelt wichtige Ereignisse -- unter anderem Finanzen, Sponsoring, Transfers/Verhandlungen, Spieler-/Personalinformationen sowie Scouting- und Analystenberichte.' },
+    { id: 'post-2', title: 'Nachrichten verwalten',
+      targetFn: () => document.querySelector('[data-post-delete]') || document.getElementById('btn-dashboard-post-delete-all') || document.getElementById('dashboard-page-title'),
+      text: () => 'Manche Nachrichten haben eine direkte Aktion (z.B. "Verhandlung starten"). Einzeln löschen kannst du über das ✕, oder oben alle auf einmal.' },
+  ],
+  transfers: [
+    { id: 'transfers-1', title: 'Transferfenster',
+      targetFn: () => document.getElementById('dashboard-transfer-window-banner') || document.getElementById('dashboard-page-title'),
+      text: () => 'Wichtig: Eine Einigung über Scouting/Verhandlungen ist jederzeit möglich, auch außerhalb des Transferfensters -- nur der COACH ist ans offene Fenster gebunden. Der tatsächliche Wechsel wartet bei allen anderen Rollen bis zum erlaubten Termin (Tag nach Weltmeisterschaftsende bzw. sofort, falls das Fenster gerade offen ist). Eine angenommene Einigung ist also nicht kaputt, nur weil die Person noch nicht sofort im Kader steht.' },
+  ],
+  scrims: [
+    { id: 'scrims-1', title: 'Scrims', target: '#btn-dashboard-home-scrim-invite',
+      text: () => 'Scrims sind Trainingsspiele gegen andere Organisationen -- wähle einen Gegner und sende eine Anfrage. Du bekommst sichtbare Rückmeldung, wenn eine Anfrage gerade nicht möglich ist (z.B. Abklingzeit). Deutlich stärkere Gegner lehnen Anfragen tendenziell eher ab, und nach einem gespielten Scrim gilt ein Cooldown, bevor ihr erneut gegeneinander antreten könnt.' },
+  ],
+  negotiation: [
+    { id: 'negotiation-1', title: 'Transferangebot',
+      targetFn: () => {
+        const feeField = document.getElementById('negotiation-offer-fee-field');
+        if (feeField && !feeField.classList.contains('hidden')) return feeField;
+        return document.getElementById('negotiation-offer-salary') || document.getElementById('negotiation-offer-modal');
+      },
+      text: () => {
+        const feeField = document.getElementById('negotiation-offer-fee-field');
+        const isFreeAgent = !feeField || feeField.classList.contains('hidden');
+        return isFreeAgent
+          ? 'Diese Person ist Free Agent -- keine Transfergebühr nötig, nur ein Gehaltsangebot.'
+          : 'Diese Person gehört noch einer anderen Organisation -- dein Transferwert-Angebot ist die Ablöse dafür.';
+      } },
+    { id: 'negotiation-2', title: 'Gehaltsangebot', target: '#negotiation-offer-salary',
+      text: () => 'Dein monatliches Gehaltsangebot. Es gibt keinen empfohlenen Festwert -- zu niedrige Angebote werden eher abgelehnt, die Gegenseite kann auch mit einem Gegenangebot antworten.' },
+    { id: 'negotiation-3', title: 'Absenden', target: '#btn-negotiation-offer-send',
+      text: () => 'Mit "Angebot senden" schickst du das Angebot ab. Die Antwort kann Zustimmung, Ablehnung oder ein Gegenangebot sein -- die eigentliche Entscheidung trifft die validierte Spiellogik, nicht nur das Gespräch selbst.' },
+  ],
+  illness: [
+    { id: 'illness-1', title: 'Krankheit',
+      targetFn: () => {
+        const p = tutorialContextualTriggerPayload || {};
+        if (!p.personName) return null;
+        const btn = document.querySelector('[data-kader-info="' + p.personName + '"]') || document.querySelector('[data-staff-info="' + p.personName + '"]');
+        return (btn && btn.closest('.dashboard-roster-card')) || null;
+      },
+      text: () => {
+        const p = tutorialContextualTriggerPayload || {};
+        const isPlayerRole = p.role === 'Starter' || p.role === 'Sub' || p.role === 'Reserve';
+        const name = p.personName || 'Diese Person';
+        return isPlayerRole
+          ? name + ' ist erkrankt und kann so lange nicht in Matches eingesetzt werden -- solange verfügbar, rückt automatisch der beste gesunde Sub/Reserve-Spieler für diese Position nach.'
+          : name + ' ist erkrankt -- der Bonus dieser Rolle ist währenddessen inaktiv. Ein Physiotherapeut senkt sowohl das Risiko als auch die Dauer künftiger Erkrankungen.';
+      } },
+  ],
+  seasonEnd: [
+    { id: 'season-end-1', title: 'Neue Saison', target: null,
+      text: () => 'Eine neue Saison beginnt: Spieler und Personal altern (manche beenden ihre Karriere und werden ersetzt), die Saison-Rangliste startet bei 0, und für den neuen Open Qualifier musst du dich erneut anmelden. Während der Saison vereinbarte, aber noch nicht vollzogene Transfers werden nach dem Ende der Weltmeisterschaft automatisch nachgeholt.' },
+  ],
+  firstMatch: [
+    { id: 'first-match-1', title: 'Dein erstes Match', target: '#roster-meta-a',
+      text: () => 'Hier läuft dein Match live mit -- deine Aufstellung links, der Gegner rechts. Die Karten zeigen Coach und Sub beider Teams sowie Moral und Team-Bonus, die wirklich in die Spielstärke einfließen. Deine Strategie beeinflusst zusätzlich, wie das Team auftritt.' },
+    { id: 'first-match-2', title: 'Ablauf',
+      targetFn: () => document.getElementById('btn-instant-sim') || document.getElementById('match-series-dots') || document.getElementById('match-score'),
+      text: () => 'Das Match läuft automatisch ab -- du kannst die Geschwindigkeit erhöhen oder das Ergebnis direkt fertig simulieren, wenn du nicht zusehen willst.' },
+  ],
+};
 
 // Baut den 4-Streifen-Spotlight um `targetEl` herum (oder dunkelt bei
 // fehlendem Ziel die komplette Fläche ab) -- gibt das Zielrechteck zurück,
@@ -21047,55 +21449,171 @@ function positionTutorialCallout(rect) {
   callout.style.top = top + 'px';
 }
 
+function resolveTutorialTarget(step) {
+  if (step.targetFn) { try { return step.targetFn(); } catch (e) { return null; } }
+  return step.target ? document.querySelector(step.target) : null;
+}
+
 function renderTutorialStep() {
-  const step = TUTORIAL_STEPS[tutorialStepIndex];
-  if (step.page) selectDashboardPage(step.page);
+  const steps = tutorialActiveSteps();
+  const step = steps[tutorialStepIndex];
+  if (!step) { endTutorial(); return; }
+  // Edge Case (Auftragsabschnitt 41, "System bereits benutzt"): eine bereits
+  // erfüllte oder gerade nicht zutreffende Voraussetzung überspringt den
+  // Schritt automatisch, statt eine bereits erledigte Aktion erneut zu
+  // verlangen (siehe skipIf() an den einzelnen Core-Schritten oben).
+  if (step.skipIf && step.skipIf()) { tutorialAdvance(); return; }
+  if (tutorialGroup === 'core') tutorialCoreStepIndex = tutorialStepIndex;
   document.querySelectorAll('.tutorial-highlight').forEach((el) => el.classList.remove('tutorial-highlight'));
-  const targetEl = step.target ? document.querySelector(step.target) : null;
+  const targetEl = resolveTutorialTarget(step);
   if (targetEl) targetEl.classList.add('tutorial-highlight');
   // Bug-Fix (Runde I, live per echtem UI-Durchlauf gefunden -- P1, "Tutorial
   // blockiert Spiel"): die Sidebar ist scrollbar (.dashboard-sidebar hat
-  // overflow-y:auto, 16 Einträge). Ohne dies stand der Schritt "Finanzen"
-  // (15. von 16 Sidebar-Einträgen) bei normaler Fensterhöhe außerhalb des
-  // sichtbaren Bereichs -- getBoundingClientRect() lieferte dadurch eine
-  // Position UNTERHALB des Viewports, Spotlight UND Sprechblase (inkl.
-  // "Weiter"-Button) landeten komplett außerhalb des sichtbaren Fensters,
-  // der Tutorial-Ablauf war an dieser Stelle nicht mehr fortsetzbar (nur noch
-  // über "Überspringen" zu verlassen). Fix: Ziel-Element vor dem Positionieren
-  // aktiv in den sichtbaren Bereich scrollen.
+  // overflow-y:auto, 16 Einträge) -- ein Ziel außerhalb des sichtbaren
+  // Bereichs lieferte sonst eine Position unterhalb des Viewports und machte
+  // den Tutorial-Ablauf unfortsetzbar. Fix: Ziel-Element vor dem
+  // Positionieren aktiv in den sichtbaren Bereich scrollen.
   if (targetEl) targetEl.scrollIntoView({ block: 'nearest' });
   const rect = positionTutorialSpotlight(targetEl);
   positionTutorialCallout(rect);
-  document.getElementById('tutorial-step-counter').textContent = 'Schritt ' + (tutorialStepIndex + 1) + ' / ' + TUTORIAL_STEPS.length;
+  document.getElementById('tutorial-step-counter').textContent = 'Schritt ' + (tutorialStepIndex + 1) + ' / ' + steps.length;
   document.getElementById('tutorial-callout-title').textContent = step.title;
-  document.getElementById('tutorial-callout-text').textContent = step.text;
+  document.getElementById('tutorial-callout-text').textContent = step.text();
   document.getElementById('btn-tutorial-back').classList.toggle('hidden', tutorialStepIndex === 0);
-  document.getElementById('btn-tutorial-next').textContent = tutorialStepIndex === TUTORIAL_STEPS.length - 1 ? 'Fertig' : 'Weiter';
+  // Schritte mit requiredEvent warten auf eine ECHTE Spieleraktion (siehe
+  // tutorialOnEvent()) -- "Weiter" bleibt deshalb versteckt, "Überspringen"
+  // (beendet das GANZE Tutorial) bleibt als Ausweg immer sichtbar, damit kein
+  // Deadlock entstehen kann.
+  document.getElementById('btn-tutorial-next').classList.toggle('hidden', !!step.requiredEvent);
+  document.getElementById('btn-tutorial-next').textContent = tutorialStepIndex === steps.length - 1 ? 'Fertig' : 'Weiter';
+}
+
+function tutorialAdvance() {
+  const steps = tutorialActiveSteps();
+  if (tutorialStepIndex >= steps.length - 1) { endTutorial(); return; }
+  tutorialStepIndex += 1;
+  renderTutorialStep();
 }
 
 function startTutorial() {
+  tutorialGroup = 'core';
+  tutorialStepIndex = tutorialCoreStatus === 'active' ? tutorialCoreStepIndex : 0;
+  tutorialCoreStatus = 'active';
   tutorialActive = true;
+  selectDashboardPage('home');
+  document.getElementById('tutorial-overlay').classList.remove('hidden');
+  renderTutorialStep();
+  // Bug-Fix (Release-Gate v0.9.0, live gefunden): confirmOrgAndProceed()
+  // speichert VOR diesem Aufruf (tutorialCoreStatus stand dort noch auf
+  // 'not_started') -- schloss der Spieler die App direkt nach der
+  // Kartererstellung (z.B. noch beim Willkommens-Schritt), zeigte der
+  // Speicherstand fälschlich 'not_started', obwohl das Tutorial sichtbar
+  // lief. resumeTutorial() prüft exakt auf 'active' und hätte das Tutorial
+  // beim nächsten Start dadurch stillschweigend NICHT fortgesetzt -- kein
+  // Absturz, aber ein für den Spieler unerklärlich "verschwundenes"
+  // Tutorial. Eigener Save hier stellt sicher, dass der tatsächliche
+  // Aktiv-Zustand immer sofort korrekt persistiert ist, unabhängig davon,
+  // von wo startTutorial() aufgerufen wird.
+  saveGameState();
+}
+
+// Setzt ein mitten im Core-Tutorial gespeichertes/geladenes Spiel exakt am
+// zuletzt aktiven Schritt fort (Auftragsabschnitt 31/47) -- KEIN Neustart
+// bei Schritt 1, KEIN übersprungener Pflichtschritt.
+function resumeTutorial() {
+  if (!tutorialEnabled || tutorialCoreStatus !== 'active') return;
+  startTutorial();
+}
+
+// Trägt die Event-Payload, die den GERADE laufenden Contextual-Tutorial-Start
+// ausgelöst hat (z.B. { personName, role } bei ILLNESS_TRIGGERED) -- rein
+// laufzeitintern (nicht gespeichert), von targetFn()/text() einzelner
+// Contextual-Schritte gelesen, damit z.B. gezielt die betroffene Person statt
+// nur ein generischer Bereich hervorgehoben werden kann (Auftragsabschnitt 13/16).
+let tutorialContextualTriggerPayload = null;
+
+function startContextualTutorial(key, payload) {
+  const steps = TUTORIAL_CONTEXTUAL_STEPS[key];
+  if (!steps || !steps.length) return;
+  tutorialGroup = key;
   tutorialStepIndex = 0;
+  tutorialActive = true;
+  tutorialContextualTriggerPayload = payload || null;
   document.getElementById('tutorial-overlay').classList.remove('hidden');
   renderTutorialStep();
 }
 
+// Startet ein Contextual Mini Tutorial beim ERSTEN Kontakt mit einem System
+// -- nie während das Core Tutorial oder ein anderes Contextual Tutorial
+// bereits läuft (kein überlappendes Overlay), nie doppelt (tutorialContextualSeen,
+// dasselbe Muster wie das bestehende shownOwnMatchSteps).
+function maybeStartContextualTutorial(key, payload) {
+  if (!tutorialEnabled || tutorialActive) return;
+  if (!TUTORIAL_CONTEXTUAL_STEPS[key]) return;
+  if (tutorialContextualSeen[key]) return;
+  tutorialContextualSeen[key] = true;
+  startContextualTutorial(key, payload);
+}
+
 function endTutorial() {
+  const wasCore = tutorialGroup === 'core';
   tutorialActive = false;
+  tutorialGroup = null;
   document.querySelectorAll('.tutorial-highlight').forEach((el) => el.classList.remove('tutorial-highlight'));
   document.getElementById('tutorial-overlay').classList.add('hidden');
+  if (wasCore && tutorialCoreStatus === 'active') tutorialCoreStatus = 'complete';
+  saveGameState();
 }
 
 function tutorialNext() {
-  if (tutorialStepIndex >= TUTORIAL_STEPS.length - 1) { endTutorial(); return; }
-  tutorialStepIndex += 1;
-  renderTutorialStep();
+  tutorialAdvance();
 }
 
 function tutorialBack() {
   if (tutorialStepIndex <= 0) return;
   tutorialStepIndex -= 1;
   renderTutorialStep();
+}
+
+// Auftragsabschnitt 35: "Tutorial überspringen?" mit Rückfrage, statt eines
+// einzigen unklaren Klicks -- Contextual Tutorials laufen unabhängig weiter
+// (nur das jeweils GERADE laufende wird durch endTutorial() beendet; ein
+// Core-Skip markiert zusätzlich den Core-Status als 'skipped', damit er beim
+// nächsten Laden nicht erneut automatisch startet).
+function requestSkipTutorial() {
+  const isCore = tutorialGroup === 'core';
+  showConfirmModal(
+    'Tutorial überspringen?',
+    isCore ? 'Du kannst die Grundlagen jederzeit später über Einstellungen -> Tutorial erneut ansehen.' : 'Dieser kurze Hinweis wird nicht mehr angezeigt.',
+    () => {
+      if (isCore) tutorialCoreStatus = 'skipped';
+      endTutorial();
+    },
+    { confirmLabel: 'Überspringen' }
+  );
+}
+
+// Auftragsabschnitt 30: Tutorial-Fortschritt wird über ECHTE Spiel-/UI-
+// Events erkannt (an ihrer jeweils realen Stelle im Code ausgelöst, siehe
+// die tutorialOnEvent()-Aufrufe verteilt im restlichen renderer.js), NICHT
+// über Polling/setInterval. Löst außerdem Contextual Mini Tutorials aus,
+// wenn gerade kein anderes Tutorial läuft.
+function tutorialOnEvent(eventName, payload) {
+  if (!tutorialEnabled) return;
+  if (tutorialActive) {
+    const steps = tutorialActiveSteps();
+    const step = steps[tutorialStepIndex];
+    if (step && step.requiredEvent === eventName && (!step.requiredEventMatch || step.requiredEventMatch(payload || {}))) {
+      tutorialAdvance();
+    }
+    return;
+  }
+  if (eventName === 'NAVIGATION_OPENED' && payload && payload.page) maybeStartContextualTutorial(payload.page, payload);
+  else if (eventName === 'FIRST_MATCH_OPENED') maybeStartContextualTutorial('firstMatch', payload);
+  else if (eventName === 'NEGOTIATION_OPENED') maybeStartContextualTutorial('negotiation', payload);
+  else if (eventName === 'ILLNESS_TRIGGERED') maybeStartContextualTutorial('illness', payload);
+  else if (eventName === 'SEASON_ROLLOVER') maybeStartContextualTutorial('seasonEnd', payload);
+  else if (eventName === 'SCRIM_SENT') maybeStartContextualTutorial('scrims', payload);
 }
 
 window.addEventListener('resize', () => { if (tutorialActive) renderTutorialStep(); });
@@ -21312,6 +21830,7 @@ function playMatchTicker(result, nameA, nameB, playersA, playersB, ownIsA, coach
   ticker.innerHTML = '';
 
   showScreen('screen-match');
+  tutorialOnEvent('FIRST_MATCH_OPENED', {});
   stopMatchInterval();
   matchLastTickTime = performance.now();
   matchInterval = setInterval(tickMatch, MATCH_TICK_MS);
@@ -21646,6 +22165,7 @@ function collectSaveState() {
     activeStrategyMode, activeStrategyId, allroundTacticSettings, customStrategies, activeCustomStrategyId,
     botEconomyOverlay,
     botTransferCooldowns, botOfferOnOwnPlayer, botOfferOnOwnPlayerCooldowns,
+    tutorialEnabled, tutorialCoreStatus, tutorialCoreStepIndex, tutorialContextualSeen,
   };
 }
 
@@ -21662,7 +22182,13 @@ let saveErrorAlreadyWarned = false;
 async function saveGameState() {
   if (!currentSlotId) return;
   try {
-    await window.electronAPI.saveGame(currentSlotId, collectSaveState());
+    // Erzwungener Tutorial-Spielstand: eigener, von den 3 normalen Slots
+    // komplett getrennter Speicherpfad (siehe main.js save-tutorial-slot/
+    // load-tutorial-slot) -- currentSlotId === 'tutorial' ist der einzige
+    // Nicht-Ganzzahl-Wert, den currentSlotId je annimmt (siehe btn-tutorial-
+    // Handler), daher als eindeutiges Unterscheidungsmerkmal geeignet.
+    if (currentSlotId === 'tutorial') await window.electronAPI.saveTutorialSlot(collectSaveState());
+    else await window.electronAPI.saveGame(currentSlotId, collectSaveState());
     saveErrorAlreadyWarned = false;
   } catch (err) {
     console.error('Speichern fehlgeschlagen:', err);
@@ -21680,7 +22206,7 @@ async function saveGameState() {
 
 async function loadGameState() {
   const requestId = ++loadStateRequestId;
-  const data = await window.electronAPI.loadGame(currentSlotId);
+  const data = currentSlotId === 'tutorial' ? await window.electronAPI.loadTutorialSlot() : await window.electronAPI.loadGame(currentSlotId);
   if (requestId !== loadStateRequestId) return; // eine neuere Ladeanfrage lief inzwischen los -- diese hier ist überholt
   if (!data) return;
   // Bug-Fix (Audit): main.js liefert jetzt { corrupted: true } statt null,
@@ -21914,6 +22440,20 @@ async function loadGameState() {
   botTransferCooldowns = data.botTransferCooldowns || {};
   botOfferOnOwnPlayer = data.botOfferOnOwnPlayer || null;
   botOfferOnOwnPlayerCooldowns = data.botOfferOnOwnPlayerCooldowns || {};
+  // Tutorial V2: v1-v38-Spielstände kannten das neue interaktive Tutorial-
+  // system noch nicht -- sichere Defaults (Tutorial an, Core "not_started",
+  // keine Contextual Tutorials gesehen). Auftragsabschnitt 32, ausdrücklich:
+  // eine BESTEHENDE Karriere soll dadurch NICHT plötzlich automatisch das
+  // komplette Core-Anfänger-Tutorial starten -- deshalb bleibt tutorialCoreStatus
+  // bei 'not_started' anstatt hier auf 'active' gesetzt zu werden, und der
+  // Resume-Hook unten (siehe "if (tutorialEnabled && tutorialCoreStatus...")
+  // startet NUR etwas, wenn 'active' bereits explizit gespeichert war (kann
+  // bei diesen alten Spielständen nie der Fall sein). Kein Save-Version-Bump
+  // nötig.
+  tutorialEnabled = data.tutorialEnabled === undefined ? true : data.tutorialEnabled;
+  tutorialCoreStatus = data.tutorialCoreStatus || 'not_started';
+  tutorialCoreStepIndex = data.tutorialCoreStepIndex || 0;
+  tutorialContextualSeen = data.tutorialContextualSeen || {};
   signedFreeAgentPlayers = new Set(data.signedFreeAgentPlayers || []);
   signedFreeAgentStaff = new Set(data.signedFreeAgentStaff || []);
   contractWarningsShown = new Set(data.contractWarningsShown || []);
@@ -21962,6 +22502,14 @@ async function loadGameState() {
     // weiter oben, "nach der Unterschrift geht es jetzt zum neuen Dashboard").
     renderAll();
     goToDashboard();
+    // Tutorial V2 (Auftragsabschnitt 31/47, "Save mitten im Tutorial"): setzt
+    // ein mitten im Core-Tutorial gespeichertes Spiel exakt am zuletzt
+    // aktiven Schritt fort -- KEIN Neustart bei Schritt 1. resumeTutorial()
+    // selbst prüft zusätzlich tutorialCoreStatus === 'active', startet also
+    // nie für einen bereits abgeschlossenen/übersprungenen oder noch nie
+    // begonnenen Tutorial-Stand (Auftragsabschnitt 32: alte/bestehende
+    // Spielstände starten NIE automatisch das komplette Core-Tutorial).
+    resumeTutorial();
   }
 }
 
@@ -22340,6 +22888,12 @@ function resetSettingsToDefaults() {
 // deaktiviert, da sich sein disabled-Status sonst nie mehr aktualisiert.
 function goToMenu() {
   stopPlaytimeTracking();
+  // Bricht der Spieler den erzwungenen Tutorial-Spielstand-Ablauf vorzeitig ab
+  // (Zurück-Button irgendwo in Charakter-/Org-Erstellung), landet er wieder
+  // hier -- ohne diesen Reset würde tutorialCareerFlowActive bestehen bleiben
+  // und beim NÄCHSTEN, ganz normalen "Neues Spiel" unerwartet die Org-Auswahl
+  // überspringen bzw. "Mit Free Agents auffüllen" fest sperren.
+  tutorialCareerFlowActive = false;
   showScreen('screen-menu');
   initContinueButton();
   centerMenuLogoOverNav();
@@ -22888,10 +23442,36 @@ document.getElementById('btn-new-game').addEventListener('click', () => { gameMo
 // Masterprompt-Feature (Tutorial): startet den identischen "Neues Spiel"-
 // Ablauf, merkt sich aber, dass am Ende automatisch das Tutorial losgehen
 // soll (siehe confirmOrgAndProceed()).
-document.getElementById('btn-tutorial').addEventListener('click', () => { tutorialPending = true; gameMode = 'career'; openSlotPicker('new'); });
+// Erzwungener Tutorial-Spielstand (User-Vorgabe): läuft NIE mehr über die
+// normale Slot-Auswahl (dort könnte der Spieler versehentlich einen
+// bestehenden Spielstand überschreiben oder -- schlimmer für das Tutorial
+// selbst -- eine bestehende Bot-Org mit unvollständigem Kader/vakantem
+// Personal übernehmen, an der einzelne Tutorial-Schritte hängen bleiben
+// könnten). Stattdessen: EIN fester, von den 3 normalen Slots komplett
+// getrennter Tutorial-Spielstand (siehe main.js save-tutorial-slot/
+// load-tutorial-slot) -- existiert bereits einer, wird er unverändert
+// fortgesetzt (derselbe bereits verifizierte Mid-Tutorial-Resume-Pfad wie
+// bei einem normalen Speicherstand); existiert noch keiner (oder ist er
+// beschädigt), wird direkt und ausschließlich der garantiert vollständige
+// "Eigene Org erstellen"-Pfad erzwungen (siehe tutorialCareerFlowActive/
+// goToOrgModeSelect()/goToOrgCreate()).
+document.getElementById('btn-tutorial').addEventListener('click', async () => {
+  const existing = await window.electronAPI.loadTutorialSlot();
+  currentSlotId = 'tutorial';
+  gameMode = 'career';
+  if (existing && !existing.corrupted) {
+    loadGameState();
+    return;
+  }
+  if (existing && existing.corrupted) {
+    showToast('⚠️', 'Der bisherige Tutorial-Spielstand war beschädigt -- ein neuer wird angelegt.', 'Tutorial');
+  }
+  tutorialCareerFlowActive = true;
+  goToCharacterCreation();
+});
 document.getElementById('btn-tutorial-next').addEventListener('click', tutorialNext);
 document.getElementById('btn-tutorial-back').addEventListener('click', tutorialBack);
-document.getElementById('btn-tutorial-skip').addEventListener('click', endTutorial);
+document.getElementById('btn-tutorial-skip').addEventListener('click', requestSkipTutorial);
 document.getElementById('btn-create-slot').addEventListener('click', async () => {
   const slots = await window.electronAPI.listSaveSlots();
   const emptySlot = slots.find((s) => !s.exists);
@@ -22925,7 +23505,15 @@ document.getElementById('btn-org-mode-continue').addEventListener('click', () =>
   if (selectedOrgMode === 'existing') goToOrgSelection();
   else if (selectedOrgMode === 'create') goToOrgCreate();
 });
-document.getElementById('btn-back-to-menu-orgcreate').addEventListener('click', goToOrgModeSelect);
+document.getElementById('btn-back-to-menu-orgcreate').addEventListener('click', () => {
+  // Erzwungener Tutorial-Spielstand: goToOrgModeSelect() würde hier bloß
+  // sofort wieder zu goToOrgCreate() zurückspringen (die Org-Modus-Auswahl
+  // wird ja übersprungen) -- "Zurück" wäre ein wirkungsloser Dead-End statt
+  // tatsächlich eine Seite zurückzugehen. Stattdessen echt zur vorherigen
+  // Seite (Charaktererstellung).
+  if (tutorialCareerFlowActive) goToCharacterCreation();
+  else goToOrgModeSelect();
+});
 document.getElementById('btn-org-contract-back').addEventListener('click', () => showScreen(contractBackScreen));
 document.getElementById('btn-org-contract-continue').addEventListener('click', () => {
   if (!contractSigned) {
@@ -22936,6 +23524,7 @@ document.getElementById('btn-org-contract-continue').addEventListener('click', (
 });
 document.getElementById('btn-org-contract-clear-signature').addEventListener('click', clearContractSignature);
 document.getElementById('opt-ceo-fireable').addEventListener('click', (e) => e.currentTarget.classList.toggle('is-active'));
+document.getElementById('opt-tutorial-enabled').addEventListener('click', (e) => e.currentTarget.classList.toggle('is-active'));
 document.querySelectorAll('.org-contract-lock-option').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.org-contract-lock-option').forEach((b) => b.classList.toggle('is-active', b === btn));
@@ -22956,6 +23545,7 @@ document.querySelectorAll('#org-create-difficulty-options .org-create-option').f
   });
 });
 document.getElementById('btn-org-create-fill-agents').addEventListener('click', (e) => {
+  if (tutorialCareerFlowActive) return; // siehe goToOrgCreate()-Kommentar, zweite Absicherung neben .disabled
   orgCreateFillAgents = !orgCreateFillAgents;
   e.currentTarget.classList.toggle('is-active', orgCreateFillAgents);
 });
@@ -23050,6 +23640,9 @@ document.getElementById('btn-dashboard-settings-exit').addEventListener('click',
   saveGameState();
   goToMenu();
 });
+document.getElementById('dashboard-settings-tutorial-enabled').addEventListener('click', toggleTutorialEnabledSetting);
+document.getElementById('btn-dashboard-settings-tutorial-restart').addEventListener('click', restartCoreTutorialFromSettings);
+document.getElementById('btn-dashboard-settings-tutorial-reset').addEventListener('click', resetTutorialProgressFromSettings);
 // Finance UI Rework: Slider-Wiring durch Button-/Direkteingabe-Wiring
 // ersetzt -- EINZIGER Mutationspfad bleibt setFinanceAllocation() (siehe
 // dort), egal ob der Klick von einem Schritt-Button, MIN, MAX oder der
@@ -23618,6 +24211,7 @@ function setPlayerTrainingMode(playerName, slotLabel, mode) {
   const dev = ensurePlayerDevelopment(assignedOrg.name, resolved.person);
   dev.training.mode = mode;
   if (mode !== 'manual') dev.training.category = null;
+  if (mode !== 'off') tutorialOnEvent('TRAINING_ASSIGNED', { playerName, mode });
   renderDashboardTrainingPanel();
   refreshDashboardSidebarBadges();
   saveGameState();
@@ -23628,6 +24222,7 @@ function setPlayerTrainingCategoryValue(playerName, slotLabel, category) {
   if (!resolved) return;
   const dev = ensurePlayerDevelopment(assignedOrg.name, resolved.person);
   dev.training.category = category;
+  if (category) tutorialOnEvent('TRAINING_ASSIGNED', { playerName, category });
   renderDashboardTrainingPanel();
   saveGameState();
 }

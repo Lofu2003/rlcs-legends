@@ -103,6 +103,24 @@ function createElectronApiStub(opts) {
     }),
     deleteSave: (slotId) => macrotask(() => { memStore.delete(slotId); if (persistDir) { try { fs.unlinkSync(slotPath(slotId)); } catch {} } }),
     listSaveSlots: () => macrotask(() => []),
+    // Erzwungener Tutorial-Spielstand: eigener fester "Slot"-Schlüssel, spiegelt
+    // main.js' save-tutorial-slot/load-tutorial-slot 1:1 (kein slotId-Parameter,
+    // nie Teil von listSaveSlots()/memStore-Slots oben).
+    saveTutorialSlot: (data) => macrotask(() => {
+      const json = JSON.stringify(data);
+      if (persistDir) fs.writeFileSync(slotPath('tutorial'), json);
+      else memStore.set('tutorial', json);
+    }),
+    loadTutorialSlot: () => macrotask(() => {
+      let raw;
+      if (persistDir) {
+        try { raw = fs.readFileSync(slotPath('tutorial'), 'utf-8'); } catch { return null; }
+      } else {
+        raw = memStore.get('tutorial');
+        if (raw === undefined) return null;
+      }
+      try { return JSON.parse(raw); } catch { return { corrupted: true }; }
+    }),
     selectPortraitImage: () => macrotask(() => null),
     listPortraitPresets: () => macrotask(() => []),
     selectTeamLogoImage: () => macrotask(() => null),
@@ -187,6 +205,12 @@ async function createHeadlessGame(opts) {
         return { state: 'running', resume: () => {}, currentTime: 0, createOscillator: () => ({ connect: () => {}, start: () => {}, stop: () => {}, type: 'sine', frequency: { value: 0 } }), createGain: () => ({ connect: () => {}, gain: { setValueAtTime: () => {}, linearRampToValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} } }), destination: {} };
       };
       window.scrollTo = () => {};
+      // jsdom implementiert kein echtes Layout, daher fehlt Element.scrollIntoView()
+      // komplett (nicht nur wirkungslos wie window.scrollTo oben) -- betrifft u.a.
+      // das Tutorial-System (renderTutorialStep()). No-Op-Stub, kein Simulationspfad.
+      if (window.Element && !window.Element.prototype.scrollIntoView) {
+        window.Element.prototype.scrollIntoView = () => {};
+      }
       window.matchMedia = window.matchMedia || (() => ({ matches: false, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {} }));
       if (typeof window.ResizeObserver === 'undefined') {
         window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };

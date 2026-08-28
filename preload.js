@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadGame: (slotId) => ipcRenderer.invoke('load-game', slotId),
   deleteSave: (slotId) => ipcRenderer.invoke('delete-save', slotId),
   listSaveSlots: () => ipcRenderer.invoke('list-save-slots'),
+  saveTutorialSlot: (data) => ipcRenderer.invoke('save-tutorial-slot', data),
+  loadTutorialSlot: () => ipcRenderer.invoke('load-tutorial-slot'),
 
   selectPortraitImage: () => ipcRenderer.invoke('select-portrait-image'),
   listPortraitPresets: () => ipcRenderer.invoke('list-portrait-presets'),

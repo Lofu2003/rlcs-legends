@@ -2391,6 +2391,15 @@ body {
   z-index: 20;
 }
 
+/* Tutorial-Härtung: eigener, höherer z-index als .modal-overlay (10) --
+   Bestätigungsdialoge (z.B. "Tutorial überspringen?") müssen auch über dem
+   Tutorial-Overlay (z-index 900-902, siehe .tutorial-overlay) sichtbar UND
+   klickbar sein, sonst könnte ein Modal während eines aktiven Tutorials
+   unsichtbar hinter der Abdunklung verschwinden. */
+#confirm-modal {
+  z-index: 950;
+}
+
 /* ── Tutorial (Masterprompt-Auftrag) ──────────────────────────────────────
    4 Abdunklungs-Streifen um das hervorgehobene Element herum (Spotlight-
    Technik) statt clip-path/mask -- robust, keine Browser-Kompatibilitäts-
@@ -4521,6 +4530,23 @@ main {
 .dashboard-settings-exit-btn:hover {
   background: #3fbdd6;
   color: #06210f;
+}
+
+.dashboard-settings-tutorial-status {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: #7d84a0;
+}
+
+.dashboard-settings-tutorial-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dashboard-settings-tutorial-buttons .menu-btn {
+  flex: 1;
 }
 
 /* ── Dashboard-Seite "Finanzen" ──────────────────────────────────────────── */

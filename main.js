@@ -94,6 +94,38 @@ ipcMain.handle('delete-save', (_event, slotId) => {
   } catch {}
 });
 
+// ── Erzwungener Tutorial-Spielstand (User-Vorgabe: "erzwungener Tutorial-
+// Spielstand, um Probleme wie Hängenbleiben in bestimmten Tutorial-Segmenten
+// zu vermeiden") ─────────────────────────────────────────────────────────
+// Eigener, fester Dateiname statt einer der 3 normalen Slots -- taucht
+// dadurch NIE in list-save-slots()/der normalen Speicherplatz-Auswahl auf
+// (die nur i=1..SAVE_SLOT_COUNT durchläuft) und kann folglich auch nie
+// versehentlich einen echten Spielstand überschreiben. Kein slotId-Parameter
+// nötig (nur EIN fester Pfad) -- entzieht sich damit vollständig der unter
+// isValidSlotId() dokumentierten Pfad-Injection-Angriffsfläche.
+const tutorialSlotPath = () => path.join(app.getPath('userData'), 'save-slot-tutorial.json');
+
+ipcMain.handle('save-tutorial-slot', (_event, data) => {
+  const target = tutorialSlotPath();
+  const tmpPath = target + '.tmp-' + process.pid;
+  fs.writeFileSync(tmpPath, JSON.stringify(data));
+  fs.renameSync(tmpPath, target);
+});
+
+ipcMain.handle('load-tutorial-slot', () => {
+  let raw;
+  try {
+    raw = fs.readFileSync(tutorialSlotPath(), 'utf-8');
+  } catch {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { corrupted: true };
+  }
+});
+
 // ── Manager-Portraits (Charaktererstellung) ─────────────────────────────────
 // Hochgeladene Bilder werden in userData KOPIERT (nicht nur der gewählte Pfad
 // gemerkt) -- der Speicherstand darf nicht davon abhängen, dass eine vom

@@ -111,7 +111,7 @@
       </div>
     </div>
 
-    <p id="mainmenu-version" class="mainmenu-version">v0.8.3</p>
+    <p id="mainmenu-version" class="mainmenu-version">v0.9.0</p>
   </div>
 
   <!-- ── Spielmodus-Auswahl (bei "Neues Spiel") ───────────────────────────── -->
@@ -581,6 +581,12 @@
             <span class="org-contract-option-box"></span>
             <span>Für 6 Monate</span>
           </button>
+
+          <div class="org-contract-options-title">Interaktives Tutorial</div>
+          <button type="button" id="opt-tutorial-enabled" class="org-contract-option is-active">
+            <span class="org-contract-option-box"></span>
+            <span>Tutorial aktiv -- führt dich Schritt für Schritt durch die ersten Aufgaben</span>
+          </button>
         </div>
 
         <button type="button" id="btn-org-contract-clear-signature" class="org-contract-clear-btn">Leeren</button>
@@ -859,6 +865,16 @@
               <select class="settings-select" disabled title="Weitere Sprachen kommen später">
                 <option>Deutsch</option>
               </select>
+
+              <div class="dashboard-settings-section-title">Tutorial</div>
+              <button type="button" id="dashboard-settings-tutorial-enabled" class="dashboard-settings-checkbox-btn">
+                <span class="dashboard-settings-checkbox-box"></span> Tutorial-Hinweise aktiv
+              </button>
+              <p id="dashboard-settings-tutorial-status" class="dashboard-settings-tutorial-status"></p>
+              <div class="dashboard-settings-tutorial-buttons">
+                <button type="button" id="btn-dashboard-settings-tutorial-restart" class="menu-btn">Grundlagen-Tutorial erneut starten</button>
+                <button type="button" id="btn-dashboard-settings-tutorial-reset" class="menu-btn">Tutorial zurücksetzen</button>
+              </div>
 
               <button type="button" id="btn-dashboard-settings-exit" class="dashboard-settings-exit-btn">Beenden zum Menü</button>
             </div>
